@@ -1,0 +1,29 @@
+# Railway deployment config for the JUVAl backend (interfaces/api,
+# FastAPI, ADR-018). Deliberately minimal -- Railway's default builder
+# (Railpack) auto-detects most of a Python project; only the two values
+# that must not be left to guesswork are pinned explicitly:
+#
+#   - buildCommand: `pip install .` relies on pyproject.toml's [project]
+#     table (verified working locally, 2026-08-17: `pip install -e .`
+#     makes `import juval` work with no PYTHONPATH hack -- see
+#     docs/adr/ADR-018-railway-backend-hosting.md). `.[postgres]` also
+#     installs psycopg so SupabaseExecutionRunStore is importable at
+#     runtime once a future session wires it into main.py (ADR-017) --
+#     no code change needed here for that later step.
+#   - startCommand: binds to 0.0.0.0 (required -- Railway's network
+#     routes to the container, not localhost) and Railway's dynamic
+#     $PORT (never a hardcoded port). Railpack runs startCommand in a
+#     shell, so $PORT expansion works without extra wrapping.
+#
+# No healthcheckPath set on purpose -- see ADR-018 "Qué NO resuelve" /
+# docs/architecture/API_CONTRACT.md: a dedicated GET /health endpoint is
+# recommended but NOT implemented yet, pending approval. Without it,
+# Railway falls back to its default TCP-level check on the bound port,
+# which is sufficient to detect a crashed process.
+
+[build]
+builder = "RAILPACK"
+buildCommand = "pip install .[postgres]"
+
+[deploy]
+startCommand = "uvicorn juval.interfaces.api.main:app --host 0.0.0.0 --port $PORT"

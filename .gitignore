@@ -1,0 +1,35 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+
+# Secrets -- never committed, .env.example is the only tracked template
+.env
+.env.*
+!.env.example
+!frontend/.env.example
+
+# Frontend (Node/Vite)
+node_modules/
+frontend/dist/
+frontend/dev-dist/
+
+# Playwright
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
+
+# Temporary run storage (Fase 4A, interfaces/api -- never permanent, see
+# docs/architecture/API_CONTRACT.md §6)
+juval_runs/
+
+# Supabase CLI local link state (project-ref only, no secrets -- still
+# machine-local, never versioned, see docs/architecture/SUPABASE.md)
+supabase/.temp/
+
+# IDE / local artifacts, logs
+.vscode/
+.idea/
+*.log
