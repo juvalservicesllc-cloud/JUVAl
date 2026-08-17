@@ -217,3 +217,41 @@ por defecto (ningún origen permitido), **nunca** `"*"`.
    `docs/PROJECT_STATUS.md` §Sesión 2026-08-17 (bloque 5) para las
    opciones presentadas, ninguna aplicada todavía, pendientes de tu
    aprobación.
+
+## 9. `MISSING ARCHITECTURAL CAPABILITY` — listados persistentes (2026-08-17)
+
+El frontend (`frontend/src/api/products.ts`, `frontend/src/api/runs.ts`)
+ya tiene clientes preparados para `GET /api/v1/products` y `GET
+/api/v1/runs`, y ambas páginas (`ProductsPage.tsx`, `RunsPage.tsx`)
+muestran explícitamente un banner "DEMO MODE" mientras tanto — Codex no
+presenta esto como implementado. **Ninguno de los dos endpoints existe
+en `main.py`.** Verificado, no inferido:
+
+- **`GET /api/v1/products` — brecha arquitectónica, no solo ausencia de
+  ruta.** No existe ninguna persistencia de `SourcingRecord`/`RecordOut`
+  individuales, en ningún store. Lo único persistido tras un run es el
+  `ExecutionRun` agregado (contadores, ADR-013/017) — nunca las filas
+  procesadas. Las filas completas solo existen: (a) una vez, en el
+  cuerpo de la respuesta síncrona de `POST /api/v1/runs`, y (b) en
+  `output.xlsx` (almacenamiento temporal, sin política de retención,
+  nunca tratado como permanente, §6). Ninguna de las dos es una fuente
+  re-consultable por HTTP después de esa respuesta inicial. Además, un
+  `/products` **global** (cross-run) sería incorrecto respecto al
+  dominio: `record_ref` es único **solo dentro de una única ejecución**,
+  nunca globalmente (ADR-012, "Por qué no es globalmente único" —
+  decisión ya aceptada, no se reabre aquí). Si esta capacidad se
+  aprueba, el modelo de recurso correcto es **run-scoped**:
+  `GET /api/v1/runs/{execution_id}/products`, nunca `GET /api/v1/products`.
+- **`GET /api/v1/runs` (listado/historial) — brecha menor, pero también
+  bloqueada por diseño.** `ExecutionRunStore` (`application/execution_run_store.py`)
+  expone deliberadamente solo `save_execution_run`/`load_execution_run`
+  by id — su propio docstring documenta que un método de listado fue
+  evaluado y rechazado como especulativo en ADR-013 ("no needed by any
+  caller today"). El único caller nuevo es el frontend de demo de
+  Codex, no una necesidad de negocio confirmada — añadir un método de
+  listado ahora reabriría esa decisión sin la aprobación que ADR-013
+  reservó explícitamente para cuando apareciera un caller real.
+
+Ninguna de las dos capacidades se implementó en esta sesión — ver el
+reporte de la sesión 2026-08-17 correspondiente para las opciones
+presentadas y la decisión pendiente del usuario.
