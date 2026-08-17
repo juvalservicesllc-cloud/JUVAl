@@ -259,3 +259,53 @@ this session.
 
 An ADR is warranted only after alternatives, scope and owner are decided;
 this plan approves none of them.
+
+## 13. Identity-provider research checkpoint (2026-08-17)
+
+Clerk documentation was reviewed as a candidate only. It documents MFA,
+session lifetime/inactivity controls, organization roles/permissions and
+secret-key rotation, but the following Amazon-specific items are not yet
+evidenced for a JUVAl production instance:
+
+| Requirement | Clerk candidate result | Classification |
+|---|---|---|
+| MFA | TOTP/SMS/backup codes and forced MFA session task documented | SUPPORTED WITH CONFIGURATION |
+| 12-character minimum | Current password guidance documents NIST-style minimums, not a verified JUVAl 12-character enforcement setting | NEEDS_VERIFICATION |
+| Special characters | No verified tenant setting proving this exact rule | NEEDS_VERIFICATION |
+| 365-day expiration | Session lifetime is documented; password expiration policy is not verified | NEEDS_VERIFICATION |
+| Annual password rotation | No verified automatic annual human-password rotation policy | NOT_SUPPORTED / NEEDS_VERIFICATION |
+| Sessions and forced revocation | Session lifetime/inactivity and user/session controls are documented | SUPPORTED WITH CONFIGURATION |
+| Organizations, roles, permissions, RBAC | Organization custom roles and permissions documented; server-side custom permission checks are required | SUPPORTED WITH CUSTOM IMPLEMENTATION |
+| Disable/delete users | Platform user-management capability exists; operational evidence is absent | SUPPORTED WITH CONFIGURATION |
+| Audit/access-review evidence | Provider/API audit capability and exports require plan/tenant verification; quarterly review remains JUVAl responsibility | NEEDS_VERIFICATION |
+| Administrative MFA | MFA is available; administrator enforcement and plan constraints require tenant verification | NEEDS_VERIFICATION |
+| API/service separation | Publishable vs secret keys and backend verification are documented | SUPPORTED WITH CONFIGURATION |
+
+Sources: [Clerk password rules](https://clerk.com/docs/guides/secure/password-protection-and-rules),
+[MFA/session tasks](https://clerk.com/docs/guides/configure/session-tasks),
+[session security](https://clerk.com/docs/guides/secure/session-options),
+[roles and permissions](https://clerk.com/docs/guides/organizations/control-access/roles-and-permissions),
+and [secret-key rotation](https://clerk.com/docs/guides/secure/rotate-api-keys),
+verified 2026-08-17. These sources do not constitute Amazon compliance
+evidence. RF-03 and RF-04 therefore remain blocked pending provider-plan
+verification and an approved identity architecture.
+
+### RF-03 identity-scope status
+
+Official Amazon guidance says MFA applies to “all accounts” and separately
+defines credentials broadly (including passwords, API keys, encryption keys
+and SP-API client credentials/tokens). It distinguishes API-key rotation and
+credential protection from the human password lifecycle, but does not clearly
+state whether password composition/expiration applies to JUVAl application
+end users, personnel with Amazon Information access, provider administrators,
+or every category. Therefore:
+
+`RF-03 IDENTITY SCOPE = NEEDS AMAZON CLARIFICATION`
+
+This is not a favorable reinterpretation and does not reduce any reviewer
+requirement. A proposed clarification is recorded in ADR-021; it must not be
+sent until reviewed by the user.
+
+`AMAZON_RF03_SCOPE_CLARIFICATION = PENDING_EXTERNAL_ACTION`
+`IDENTITY SECURITY GATE = BLOCKED`
+`REAPPLICATION GATE = BLOCKED`
