@@ -125,6 +125,17 @@ explícita. Esto es una decisión técnica (cómo debe fallar el sistema),
 distinta de la aprobación de negocio de HAZMAT/BULKY en sí, que sigue
 pendiente.
 
+**Provenance de severidad separada de presence (ADR-020, `Estado:
+Aceptada`, 2026-08-17)**: `RiskFlag.severity` es un
+`FieldValue[Severity]` propio, no un `Severity` pelado. Que el
+proveedor haya verificado `hazmat=TRUE` (presence, `VERIFIED`) no
+verifica la clasificación `HIGH` de Juval (severity,
+**`INFERRED`** — regla/heurística interna, ADR-010). Un `RiskFlag`
+`ABSENT` sí tiene `severity.status=VERIFIED` (consecuencia lógica
+cierta de una ausencia verificada, no una política). El contrato de
+`RecordOut`/columnas Excel (`hazmat_severity`/`bulky_severity` como
+string plano) no cambió — ver ADR-020 "Qué NO resuelve".
+
 ## 6. Excel Exporter (`exporter.py`)
 
 Una fila por `SourcingRecord`, columnas fijas (`HEADERS`). Ningún

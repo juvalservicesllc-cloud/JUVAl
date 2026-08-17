@@ -21,7 +21,8 @@ def _record():
     costs = CostInputs(cog=Decimal("3"))
     flag = RiskFlag(
         risk_type=RiskType.HAZMAT, status=RiskStatus.ABSENT, verification_status=VerificationStatus.VERIFIED,
-        severity=Severity.NONE, source="s", timestamp=NOW,
+        severity=FieldValue.verified(Severity.NONE, source="s", method="test", retrieved_at=NOW),
+        source="s", timestamp=NOW,
     )
     return SourcingRecord(record_ref="row_1:SUP-EXPORT", product=product, costs=costs, risk=RiskProfile(flags=(flag,)))
 

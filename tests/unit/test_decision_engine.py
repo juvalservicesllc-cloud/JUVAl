@@ -20,6 +20,10 @@ def _thresholds(**overrides):
     return Thresholds(**defaults)
 
 
+def _severity(value):
+    return FieldValue.verified(value, source="s", method="test", retrieved_at=NOW)
+
+
 def _inputs(profit, roi, sales, risk_profile=None):
     return DecisionInputs(
         profit=profit,
@@ -52,7 +56,7 @@ def test_pass_on_disqualifying_risk_severity():
         risk_type=RiskType.HAZMAT,
         status=RiskStatus.PRESENT,
         verification_status=VerificationStatus.VERIFIED,
-        severity=Severity.HIGH,
+        severity=_severity(Severity.HIGH),
         source="s",
         timestamp=NOW,
     )
@@ -67,7 +71,7 @@ def test_pass_on_restricted_by_default():
         risk_type=RiskType.RESTRICTED,
         status=RiskStatus.PRESENT,
         verification_status=VerificationStatus.VERIFIED,
-        severity=Severity.NONE,
+        severity=_severity(Severity.NONE),
         source="s",
         timestamp=NOW,
     )
@@ -82,7 +86,7 @@ def test_restricted_allowed_when_configured():
         risk_type=RiskType.RESTRICTED,
         status=RiskStatus.PRESENT,
         verification_status=VerificationStatus.VERIFIED,
-        severity=Severity.NONE,
+        severity=_severity(Severity.NONE),
         source="s",
         timestamp=NOW,
     )
@@ -118,7 +122,7 @@ def test_review_when_risk_unknown_and_not_allowed():
         risk_type=RiskType.IP_COMPLAINTS,
         status=RiskStatus.UNKNOWN,
         verification_status=VerificationStatus.NOT_FOUND,
-        severity=Severity.NONE,
+        severity=_severity(Severity.NONE),
         source="s",
         timestamp=NOW,
     )
@@ -133,7 +137,7 @@ def test_unknown_risk_allowed_when_configured():
         risk_type=RiskType.IP_COMPLAINTS,
         status=RiskStatus.UNKNOWN,
         verification_status=VerificationStatus.NOT_FOUND,
-        severity=Severity.NONE,
+        severity=_severity(Severity.NONE),
         source="s",
         timestamp=NOW,
     )

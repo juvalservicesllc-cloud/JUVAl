@@ -45,10 +45,11 @@ def rule_pass_disqualifying_risk(inputs: DecisionInputs, thresholds: Thresholds)
     for flag in inputs.risk_profile.flags:
         if flag.status != RiskStatus.PRESENT:
             continue
-        if _SEVERITY_RANK[flag.severity.value] > max_rank:
+        severity = flag.severity.value  # a PRESENT flag's severity is never None -- see RiskFlag.__post_init__
+        if _SEVERITY_RANK[severity.value] > max_rank:
             return DecisionReason(
                 "RISK_ABOVE_MAXIMUM",
-                f"{flag.risk_type.value} is PRESENT with severity {flag.severity.value}, above the configured maximum {thresholds.maximum_risk_severity.value}.",
+                f"{flag.risk_type.value} is PRESENT with severity {severity.value}, above the configured maximum {thresholds.maximum_risk_severity.value}.",
             )
     return None
 

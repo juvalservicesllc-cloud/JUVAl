@@ -154,8 +154,11 @@ dependen de que un desarrollador "se acuerde":
   ninguno.
 - `CostInputs` / `FeeInputs`: ningún componente negativo;
   `referral_fee_rate` en `[0,1)`.
-- `RiskFlag`: `ABSENT` ⇒ `severity=NONE`; `UNKNOWN` ⇒
-  `verification_status` en `{NOT_FOUND, INVALID}`.
+- `RiskFlag`: `severity` es `FieldValue[Severity]`, provenance propia e
+  independiente de `verification_status` (que describe solo presence —
+  ver ADR-020). `ABSENT` ⇒ `severity.value=NONE`; `PRESENT` ⇒
+  `severity.value` no `None`; `UNKNOWN` ⇒ `verification_status` en
+  `{NOT_FOUND, INVALID}`.
 - `DecisionResult`: `REVIEW`/`PASS` deben traer al menos una razón.
 - `ScoreWeights`: los 6 pesos suman 1 (± 0.0001) y están en `[0,1]`.
 - `SourcingRecord`: `record_ref` no vacío.

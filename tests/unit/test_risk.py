@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from juval.domain.provenance import VerificationStatus
+from juval.domain.provenance import FieldValue, VerificationStatus
 from juval.domain.risk import RiskFlag, RiskProfile, RiskStatus, RiskType, Severity
 
 NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
@@ -13,7 +13,7 @@ def _flag(risk_type, status, severity, verification_status=VerificationStatus.VE
         risk_type=risk_type,
         status=status,
         verification_status=verification_status,
-        severity=severity,
+        severity=FieldValue.verified(severity, source="s", method="test", retrieved_at=NOW),
         source="s",
         timestamp=NOW,
     )

@@ -78,7 +78,8 @@ def test_with_decision_and_risk_preserve_untouched_fields():
     flag = RiskFlag(
         risk_type=RiskType.HAZMAT, status=RiskStatus.PRESENT,
         verification_status=VerificationStatus.VERIFIED,
-        severity=Severity.HIGH, source="s", timestamp=NOW,
+        severity=FieldValue.verified(Severity.HIGH, source="s", method="test", retrieved_at=NOW),
+        source="s", timestamp=NOW,
     )
     decision = DecisionResult(decision=Decision.PASS, reasons=(DecisionReason("X", "x"),), evaluated_at=NOW)
     updated = record.with_risk(RiskProfile(flags=(flag,))).with_decision(decision)

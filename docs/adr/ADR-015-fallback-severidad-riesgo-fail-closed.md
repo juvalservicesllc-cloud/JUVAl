@@ -70,10 +70,12 @@ observable.
   valor de reemplazo, incluido uno conservador, porque seguiría siendo
   un valor de negocio no aprobado, solo que asumido en la dirección
   opuesta.
-- **No implementa provenance independiente para `severity`**
-  (`RiskFlag.severity -> FieldValue[Severity]`) — esa propuesta,
-  identificada en el mismo análisis arquitectónico, queda explícitamente
-  diferida como mejora futura separada, sin ADR propio todavía.
+- ~~No implementa provenance independiente para `severity`~~ —
+  **RESUELTO 2026-08-17 por ADR-020**
+  (`RiskFlag.severity -> FieldValue[Severity]`, con
+  `severity.status=INFERRED` para HAZMAT/BULKY en vez de heredar el
+  `VERIFIED` de presence). Esta ADR-015 sigue igual de vigente sin
+  modificarse — ADR-020 solo cierra el ítem que aquí quedaba diferido.
 - **No modifica `RiskFlag`, `decision_engine.py`, `decision_score.py`,
   el esquema de Excel, ni ninguna columna** — el cambio vive
   enteramente dentro de `_build_risk_flag()` en

@@ -23,7 +23,7 @@ from decimal import Decimal
 from typing import Any, Optional
 
 from juval.domain.provenance import FieldValue
-from juval.domain.risk import RiskType
+from juval.domain.risk import RiskFlag, RiskType
 from juval.domain.sourcing_record import SourcingRecord
 
 
@@ -32,6 +32,21 @@ def _fv(fv: Optional[FieldValue[Any]]) -> dict[str, Any]:
         return {"value": None, "status": None}
     value = str(fv.value) if isinstance(fv.value, Decimal) else fv.value
     return {"value": value, "status": fv.status.value}
+
+
+def _severity_value(flag: Optional[RiskFlag]) -> Optional[str]:
+    """A RiskFlag's severity is its own FieldValue[Severity] (ADR-020) --
+    unwrapped here to the plain enum-value string this snapshot's
+    `hazmat_severity`/`bulky_severity` fields have always held, so the
+    API/export contract shape does not change. Severity's own
+    verification status (VERIFIED for a certain NONE, INFERRED for
+    today's policy-derived HIGH/MEDIUM) is intentionally not exposed
+    yet -- no confirmed consumer needs it (see ADR-020 "Qué NO
+    resuelve")."""
+
+    if flag is None or flag.severity.value is None:
+        return None
+    return flag.severity.value.value
 
 
 def record_to_snapshot(record: SourcingRecord) -> dict[str, Any]:
@@ -82,9 +97,9 @@ def record_to_snapshot(record: SourcingRecord) -> dict[str, Any]:
         "max_cog_target_profit": max_cog_target_profit,
         "max_cog_target_roi": max_cog_target_roi,
         "hazmat_status": hazmat_flag.status.value if hazmat_flag is not None else None,
-        "hazmat_severity": hazmat_flag.severity.value if hazmat_flag is not None else None,
+        "hazmat_severity": _severity_value(hazmat_flag),
         "bulky_status": bulky_flag.status.value if bulky_flag is not None else None,
-        "bulky_severity": bulky_flag.severity.value if bulky_flag is not None else None,
+        "bulky_severity": _severity_value(bulky_flag),
         "decision": decision,
         "decision_reasons": decision_reasons,
         "issue_count": len(record.issues),

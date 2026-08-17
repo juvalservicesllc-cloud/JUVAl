@@ -171,14 +171,45 @@ def test_default_risk_severity_hazmat_still_high():
     flag = _build_risk_flag(
         {"hazmat": True}, "hazmat", RiskType.HAZMAT, source="s", now=NOW, row_ref="row_1", issues=[]
     )
-    assert flag.severity == Severity.HIGH
+    assert flag.severity.value == Severity.HIGH
 
 
 def test_default_risk_severity_bulky_still_medium():
     flag = _build_risk_flag(
         {"bulky": True}, "bulky", RiskType.BULKY, source="s", now=NOW, row_ref="row_1", issues=[]
     )
-    assert flag.severity == Severity.MEDIUM
+    assert flag.severity.value == Severity.MEDIUM
+
+
+def test_present_risk_presence_is_verified_but_severity_is_only_inferred():
+    # ADR-020: a supplier verifying hazmat=TRUE does not verify Juval's
+    # internal HIGH/MEDIUM classification for it -- presence and severity
+    # provenance must never be conflated into a single VERIFIED status.
+    flag = _build_risk_flag(
+        {"hazmat": True}, "hazmat", RiskType.HAZMAT, source="s", now=NOW, row_ref="row_1", issues=[]
+    )
+    assert flag.verification_status == VerificationStatus.VERIFIED  # presence: supplier declared it
+    assert flag.severity.status == VerificationStatus.INFERRED  # severity: Juval's own provisional policy
+    assert flag.severity.status != flag.verification_status
+
+
+def test_absent_risk_severity_none_is_verified_not_inferred():
+    # NONE severity for an absent risk is a certain logical consequence of
+    # a verified absence, not a policy guess -- unlike the PRESENT case.
+    flag = _build_risk_flag(
+        {"hazmat": False}, "hazmat", RiskType.HAZMAT, source="s", now=NOW, row_ref="row_1", issues=[]
+    )
+    assert flag.severity.value == Severity.NONE
+    assert flag.severity.status == VerificationStatus.VERIFIED
+
+
+def test_blank_risk_cell_severity_mirrors_not_found_presence():
+    flag = _build_risk_flag(
+        {"hazmat": None}, "hazmat", RiskType.HAZMAT, source="s", now=NOW, row_ref="row_1", issues=[]
+    )
+    assert flag.status == RiskStatus.UNKNOWN
+    assert flag.severity.value is None
+    assert flag.severity.status == VerificationStatus.NOT_FOUND
 
 
 def test_unmapped_risk_type_raises_instead_of_defaulting_to_medium():

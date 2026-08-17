@@ -16,7 +16,7 @@ from typing import Any, Optional, Sequence
 import openpyxl
 
 from juval.domain.provenance import FieldValue
-from juval.domain.risk import RiskType
+from juval.domain.risk import RiskFlag, RiskType
 from juval.domain.sourcing_record import SourcingRecord
 
 HEADERS: tuple[str, ...] = (
@@ -68,6 +68,17 @@ def _value_and_status(fv: Optional[FieldValue]) -> tuple[Any, Any]:
     if fv is None:
         return None, None
     return fv.value, fv.status.value
+
+
+def _severity_value(flag: Optional[RiskFlag]) -> Optional[str]:
+    """A RiskFlag's severity is its own FieldValue[Severity] (ADR-020) --
+    this unwraps to the plain enum-value string a cell can hold, distinct
+    from that FieldValue's own verification status (not exported here,
+    same scope as before this ADR: only presence status is a column)."""
+
+    if flag is None or flag.severity.value is None:
+        return None
+    return flag.severity.value.value
 
 
 def _row_for_record(record: SourcingRecord) -> tuple[Any, ...]:
@@ -149,9 +160,9 @@ def _row_for_record(record: SourcingRecord) -> tuple[Any, ...]:
         max_cog_roi_value,
         max_cog_roi_status,
         hazmat_flag.status.value if hazmat_flag is not None else None,
-        hazmat_flag.severity.value if hazmat_flag is not None else None,
+        _severity_value(hazmat_flag),
         bulky_flag.status.value if bulky_flag is not None else None,
-        bulky_flag.severity.value if bulky_flag is not None else None,
+        _severity_value(bulky_flag),
         decision_value,
         decision_reasons,
         len(record.issues),

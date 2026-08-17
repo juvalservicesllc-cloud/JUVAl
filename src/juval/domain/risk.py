@@ -3,6 +3,17 @@
 Each risk type is tracked independently with its own status, verification
 state, severity and evidence — a single "is this risky?" boolean would
 throw away exactly the trail the project requires.
+
+`RiskFlag` carries two provenance axes that must never be conflated
+(ADR-020): `status`/`verification_status`/`source`/`timestamp`/`evidence`
+describe **presence** — whether this risk type was found at all, and how
+sure we are (e.g. "supplier declared hazmat=TRUE in the Excel file, that
+declaration is VERIFIED"). `severity` is its own `FieldValue[Severity]`
+with its own provenance — *how severe* a present risk is may come from a
+completely different process (today, an internal Juval classification
+table, ADR-010) and must never inherit presence's verification_status by
+implication. A supplier verifying a HazMat flag does not verify that
+Juval's HIGH/MEDIUM taxonomy for it is correct.
 """
 
 from __future__ import annotations
@@ -12,7 +23,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from .provenance import VerificationStatus
+from .provenance import FieldValue, VerificationStatus
 
 
 class RiskType(str, Enum):
@@ -59,8 +70,8 @@ _SEVERITY_RANK = {
 class RiskFlag:
     risk_type: RiskType
     status: RiskStatus
-    verification_status: VerificationStatus
-    severity: Severity
+    verification_status: VerificationStatus  # presence verification only -- see module docstring
+    severity: FieldValue[Severity]  # its own provenance; never inherits verification_status above
     source: str
     timestamp: datetime
     evidence: Optional[str] = None
@@ -70,8 +81,10 @@ class RiskFlag:
             raise ValueError("RiskFlag.timestamp must be timezone-aware")
         if not self.source:
             raise ValueError("RiskFlag.source must not be empty")
-        if self.status == RiskStatus.ABSENT and self.severity != Severity.NONE:
+        if self.status == RiskStatus.ABSENT and self.severity.value != Severity.NONE:
             raise ValueError("An ABSENT RiskFlag must have severity NONE")
+        if self.status == RiskStatus.PRESENT and self.severity.value is None:
+            raise ValueError("A PRESENT RiskFlag must carry a non-None severity")
         if self.status == RiskStatus.UNKNOWN and self.verification_status not in (
             VerificationStatus.NOT_FOUND,
             VerificationStatus.INVALID,
@@ -94,7 +107,7 @@ class RiskProfile:
 
     @property
     def highest_severity(self) -> Severity:
-        present = [f.severity for f in self.flags if f.status == RiskStatus.PRESENT]
+        present = [f.severity.value for f in self.flags if f.status == RiskStatus.PRESENT]
         if not present:
             return Severity.NONE
         return max(present, key=lambda s: _SEVERITY_RANK[s])

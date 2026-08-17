@@ -276,7 +276,11 @@ def _build_risk_flag(
     if value is None:
         return RiskFlag(
             risk_type=risk_type, status=RiskStatus.UNKNOWN, verification_status=VerificationStatus.NOT_FOUND,
-            severity=Severity.NONE, source=source, timestamp=now, evidence="column present but cell is blank",
+            # Presence is unknown, so severity cannot be assessed either
+            # (ADR-020) -- it mirrors presence's own NOT_FOUND rather than
+            # defaulting to a bare Severity.NONE that would look verified.
+            severity=FieldValue.not_found(source=source, method="risk_presence_unknown", retrieved_at=now),
+            source=source, timestamp=now, evidence="column present but cell is blank",
         )
     if not is_valid:
         issues.append(
@@ -288,7 +292,11 @@ def _build_risk_flag(
         )
         return RiskFlag(
             risk_type=risk_type, status=RiskStatus.UNKNOWN, verification_status=VerificationStatus.INVALID,
-            severity=Severity.NONE, source=source, timestamp=now, evidence=f"unrecognized boolean value: {value!r}",
+            severity=FieldValue.invalid(
+                value, source=source, method="risk_presence_unknown", retrieved_at=now,
+                source_type=SourceType.SUPPLIER_FILE,
+            ),
+            source=source, timestamp=now, evidence=f"unrecognized boolean value: {value!r}",
         )
     if value is True:
         return RiskFlag(
@@ -298,12 +306,29 @@ def _build_risk_flag(
             # would be exactly the kind of invented business value this project
             # forbids. Adding a new risk source requires adding its severity to
             # DEFAULT_RISK_SEVERITY first, not falling back to a guess.
-            severity=DEFAULT_RISK_SEVERITY[risk_type], source=source, timestamp=now,
-            evidence="declared by supplier",
+            #
+            # This severity is INFERRED, never VERIFIED (ADR-020): the
+            # supplier verified that the risk is PRESENT, not that Juval's
+            # internal HIGH/MEDIUM classification for it is correct --
+            # DEFAULT_RISK_SEVERITY is a provisional, business-unapproved
+            # policy table (ADR-010), not data read from the file.
+            severity=FieldValue.inferred(
+                DEFAULT_RISK_SEVERITY[risk_type], source="DEFAULT_RISK_SEVERITY",
+                method="ADR-010 provisional internal severity classification (not business-approved)",
+                retrieved_at=now, source_type=SourceType.CALCULATED,
+            ),
+            source=source, timestamp=now, evidence="declared by supplier",
         )
     return RiskFlag(
         risk_type=risk_type, status=RiskStatus.ABSENT, verification_status=VerificationStatus.VERIFIED,
-        severity=Severity.NONE, source=source, timestamp=now,
+        # No risk present -> NONE severity is a certain logical consequence
+        # of a verified absence, not a policy guess -- VERIFIED is correct
+        # here (unlike the PRESENT branch above).
+        severity=FieldValue.verified(
+            Severity.NONE, source=source, method="no_risk_present", retrieved_at=now,
+            source_type=SourceType.SUPPLIER_FILE,
+        ),
+        source=source, timestamp=now,
     )
 
 
