@@ -14,6 +14,13 @@ describe("theme storage", () => {
     const settings = { ...defaultThemeSettings, preset: "custom" as const, colors: { ...defaultThemeSettings.colors, accent: "#112233" } }
     saveThemeSettings(settings)
     expect(loadThemeSettings().colors.accent).toBe("#112233")
+    expect(loadThemeSettings().appearanceMode).toBe("dark")
+  })
+
+  it("migrates legacy light settings without losing their colors", () => {
+    const { appearanceMode: _appearanceMode, ...legacySettings } = defaultThemeSettings
+    localStorage.setItem("juval-theme-settings-v1", JSON.stringify({ ...legacySettings, preset: "light" }))
+    expect(loadThemeSettings()).toMatchObject({ appearanceMode: "light", preset: "juval" })
   })
 
   it("rejects unsupported and oversized brand assets", () => {

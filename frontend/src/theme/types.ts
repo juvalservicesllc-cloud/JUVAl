@@ -9,9 +9,11 @@ export type ThemeColors = {
   accent: string
 }
 
-export type ThemePreset = "juval" | "light" | "dark" | "custom"
+export type AppearanceMode = "light" | "dark"
+export type ThemePreset = "juval" | "custom"
 
 export interface ThemeSettings {
+  appearanceMode: AppearanceMode
   preset: ThemePreset
   colors: ThemeColors
   logoDataUrl: string | null

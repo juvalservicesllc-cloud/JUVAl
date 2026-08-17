@@ -1,14 +1,14 @@
-import type { ThemeColors, ThemePreset, ThemeSettings } from "./types"
+import type { AppearanceMode, ThemeColors, ThemeSettings } from "./types"
 
-export const themePresets: Record<Exclude<ThemePreset, "custom">, ThemeColors> = {
-  juval: { background: "#0c0d10", sidebar: "#101115", header: "#0c0d10", surface: "#15171c", text: "#eef0f5", muted: "#717887", border: "#292d36", accent: "#7c8cff" },
-  light: { background: "#f5f7fb", sidebar: "#172033", header: "#ffffff", surface: "#ffffff", text: "#172033", muted: "#64748b", border: "#d9e0eb", accent: "#4f46e5" },
-  dark: { background: "#101216", sidebar: "#0a0c10", header: "#151820", surface: "#1a1e27", text: "#f5f7fb", muted: "#929aab", border: "#323846", accent: "#54a6ff" },
+export const appearancePalettes: Record<AppearanceMode, ThemeColors> = {
+  light: { background: "#f5f7fb", sidebar: "#172033", header: "#ffffff", surface: "#ffffff", text: "#172033", muted: "#64748b", border: "#d9e0eb", accent: "#7c8cff" },
+  dark: { background: "#181a1f", sidebar: "#121419", header: "#1d2026", surface: "#24272e", text: "#f2f4f8", muted: "#9aa1ae", border: "#373c46", accent: "#7c8cff" },
 }
 
 export const defaultThemeSettings: ThemeSettings = {
+  appearanceMode: "dark",
   preset: "juval",
-  colors: themePresets.juval,
+  colors: appearancePalettes.dark,
   logoDataUrl: null,
   backgroundImageDataUrl: null,
   backgroundSize: "cover",

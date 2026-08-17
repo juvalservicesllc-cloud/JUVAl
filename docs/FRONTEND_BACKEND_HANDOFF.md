@@ -323,10 +323,10 @@ This handoff was reconciled against current frontend modules, actual FastAPI rou
 
 ## 21. Local Appearance / Branding
 
-`frontend/src/theme/ThemeProvider.tsx` is the frontend-only source of truth for `ThemeSettings`. It applies structural CSS custom properties (`--bg`, `--sidebar`, `--header`, `--surface`, text, border, and accent) immediately and persists the preferences through `frontend/src/theme/storage.ts`.
+`frontend/src/theme/ThemeProvider.tsx` is the frontend-only source of truth for `ThemeSettings`. `appearanceMode` is `light` or `dark`; it controls the complete structural palette (charcoal/graphite in Dark, never OLED black) through CSS custom properties while retaining the selected accent and local assets. The provider persists preferences through `frontend/src/theme/storage.ts`, including a safe migration of the prior Light/Dark preset representation.
 
 - Route: `/appearance` (`frontend/src/pages/AppearancePage.tsx`).
-- Presets: JUVAl Default, Light, Dark, and Custom after an edit.
+- Appearance: `/appearance` provides a keyboard-accessible smartphone-style Light/Dark switch. Reset restores the JUVAl default Dark appearance together with default branding.
 - Local assets: PNG/JPEG/WEBP only, 400 KB per logo/background asset, stored as browser data URLs. Invalid/corrupt settings fall back to JUVAl defaults; storage quota errors preserve the live preview and show a safe message.
 - Background options: cover/contain, center/top/bottom, and overlay opacity. Panels remain opaque to protect operational readability.
 - Status/provenance badge colors remain semantic and are not redefined by customer accent selections.

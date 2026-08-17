@@ -10,8 +10,7 @@ export function loadThemeSettings(): ThemeSettings {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return defaultThemeSettings
     const value: unknown = JSON.parse(raw)
-    if (!isThemeSettings(value)) return defaultThemeSettings
-    return value
+    return normalizeThemeSettings(value) ?? defaultThemeSettings
   } catch {
     return defaultThemeSettings
   }
@@ -40,17 +39,22 @@ export function readBrandAsset(file: File): Promise<string> {
   })
 }
 
-function isThemeSettings(value: unknown): value is ThemeSettings {
-  if (!value || typeof value !== "object") return false
+function normalizeThemeSettings(value: unknown): ThemeSettings | null {
+  if (!value || typeof value !== "object") return null
   const settings = value as Record<string, unknown>
   const colors = settings.colors
-  if (!colors || typeof colors !== "object") return false
+  if (!colors || typeof colors !== "object") return null
   const keys = ["background", "sidebar", "header", "surface", "text", "muted", "border", "accent"]
-  return ["juval", "light", "dark", "custom"].includes(String(settings.preset))
-    && keys.every((key) => typeof (colors as Record<string, unknown>)[key] === "string")
+  const legacyPreset = String(settings.preset)
+  const appearanceMode = settings.appearanceMode === "light" || settings.appearanceMode === "dark"
+    ? settings.appearanceMode
+    : legacyPreset === "light" ? "light" : "dark"
+  const valid = keys.every((key) => typeof (colors as Record<string, unknown>)[key] === "string")
     && (settings.logoDataUrl === null || typeof settings.logoDataUrl === "string")
     && (settings.backgroundImageDataUrl === null || typeof settings.backgroundImageDataUrl === "string")
     && ["cover", "contain"].includes(String(settings.backgroundSize))
     && ["center", "top", "bottom"].includes(String(settings.backgroundPosition))
     && typeof settings.overlayOpacity === "number" && settings.overlayOpacity >= 0 && settings.overlayOpacity <= 0.9
+  if (!valid) return null
+  return { ...(settings as Omit<ThemeSettings, "appearanceMode" | "preset">), appearanceMode, preset: legacyPreset === "custom" ? "custom" : "juval" }
 }
