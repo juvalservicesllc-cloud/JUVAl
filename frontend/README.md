@@ -1,35 +1,43 @@
 # JUVAl frontend
 
-React + TypeScript + Vite PWA.
+React + TypeScript + Vite PWA. The current MVP frontend is ready for backend API integration; see [the full handoff](../docs/FRONTEND_BACKEND_HANDOFF.md).
 
-- `/` — dashboard with typed demo data.
-- `/upload` — real `.xlsx` processing through FastAPI; CSV remains unsupported.
-- `/products` — typed demo product/provenance rows; the historical global client is disconnected because backend records are run-scoped.
-- `/runs` — typed demo execution history; `GET /api/v1/runs` exists, but the page remains disconnected until its historical DTO is reconciled with the backend contract.
-- `/appearance` — local browser-only visual customization: presets, CSS tokens, logo, and background image.
+## Current view state
 
-Appearance has a persisted Light/Dark mode switch. It changes the structural palette while retaining the chosen accent and local logo/background assets.
-
-Fixtures live only in `src/data/demo.ts` and are visibly marked `DEMO MODE`. The frontend never calculates profitability, risk, provenance, or sourcing decisions.
+| Route | State |
+| --- | --- |
+| `/` | DEMO dashboard fixtures |
+| `/upload` | REAL XLSX processing through FastAPI; CSV remains unsupported |
+| `/products` | DEMO / API-ready; awaits run-scoped records reconciliation |
+| `/runs` | DEMO / API-ready; awaits `RunSummaryOut` DTO reconciliation |
+| `/appearance` | LOCAL REAL theme and branding settings |
 
 ## Local development
 
+Start FastAPI from the repository root:
+
 ```powershell
-npm install
-npm run dev
+$env:JUVAL_CORS_ORIGINS='http://127.0.0.1:5173'
+.venv\Scripts\python -m uvicorn juval.interfaces.api.main:app --host 127.0.0.1 --port 8000
 ```
 
-`VITE_API_BASE_URL` is the only public frontend connection variable. It contains the FastAPI base URL and never a secret.
+Start Vite:
 
-Appearance preferences use browser `localStorage`; local logo/background assets are limited to PNG, JPEG, or WEBP at 400 KB each. Remote brand asset storage is intentionally deferred.
+```powershell
+cd frontend
+npm install
+npm run dev -- --host 127.0.0.1 --port 5173
+```
+
+Open `http://127.0.0.1:5173/`. The public frontend API variable is `VITE_API_BASE_URL`; it must never contain a secret.
+
+Appearance preferences use browser `localStorage`. Local logo/background assets are PNG, JPEG, or WEBP and limited to 400 KB each.
 
 ## Checks
 
 ```powershell
+npm test -- --run
 npm run lint
-npm test
 npm run build
 npm run test:e2e
 ```
-
-For the real API contract, CORS/local demo setup, provenance rules, and backend handoff, read [`../docs/FRONTEND_BACKEND_HANDOFF.md`](../docs/FRONTEND_BACKEND_HANDOFF.md).

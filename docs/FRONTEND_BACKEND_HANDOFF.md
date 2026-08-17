@@ -1,5 +1,9 @@
 # JUVAl — Frontend → Backend Handoff
 
+## Frontend Status: READY FOR BACKEND INTEGRATION
+
+Frontend implementation is complete for the current MVP scope and is ready for backend API integration. This does **not** mean that every view consumes real backend data: Dashboard, Products, and Runs deliberately retain their clearly labelled demo fixtures until their real contracts are reconciled. Current frontend checkpoint: `ffe2a36` (`feat(frontend): refine light and dark appearance modes`).
+
 ## 1. Purpose
 
 This is the operational handoff for the actual PWA state and its HTTP boundary. It separates implemented code from historical frontend proposals.
@@ -19,7 +23,8 @@ React / TypeScript PWA (frontend/src)
   |- Dashboard  frontend/src/pages/DashboardPage.tsx
   |- Upload     frontend/src/pages/UploadPage.tsx
   |- Products   frontend/src/pages/ProductsPage.tsx
-  `- Runs       frontend/src/pages/RunsPage.tsx
+  |- Runs       frontend/src/pages/RunsPage.tsx
+  `- Appearance frontend/src/pages/AppearancePage.tsx
   |
   v
 API boundary (frontend/src/api/client.ts + resource modules)
@@ -40,9 +45,18 @@ application / domain / persistence
 | `/` | `DashboardPage.tsx` | Metrics and recent-run display | **DEMO**, `src/data/demo.ts` | None; no Dashboard API is designed. |
 | `/upload` | `UploadPage.tsx` | Submit XLSX, render result, download Excel | **REAL**, FastAPI | `POST /api/v1/runs`, `GET /api/v1/runs/{execution_id}/download`. |
 | `/products` | `ProductsPage.tsx` | Current product table | **DEMO**, `src/data/demo.ts` | Historical global-client proposal is disconnected. Records are backend run-scoped. |
-| `/runs` | `RunsPage.tsx` | Execution-history table | **DEMO**, `src/data/demo.ts` | List endpoint exists, but the prepared DTO is stale. |
+| `/runs` | `RunsPage.tsx` | Execution-history table | **DEMO / API-ready**, `src/data/demo.ts` | `GET /api/v1/runs` exists; its historical consumer DTO must be reconciled first. |
+| `/appearance` | `AppearancePage.tsx` | Local workspace appearance and branding | **LOCAL REAL**, `ThemeProvider` / browser `localStorage` | None. |
 
 Dashboard, Products, and Runs visibly render `DEMO MODE`. Upload renders the contextual `Live processing` marker. Fixtures live only in `frontend/src/data/demo.ts`; API failure never becomes fixture data.
+
+| View | State | Data source |
+| --- | --- | --- |
+| Dashboard | **DEMO** | Frontend fixtures |
+| Upload | **REAL** | FastAPI |
+| Products | **DEMO / API-ready** | Frontend fixtures |
+| Runs | **DEMO / API-ready** | Frontend fixtures |
+| Appearance | **LOCAL REAL** | `ThemeProvider` and `localStorage` |
 
 ## 4. Frontend API Boundary
 
@@ -90,6 +104,8 @@ The actual decorators in `src/juval/interfaces/api/main.py` register these PWA-f
 - **Frontend state:** no consumer yet. ADR-019 defines this as the record boundary, not a global Products API.
 
 ## 6. Contracts Pending or Requiring Reconciliation
+
+There is no missing approved Runs list endpoint: `GET /api/v1/runs` is implemented. `GET /api/v1/products` is **NOT IMPLEMENTED / NOT APPROVED** because the domain currently has no cross-run product identity. `GET /api/v1/dashboard` is **NOT IMPLEMENTED / NO FRONTEND CONTRACT**; Dashboard remains a demo until a concrete UI need exists.
 
 ### Runs — frontend reconciliation, not a missing endpoint
 
@@ -226,6 +242,8 @@ Only `VITE_API_BASE_URL` is relevant public frontend connection config. Never pu
 
 Fixture: `tests/fixtures/sample_sourcing_TEST_DATA.xlsx`. It is a technical test fixture, not production commercial data.
 
+The real E2E verifies `PARTIAL_SUCCESS`, `4` processed records, a real `B0TESTAAA1` ASIN with visible `[VERIFIED]` provenance, and an `.xlsx` download. This is evidence for the existing fixture and thresholds, not a promise for arbitrary catalogs.
+
 1. Start FastAPI and Vite with section 11 commands.
 2. Open `http://127.0.0.1:5173/upload`.
 3. Select `tests/fixtures/sample_sourcing_TEST_DATA.xlsx`.
@@ -244,16 +262,20 @@ CSV remains visibly unsupported/pending and is not a real alternative to XLSX.
 | Real XLSX upload/download E2E | `frontend/e2e/smoke.spec.ts` | `npm run test:e2e` with both local servers |
 | Lint / production PWA build | `frontend/package.json`, `frontend/vite.config.ts` | `npm run lint`; `npm run build` |
 
-Last verified Demo Local v1 evidence for this source tree: **20 frontend tests**, **13 Playwright tests**, lint, and production build passed. Rerun after changes. Automated Playwright is not human visual QA; manual browser inspection remains pending where an integrated browser is unavailable.
+Last verified at frontend checkpoint `ffe2a36`: **29 frontend tests** and **16 Playwright tests** passed; lint and production build passed. The real Upload/download E2E is included in the Playwright suite. Automated screenshots were reviewed; integrated interactive browser inspection was not available, so this is not claimed as complete manual visual QA.
 
 ## 14. Mobile and PWA Contract
 
 - Desktop: persistent sidebar; narrow viewports: labelled bottom navigation (`AppLayout.tsx`).
 - Products/Runs tables preserve columns with horizontal scrolling instead of silently hiding fields.
 - Backend does not vary domain schema by viewport.
-- `frontend/vite.config.ts` configures manifest plus `generateSW` precache. Backend must not depend on service-worker state.
+- `frontend/vite.config.ts` configures manifest plus `generateSW` precache. The last production build generated `manifest.webmanifest`, `registerSW.js`, `sw.js`, and a six-entry precache. Backend must not depend on service-worker state.
 
-## 15. BACKEND NEXT STEPS
+## 14.1 Non-blocking frontend technical debt
+
+- Vite reports one production JavaScript chunk above 500 kB. This is **NON-BLOCKING**; measure before introducing code splitting or changing bundle architecture.
+
+## 15. WHAT CLAUDE CODE OWNS NEXT
 
 ### Priority 1 — Finalize handoff of implemented Runs resource
 
@@ -273,7 +295,7 @@ Last verified Demo Local v1 evidence for this source tree: **20 frontend tests**
 
 Do not design a dashboard endpoint before the two resources are used by the frontend and there is a concrete UI requirement.
 
-## 16. FRONTEND/BACKEND OWNERSHIP
+## 16. WHAT CODEX OWNS / FRONTEND-BACKEND OWNERSHIP
 
 | Claude Code owns | Codex owns |
 | --- | --- |
@@ -292,17 +314,19 @@ Shared boundary: HTTP DTOs, status/counter semantics, safe errors, and provenanc
 7. `frontend/src/types.ts`
 8. `frontend/src/pages/RunsPage.tsx`
 9. `frontend/src/pages/ProductsPage.tsx`
-10. `src/juval/interfaces/api/main.py`
-11. `src/juval/interfaces/api/models.py`
-12. `src/juval/interfaces/api/service.py`
-13. `src/juval/domain/execution_run.py`
-14. `src/juval/domain/sourcing_record.py`
-15. `src/juval/domain/provenance.py`
-16. `src/juval/domain/risk.py`
-17. `docs/adr/ADR-003-provenance-datos.md`
-18. `docs/adr/ADR-004-estados-verificacion.md`
-19. `docs/adr/ADR-012-record-ref-estrategia.md`
-20. `docs/adr/ADR-019-persistencia-records-run-scoped.md`
+10. `frontend/src/pages/UploadPage.tsx`
+11. `frontend/src/theme/types.ts`
+12. `src/juval/interfaces/api/main.py`
+13. `src/juval/interfaces/api/models.py`
+14. `src/juval/interfaces/api/service.py`
+15. `src/juval/domain/execution_run.py`
+16. `src/juval/domain/sourcing_record.py`
+17. `src/juval/domain/provenance.py`
+18. `src/juval/domain/risk.py`
+19. `docs/adr/ADR-003-provenance-datos.md`
+20. `docs/adr/ADR-004-estados-verificacion.md`
+21. `docs/adr/ADR-012-record-ref-estrategia.md`
+22. `docs/adr/ADR-019-persistencia-records-run-scoped.md`
 
 ## 18. Known Blockers
 
@@ -321,12 +345,27 @@ No new ADR is required. **ADR_CANDIDATE only if a durable cross-run product iden
 
 This handoff was reconciled against current frontend modules, actual FastAPI route decorators, API models/service, `ExecutionRun`, `SourcingRecord`, `RiskFlag`, provenance, ADR-003/004/012/019, test layout, and the sample XLSX path. It intentionally distinguishes implemented routes from historical frontend proposals. No secret, password, service-role key, or connection string is documented.
 
-## 21. Local Appearance / Branding
+## 21. Definition of Frontend Ready
+
+| Capability | State |
+| --- | --- |
+| PWA shell, routing, responsive layout, and mobile navigation | **READY** |
+| Theme, Light/Dark mode, and local branding | **READY** |
+| Upload API and download | **READY / REAL** |
+| Runs consumer | **READY / WAITING FOR DTO RECONCILIATION** |
+| Products consumer | **READY / WAITING FOR RUN-SCOPED CONTRACT RECONCILIATION** |
+| Dashboard | **DEMO / WAITING FOR A CONCRETE CONTRACT** |
+| Frontend tests, E2E, and production PWA build | **READY** |
+
+## 22. Local Appearance / Branding
 
 `frontend/src/theme/ThemeProvider.tsx` is the frontend-only source of truth for `ThemeSettings`. `appearanceMode` is `light` or `dark`; it controls the complete structural palette (charcoal/graphite in Dark, never OLED black) through CSS custom properties while retaining the selected accent and local assets. The provider persists preferences through `frontend/src/theme/storage.ts`, including a safe migration of the prior Light/Dark preset representation.
 
 - Route: `/appearance` (`frontend/src/pages/AppearancePage.tsx`).
 - Appearance: `/appearance` provides a keyboard-accessible smartphone-style Light/Dark switch. Reset restores the JUVAl default Dark appearance together with default branding.
+- `frontend/src/components/AppearanceModeSwitch.tsx` is a semantic `role="switch"` control with `aria-checked`, native keyboard activation, focus-visible feedback, immediate CSS-token updates, and local persistence.
+- Dark is the default, but never mandatory: it uses charcoal/graphite structural tokens (`background #181a1f`, `sidebar #121419`, `header #1d2026`), not pure black. Light is a full mode that updates background, sidebar, header, cards, text, muted text, borders, and elevated surfaces.
+- Branding controls are separate from appearance mode: custom accent/structural tokens, live preview, logo replacement/removal, and background-image replacement/removal. Switching mode preserves logo, background image, fit/position, overlay, and accent.
 - Local assets: PNG/JPEG/WEBP only, 400 KB per logo/background asset, stored as browser data URLs. Invalid/corrupt settings fall back to JUVAl defaults; storage quota errors preserve the live preview and show a safe message.
 - Background options: cover/contain, center/top/bottom, and overlay opacity. Panels remain opaque to protect operational readability.
 - Status/provenance badge colors remain semantic and are not redefined by customer accent selections.

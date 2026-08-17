@@ -30,6 +30,10 @@ Aceptada`, aprobada explícitamente por el usuario 2026-08-16).
 deliberada (Opción B, 2026-08-16) — no invoca el store automáticamente;
 persistir es responsabilidad explícita del caller.
 
+## Frontend Handoff Status
+
+**FRONTEND_READY_FOR_BACKEND_INTEGRATION** (frontend checkpoint `ffe2a36`, 2026-08-17). React/TypeScript PWA routing, responsive shell, mobile navigation, theme/branding, and the real Upload/download flow are implemented. Dashboard remains **DEMO**; Runs and Products remain **DEMO / API-ready** pending reconciliation with the implemented run-scoped FastAPI resources. This status does not declare the full product or all backend integrations complete. See `docs/FRONTEND_BACKEND_HANDOFF.md` for the operational contract and ownership boundary.
+
 ## Completed Phases
 
 | Phase | Status |
@@ -64,7 +68,7 @@ reconciliación documental correspondiente.
 | `infrastructure/enrichment/` | **NOT IMPLEMENTED** — solo `README.md` |
 | `infrastructure/logging/` | **IMPLEMENTED** (parcial) — `sqlite_execution_run_store.py` (persistencia de `ExecutionRun`, ADR-013 `Aceptada`); logging técnico operacional (stdout/archivo) sigue sin implementar |
 | `interfaces/cli` | **IMPLEMENTED** (2026-08-17) — `src/juval/interfaces/cli/main.py`, `argparse` (stdlib) sobre `run_pipeline()`/`export_excel()`, thresholds/fees siempre explícitos por flag (ADR-007), persistencia opt-in vía `--persist-db` (ADR-013 Opción B), 7 tests de integración |
-| `interfaces/api` | **IMPLEMENTED** (Fase 4A, 2026-08-17) — `main.py`/`models.py`/`service.py`, FastAPI (ADR-016), 19 tests de integración. Frontend/deployment/auth siguen sin implementar |
+| `interfaces/api` | **IMPLEMENTED** (Fase 4A, 2026-08-17) — `main.py`/`models.py`/`service.py`, FastAPI (ADR-016). The React/Vite PWA is **FRONTEND_READY_FOR_BACKEND_INTEGRATION**; Dashboard remains demo and Runs/Products await contract reconciliation. See `docs/FRONTEND_BACKEND_HANDOFF.md`. Deployment/auth status is unchanged. |
 | `interfaces/desktop` | **NOT IMPLEMENTED** — solo `README.md`; `.exe` no se construirá como interfaz principal (ADR-014); no se planea trabajo aquí |
 | `processing/decision_score.py` (`DecisionScoreResult`) | **IMPLEMENTED** (código, 6 tests) / **NOT FULLY INTEGRATED** en el pipeline — `process_record`/`process_batch` no lo invocan. Fórmulas de subscore no aprobadas por negocio. Pendiente técnico registrado en §Technical Debt; su resolución corresponde a Fase 5 (Decision Intelligence), no a esta fase. |
 | AI Analyst | **NOT IMPLEMENTED** — solo diseño (`AI_ANALYST.md`, ADR-008) |
