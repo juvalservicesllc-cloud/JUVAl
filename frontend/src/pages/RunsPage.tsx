@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { Link } from "react-router-dom"
 import { getRuns } from "../api/runs"
 import { ApiError, apiErrorMessage } from "../api/client"
 import { StatusBadge } from "../components/StatusBadge"
@@ -81,7 +82,9 @@ export function RunsPage() {
             <tbody>
               {state.items.map((run) => (
                 <tr key={run.execution_id}>
-                  <td className="mono">{run.execution_id}</td>
+                  <td className="mono">
+                    <Link to={`/runs/${encodeURIComponent(run.execution_id)}`}>{run.execution_id}</Link>
+                  </td>
                   <td>{formatTimestamp(run.started_at)}</td>
                   <td>
                     <StatusBadge value={run.status} />

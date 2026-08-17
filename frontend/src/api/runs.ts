@@ -29,3 +29,13 @@ export async function getRuns(options?: { limit?: number; signal?: AbortSignal }
   }
   return { items: body.items }
 }
+
+// GET /api/v1/runs/{execution_id} -- single run, for Run Detail
+// (API_CONTRACT.md §2b-2). 404 surfaces as ApiError via requestJson.
+export async function getRun(executionId: string, signal?: AbortSignal): Promise<RunSummaryOut> {
+  const body = await requestJson(`/api/v1/runs/${encodeURIComponent(executionId)}`, { signal })
+  if (!isRun(body)) {
+    throw new Error("Run API returned an invalid response")
+  }
+  return body
+}

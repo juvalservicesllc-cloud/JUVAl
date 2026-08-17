@@ -1,7 +1,12 @@
 import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import { MemoryRouter } from "react-router-dom"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { RunsPage } from "./RunsPage"
+
+function renderPage() {
+  return render(<MemoryRouter><RunsPage /></MemoryRouter>)
+}
 
 const RUN = {
   execution_id: "run-1",
@@ -22,13 +27,13 @@ describe("RunsPage", () => {
 
   it("shows a loading state while the request is in flight", () => {
     vi.stubGlobal("fetch", vi.fn().mockReturnValue(new Promise(() => {})))
-    render(<RunsPage />)
+    renderPage()
     expect(screen.getByText(/loading run history/i)).toBeInTheDocument()
   })
 
   it("renders real run rows from the API, not demo data", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ items: [RUN] }) }))
-    render(<RunsPage />)
+    renderPage()
 
     expect(await screen.findByText("run-1")).toBeInTheDocument()
     expect(screen.getByText("SUCCESS")).toBeInTheDocument()
@@ -37,7 +42,7 @@ describe("RunsPage", () => {
 
   it("shows an empty state when no runs are persisted", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ items: [] }) }))
-    render(<RunsPage />)
+    renderPage()
     expect(await screen.findByText(/no persisted runs yet/i)).toBeInTheDocument()
   })
 
@@ -45,7 +50,7 @@ describe("RunsPage", () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 503, json: async () => ({ detail: "unavailable" }) })
     vi.stubGlobal("fetch", fetchMock)
     const user = userEvent.setup()
-    render(<RunsPage />)
+    renderPage()
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/unavailable/i)
     expect(screen.queryByRole("table")).not.toBeInTheDocument()

@@ -223,6 +223,44 @@ def test_uploaded_input_file_is_deleted_after_processing(client, tmp_path):
 # -- GET /api/v1/runs/{execution_id}/records (ADR-019) ------------------
 
 
+# -- GET /api/v1/runs/{execution_id} (Run Detail, ADR-019 surface) ------
+
+
+def test_get_run_returns_the_persisted_summary(client):
+    resp = _upload(client, persist="true")
+    body = resp.json()
+
+    detail_resp = client.get(f"/api/v1/runs/{body['execution_id']}")
+
+    assert detail_resp.status_code == 200
+    detail = detail_resp.json()
+    assert detail["execution_id"] == body["execution_id"]
+    assert detail["status"] == body["status"]
+    assert detail["input_filename"] == body["input_filename"]
+    assert detail["records_total"] == body["records_total"]
+    assert detail["records_processed"] == body["records_processed"]
+    assert detail["records_successful"] == body["records_successful"]
+    assert detail["records_with_errors"] == body["records_with_errors"]
+    assert detail["warnings"] == body["warnings"]
+    assert "started_at" in detail and "finished_at" in detail
+
+
+def test_get_run_unknown_execution_id_returns_404(client):
+    resp = client.get("/api/v1/runs/00000000-0000-0000-0000-000000000000")
+    assert resp.status_code == 404
+
+
+def test_get_run_requires_a_configured_store(monkeypatch, tmp_path):
+    monkeypatch.setenv("JUVAL_RUN_STORAGE_DIR", str(tmp_path))
+    monkeypatch.delenv("JUVAL_EXECUTION_DB_PATH", raising=False)
+    monkeypatch.delenv("JUVAL_EXECUTION_STORE", raising=False)
+    unconfigured_client = TestClient(app)
+
+    resp = unconfigured_client.get("/api/v1/runs/does-not-matter")
+
+    assert resp.status_code == 500
+
+
 def test_get_run_records_after_persist_returns_the_same_records(client):
     resp = _upload(client, persist="true")
     body = resp.json()

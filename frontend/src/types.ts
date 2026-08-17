@@ -136,6 +136,14 @@ export interface RunsListResponse {
   items: RunSummaryOut[]
 }
 
+// GET /api/v1/runs/{execution_id}/records (ADR-019) -- run-scoped only,
+// never a global product identity (record_ref is unique per execution,
+// ADR-012). RecordOut is the same shape as RunResponse.records.
+export interface RunRecordsResponse {
+  execution_id: string
+  records: RecordOut[]
+}
+
 export interface ProductListItem {
   record_ref: string
   supplier_sku: string | null

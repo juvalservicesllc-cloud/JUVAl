@@ -136,6 +136,19 @@ equivalente en el dominio; inventarlos habría significado presentar
 una inferencia como si fuera un dato real (ver ADR-019 "Modelo de
 recurso"). Timestamps como string ISO 8601.
 
+## 2b-2. `GET /api/v1/runs/{execution_id}` (Run Detail, 2026-08-17)
+
+Un único run — mismo `RunSummaryOut` de §2b. Añadido para la vista Run
+Detail del frontend (necesita metadata de un run conocido por
+`execution_id` sin traer el listado completo) — reutiliza
+`ExecutionRunStore.load_execution_run`, ya existente y ya usado por
+`GET .../records` para su propio chequeo de 404; ninguna capacidad de
+dominio/persistencia nueva.
+
+- 200 + `RunSummaryOut`.
+- 404 si `execution_id` no existe en el store.
+- 500 si el store no está configurado (mismo mecanismo que §5).
+
 ## 2c. `GET /api/v1/runs/{execution_id}/records` (ADR-019)
 
 Devuelve los records persistidos de una ejecución — el mismo snapshot

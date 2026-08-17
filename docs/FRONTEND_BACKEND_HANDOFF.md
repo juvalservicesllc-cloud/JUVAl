@@ -22,11 +22,12 @@ Browser
   |
   v
 React / TypeScript PWA (frontend/src)
-  |- Dashboard  frontend/src/pages/DashboardPage.tsx
-  |- Upload     frontend/src/pages/UploadPage.tsx
-  |- Products   frontend/src/pages/ProductsPage.tsx
-  |- Runs       frontend/src/pages/RunsPage.tsx
-  `- Appearance frontend/src/pages/AppearancePage.tsx
+  |- Dashboard   frontend/src/pages/DashboardPage.tsx
+  |- Upload      frontend/src/pages/UploadPage.tsx
+  |- Products    frontend/src/pages/ProductsPage.tsx
+  |- Runs        frontend/src/pages/RunsPage.tsx
+  |- Run Detail  frontend/src/pages/RunDetailPage.tsx  (/runs/:executionId)
+  `- Appearance  frontend/src/pages/AppearancePage.tsx
   |
   v
 API boundary (frontend/src/api/client.ts + resource modules)
@@ -47,7 +48,8 @@ application / domain / persistence
 | `/` | `DashboardPage.tsx` | Metrics and recent-run display | **DEMO**, `src/data/demo.ts` | None; no Dashboard API is designed. |
 | `/upload` | `UploadPage.tsx` | Submit XLSX, render result, download Excel | **REAL**, FastAPI | `POST /api/v1/runs`, `GET /api/v1/runs/{execution_id}/download`. |
 | `/products` | `ProductsPage.tsx` | Current product table | **DEMO**, `src/data/demo.ts` | Historical global-client proposal is disconnected. Records are backend run-scoped. |
-| `/runs` | `RunsPage.tsx` | Execution-history table | **REAL**, FastAPI (2026-08-17) | `GET /api/v1/runs`. Loading/empty/error states; retry on error; no demo fallback. |
+| `/runs` | `RunsPage.tsx` | Execution-history table | **REAL**, FastAPI (2026-08-17) | `GET /api/v1/runs`. Loading/empty/error states; retry on error; no demo fallback. Execution IDs link to Run Detail. |
+| `/runs/:executionId` | `RunDetailPage.tsx` | Run metadata + run-scoped records + download | **REAL**, FastAPI (2026-08-17) | `GET /api/v1/runs/{execution_id}` (new), `GET /api/v1/runs/{execution_id}/records`, `GET /api/v1/runs/{execution_id}/download`. Loading/not-found/error(+retry)/ready states; stable URL (refresh/back/forward work, no in-memory-only state). |
 | `/appearance` | `AppearancePage.tsx` | Local workspace appearance and branding | **LOCAL REAL**, `ThemeProvider` / browser `localStorage` | None. |
 
 Dashboard and Products visibly render `DEMO MODE`; Runs renders a `LIVE API` marker instead. Upload renders the contextual `Live processing` marker. Dashboard/Products fixtures live only in `frontend/src/data/demo.ts`; API failure never becomes fixture data anywhere, including Runs.
@@ -68,7 +70,8 @@ Dashboard and Products visibly render `DEMO MODE`; Runs renders a `LIVE API` mar
 | --- | --- | --- |
 | `frontend/src/api/client.ts` | Reads public `VITE_API_BASE_URL`, constructs URLs, uses `fetch`, parses JSON, and throws `ApiError` for non-2xx responses. | Used by all API modules. |
 | `frontend/src/api.ts` | Upload multipart request and download URL. | Connected to Upload. |
-| `frontend/src/api/runs.ts` | `getRuns({limit?, signal?})` consumer, runtime shape checks against real `RunSummaryOut`. | **Connected** — used by `RunsPage.tsx` (2026-08-17). |
+| `frontend/src/api/runs.ts` | `getRuns({limit?, signal?})` and `getRun(executionId, signal?)`, runtime shape checks against real `RunSummaryOut`. | **Connected** — used by `RunsPage.tsx`, `RunDetailPage.tsx` (2026-08-17). |
+| `frontend/src/api/records.ts` | `getRunRecords(executionId, signal?)` — top-level shape check only (see file comment for why: `RecordOut` is already the trusted POST-response shape `api.ts` uses uncast, not a stale demo shape needing deep reconciliation like `products.ts`/`runs.ts` originally did). | **Connected** — used by `RunDetailPage.tsx` (2026-08-17). |
 | `frontend/src/api/products.ts` | Historical `getProducts(signal?)` consumer with runtime checks. | Disconnected: global Products is not registered and conflicts with the run-scoped records model. |
 
 There is no frontend SDK, repository/service layer, direct Supabase client, state manager, or silent API-to-demo fallback.
@@ -101,11 +104,18 @@ The actual decorators in `src/juval/interfaces/api/main.py` register these PWA-f
 - **Error:** safe `500` when no execution-run store is configured.
 - **Frontend state:** connected (2026-08-17) — `RunsPage.tsx` fetches on mount, renders loading/empty/error/success states, no demo fallback. `RunForm.tsx` now exposes the `persist` checkbox needed to produce listable runs.
 
+### IMPLEMENTED — `GET /api/v1/runs/{execution_id}` (added 2026-08-17)
+
+- **Success:** `200 RunSummaryOut` — same shape as one item of `GET /api/v1/runs`.
+- **Errors:** `404 { "detail": "unknown execution_id" }`; safe `500` when no execution-run store is configured.
+- **Why it was added:** Run Detail needs a single run's metadata by ID without fetching the full list and searching client-side (doesn't scale, and the run may fall outside the list's `limit` window). Domain/persistence support already existed (`ExecutionRunStore.load_execution_run`, the same method `GET .../records` already used for its own 404 check) — no new capability, just a second thin HTTP route over it.
+- **Frontend state:** connected — `RunDetailPage.tsx` (`/runs/:executionId`).
+
 ### IMPLEMENTED — `GET /api/v1/runs/{execution_id}/records`
 
 - **Success:** `200 { "execution_id": "...", "records": RecordOut[] }` from persisted run-scoped snapshots.
 - **Errors:** `404 { "detail": "unknown execution_id" }`; safe `500` when no execution-run store is configured.
-- **Frontend state:** no consumer yet. ADR-019 defines this as the record boundary, not a global Products API.
+- **Frontend state:** connected (2026-08-17) — `RunDetailPage.tsx` via `api/records.ts::getRunRecords`, rendered with the existing `ResultsTable.tsx` (reused unchanged, no second table component). ADR-019 defines this as the record boundary, not a global Products API; `ProductsPage.tsx` itself remains demo (see §15 Priority 2 — title/brand still not in the contract, unchanged).
 
 ## 6. Contracts Pending or Requiring Reconciliation
 
@@ -266,7 +276,7 @@ CSV remains visibly unsupported/pending and is not a real alternative to XLSX.
 | Real XLSX upload/download E2E | `frontend/e2e/smoke.spec.ts` | `npm run test:e2e` with both local servers |
 | Lint / production PWA build | `frontend/package.json`, `frontend/vite.config.ts` | `npm run lint`; `npm run build` |
 
-Last verified at frontend checkpoint `ffe2a36`: **29 frontend tests** and **16 Playwright tests** passed; lint and production build passed. Re-verified 2026-08-17 after the Runs integration (Claude Code): **34 frontend tests** and **17 Playwright tests** passed (adds `runs-persistence.spec.ts`, a real-browser E2E for Upload-with-persist → Runs), lint and production build still passing. The real Upload/download E2E is included in the Playwright suite. Automated screenshots were reviewed; integrated interactive browser inspection was not available, so this is not claimed as complete manual visual QA.
+Last verified at frontend checkpoint `ffe2a36`: **29 frontend tests** and **16 Playwright tests** passed; lint and production build passed. Re-verified 2026-08-17 after the Runs integration (Claude Code): **34 frontend tests** and **17 Playwright tests**. Re-verified again 2026-08-17 after Run Detail (Claude Code): **41 frontend tests** and **18 Playwright tests** passed (adds `RunDetailPage.test.tsx` and extends `runs-persistence.spec.ts` through Run Detail: click-through from Runs, real records/decision/provenance, refresh-from-URL, download, plus an unknown-execution-id not-found case), lint and production build still passing. The real Upload/download E2E is included in the Playwright suite. Automated screenshots were reviewed; integrated interactive browser inspection was not available, so this is not claimed as complete manual visual QA.
 
 ## 14. Mobile and PWA Contract
 
@@ -285,16 +295,38 @@ Last verified at frontend checkpoint `ffe2a36`: **29 frontend tests** and **16 P
 
 `frontend/src/types.ts` (`RunSummaryOut`/`RunsListResponse`), `frontend/src/api/runs.ts`, and `frontend/src/pages/RunsPage.tsx` now match the real backend contract exactly — no new backend endpoint, no backend change. `RunForm.tsx` exposes "Persist this run" so the slice is demonstrable end to end. Verified with a real browser E2E (`frontend/e2e/runs-persistence.spec.ts`): Upload with persist checked → run appears in `/runs` with its real `execution_id`/status/counters. 34 frontend unit tests + 17 Playwright E2E passing.
 
-### Priority 2 — Complete run-scoped records, not global Products
+### Priority 2 — PARTIALLY CLOSED 2026-08-17: Run Detail connected; Products still blocked
 
-1. Preserve `(execution_id, record_ref)` identity and `GET /api/v1/runs/{execution_id}/records`.
-2. Decide title/brand availability and explicit risk provenance before adding UI-needed fields to snapshots/`RecordOut`.
-3. Keep the endpoint application/domain-backed; never expose Supabase tables.
-4. Give Codex the updated records DTO. Codex will adapt Products to a selected run-scoped resource.
+Run-scoped records are now consumed for real by **Run Detail** (`/runs/:executionId`, `RunDetailPage.tsx`), not by Products: `(execution_id, record_ref)` identity preserved, `GET /api/v1/runs/{execution_id}/records` reused unchanged, `ResultsTable.tsx` reused unchanged (no second records table built). One new endpoint added, `GET /api/v1/runs/{execution_id}` (single-run metadata by ID) — justified because Run Detail needs it and `ExecutionRunStore.load_execution_run` already backs it; see §5.
 
-### Priority 3 — Dashboard
+**`ProductsPage.tsx` itself remains demo, unchanged.** `title`/`brand` are confirmed **NOT AVAILABLE IN CURRENT CONTRACT** (`RecordOut` has no such fields, verified directly against `models.py` 2026-08-17) — not derived, not invented, not added to the backend just to fill a visual column. Risk verification_status (`RiskFlag.verification_status`/`severity.status`, ADR-020) is also **NOT EXPOSED** by `RecordOut` today — same treatment: reported, not invented. Remaining steps, still pending a real decision:
+1. Decide whether `RecordOut`/snapshot gain `title`/`brand` (would need `_build_record`/`record_to_snapshot` to carry `ProductInfo.title`/`.brand`, which the domain already has — not a domain gap, a snapshot/DTO scope decision).
+2. Decide whether to expose `severity.status` (ADR-020 already flagged this as a deliberately deferred, additive-only change).
+3. Only then adapt `ProductsPage.tsx` to the run-scoped resource (likely: list of runs → pick one → its records, i.e. reuse Run Detail's own records view rather than inventing a separate "Products" concept at all).
 
-Do not design a dashboard endpoint before the two resources are used by the frontend and there is a concrete UI requirement.
+### Priority 3 — Dashboard: still demo, observations recorded for the next slice
+
+Still not designed/implemented — no dashboard endpoint, no aggregation. While building Run Detail, real per-run metrics were observed as actually available without inventing anything:
+
+| Metric | Status | Notes |
+| --- | --- | --- |
+| Records total/processed/successful/with errors, warnings, per run | **AVAILABLE NOW** | Already in `RunSummaryOut`, already rendered per-run in Runs/Run Detail. |
+| Decision (BUY/REVIEW/PASS) distribution, per run | **AVAILABLE NOW (frontend-computable)** | `RecordOut.decision` per record, already fetched by Run Detail — a per-run count is a client-side reduction over already-fetched records, no backend change needed for a single run's distribution. |
+| Cross-run aggregates (e.g. "BUY rate this week") | **NEEDS AGGREGATION** | Would require summing across many runs' records — not fetched together today; backend aggregation vs. many-request client aggregation is an open scaling question, not decided here. |
+| Average ROI/profit across a catalog | **NEEDS AGGREGATION** | Same reasoning; also raises which runs to include (latest only? all time?) — a **BUSINESS DEFINITION**, not just a technical one. |
+| HAZMAT/BULKY prevalence across a catalog | **NEEDS AGGREGATION + BUSINESS DEFINITION** | Same as above. |
+| Data quality (issue/warning rate) | **NEEDS AGGREGATION** | Per-run issue counts already exist (`RunSummaryOut.warnings`); a cross-run rate is aggregation, not new data. |
+
+None implemented this session — Dashboard remains untouched, demo. This table is only the input for whichever slice tackles it next.
+
+### Chart candidates identified, not built (documentation only, per this session's scope)
+
+| Candidate | Question answered | Data source | Transformation | Business value |
+| --- | --- | --- | --- | --- |
+| Decision distribution (single run) | "How many BUY/REVIEW/PASS did this run produce?" | `RunDetailPage`'s already-fetched `records[].decision` | Client-side count by value | Immediate read of a run's outcome mix — no backend change to build. |
+| Run outcome history (SUCCESS/PARTIAL_SUCCESS/FAILED over time) | "Is catalog processing getting more or less reliable?" | `GET /api/v1/runs` (already fetched by RunsPage) | Client-side count by `status`, ordered by `started_at` | Useful once enough persisted runs exist; not fabricated now — no chart added this session because the current SQLite/dev dataset has too few real runs to be meaningful, not because the code would be hard. |
+
+Not built: no chart added to any page this session (per instruction — document, don't implement).
 
 ## 16. WHAT CODEX OWNS / FRONTEND-BACKEND OWNERSHIP
 
@@ -353,7 +385,8 @@ This handoff was reconciled against current frontend modules, actual FastAPI rou
 | Theme, Light/Dark mode, and local branding | **READY** |
 | Upload API and download | **READY / REAL** |
 | Runs consumer | **READY / REAL** |
-| Products consumer | **READY / WAITING FOR RUN-SCOPED CONTRACT RECONCILIATION** |
+| Run Detail consumer | **READY / REAL** |
+| Products consumer | **READY / WAITING FOR RUN-SCOPED CONTRACT RECONCILIATION** (title/brand, risk provenance -- both confirmed NOT AVAILABLE in current `RecordOut`) |
 | Dashboard | **DEMO / WAITING FOR A CONCRETE CONTRACT** |
 | Frontend tests, E2E, and production PWA build | **READY** |
 

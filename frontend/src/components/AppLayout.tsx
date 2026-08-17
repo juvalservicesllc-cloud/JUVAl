@@ -11,10 +11,17 @@ const navigation = [
 
 const titles: Record<string, string> = { "/": "Dashboard", "/upload": "Upload Catalog", "/products": "Products", "/runs": "Processing Runs", "/appearance": "Appearance" }
 
+function pageTitle(pathname: string): string {
+  if (pathname.startsWith("/runs/")) return "Run Detail"
+  return titles[pathname] ?? "JUVAl"
+}
+
 export function AppLayout() {
   const { pathname } = useLocation()
   const { settings } = useTheme()
-  const isLiveRoute = pathname === "/upload"
+  // Upload and Runs (list + detail) are real backend data -- everything
+  // else (Dashboard, Products) is still demo fixtures (docs/FRONTEND_BACKEND_HANDOFF.md).
+  const isLiveRoute = pathname === "/upload" || pathname.startsWith("/runs")
   return (
     <div className="shell">
       <aside className="sidebar">
@@ -22,7 +29,7 @@ export function AppLayout() {
         <nav aria-label="Main navigation">{navigation.map(([to, label, icon]) => <NavLink key={to} to={to} end={to === "/"}><span>{icon}</span>{label}</NavLink>)}</nav>
         <div className="sidebar-footer"><span className="avatar">JD</span><div><strong>Juval Demo</strong><small>Operator</small></div></div>
       </aside>
-      <div className="workspace"><header className="topbar"><div><small>JUVAl / Operations</small><h1>{titles[pathname] ?? "JUVAl"}</h1></div><span className={`environment ${isLiveRoute ? "environment-live" : ""}`}>{isLiveRoute ? "Live processing" : "Demo workspace"}</span></header><main><Outlet /></main></div>
+      <div className="workspace"><header className="topbar"><div><small>JUVAl / Operations</small><h1>{pageTitle(pathname)}</h1></div><span className={`environment ${isLiveRoute ? "environment-live" : ""}`}>{isLiveRoute ? "Live processing" : "Demo workspace"}</span></header><main><Outlet /></main></div>
     </div>
   )
 }

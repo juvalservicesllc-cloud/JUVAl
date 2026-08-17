@@ -51,6 +51,7 @@ from .models import (
     RunRecordsResponse,
     RunResponse,
     RunsListResponse,
+    RunSummaryOut,
     ThresholdsIn,
 )
 
@@ -227,6 +228,16 @@ async def list_runs(limit: int = Query(_RUNS_LIST_DEFAULT_LIMIT, ge=1, le=_RUNS_
     store = _require_execution_run_store()
     runs = store.list_execution_runs(limit=limit)
     response = RunsListResponse(items=[service.run_to_summary(r) for r in runs])
+    return JSONResponse(status_code=200, content=response.model_dump(mode="json"))
+
+
+@app.get("/api/v1/runs/{execution_id}", response_model=RunSummaryOut)
+async def get_run(execution_id: str) -> JSONResponse:
+    store = _require_execution_run_store()
+    run = store.load_execution_run(execution_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="unknown execution_id")
+    response = service.run_to_summary(run)
     return JSONResponse(status_code=200, content=response.model_dump(mode="json"))
 
 
