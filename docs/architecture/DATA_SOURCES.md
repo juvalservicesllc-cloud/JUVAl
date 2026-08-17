@@ -12,12 +12,32 @@
 | `CALCULATED` | Derivado determinísticamente por código de Juval | profit, ROI, margin, break-even, volumen |
 | `INFERRED` | Derivado por una regla/heurística, no un cálculo exacto | hazmat por categoría+keyword, estimación de ventas |
 | `AI_ANALYSIS` | Producido por la capa de IA | resúmenes, explicaciones — **nunca** un valor numérico de negocio (ver ADR-008) |
-| `NOT_FOUND` | No se intentó ninguna fuente, o ninguna tuvo el dato | valor por defecto cuando no hay nada que declarar |
+| `NOT_FOUND` | No se encontró un dato útil después de una consulta o validación aplicable | resultado explícito de una fuente consultada; no representa un fallo operacional |
 
 `SourceType` responde "¿dónde se buscó?"; `VerificationStatus` responde
 "¿qué se obtuvo?". Son ejes independientes — ver `domain/provenance.py`
 docstring de `SourceType` para el ejemplo canónico
 (`OFFICIAL_API` + `NOT_FOUND` = "se consultó la API, no había match").
+
+## 1b. Política transversal de adquisición
+
+Prioridad de fuentes, en orden: (1) API/fuente oficial, (2) fuente pública
+estructurada y legítima, (3) proveedor comercial con licencia, (4) dato
+derivado internamente de inputs trazables. `docs/DATA_ACQUISITION_MATRIX.md`
+es la fuente de verdad campo por campo y de los hechos de cada proveedor.
+
+Un dato de proveedor y un dato Amazon no son sinónimos. Por ejemplo, peso
+de paquete declarado por proveedor y peso de paquete de catálogo Amazon se
+retienen como hechos distintos, con su propia provenance; no se sobrescribe
+uno con el otro. La misma regla aplica a dimensiones, título, marca,
+categoría, precio y HazMat. Una divergencia se registra y se resuelve por
+contexto aprobado posteriormente, nunca por una precedencia universal oculta.
+
+Fallos operacionales no son resultados de negocio: 429 es throttling, 5xx y
+timeout son fallos de fuente/retry, auth es fallo de configuración/autorización
+y una respuesta malformada es fallo de esquema. Ninguno debe producir
+`NOT_FOUND`. La política por proveedor+operación, batch, rate header, retry y
+coste vive en `DATA_ACQUISITION_MATRIX.md`.
 
 ## 2. Regla dura del proyecto: sin scraping ni evasión
 
@@ -61,12 +81,23 @@ pendiente #2). Cuando se apruebe una fuente concreta, su adapter deberá:
    la fuente lo permita, `source_reference` (ID de consulta/URL) para
    auditoría.
 4. Nunca traducir un "no encontrado" de la fuente en un valor por defecto.
+5. No resolver silenciosamente matches ambiguos: `AMBIGUOUS` es una decisión
+   pendiente de modelo separada de `VerificationStatus`.
 
 ## 5. Estado de integraciones
 
 | Fuente | Estado |
 |---|---|
 | Excel (proveedor) | **IMPLEMENTED** — `infrastructure/excel/importer.py`, única fuente de datos real hoy; 17 tests de integración |
-| Amazon SP-API u otra API oficial | **NOT IMPLEMENTED** — pendiente de aprobación y credenciales |
+| Amazon SP-API Catalog Items | **DOC VERIFIED / AUTH BLOCKED / LIVE VALIDATION BLOCKED** — requirements, Product Listing role y POC están documentados; no hay adapter ni credenciales configuradas |
 | Fuente de datos de mercado (BSR/Buy Box histórico, tipo Keepa) | **NOT IMPLEMENTED** — pendiente de aprobación explícita, no asumida |
-| Base de datos de persistencia de Juval | **NOT IMPLEMENTED** — pendiente decisión (Supabase `PENDING`, `CLAUDE.md` §14; ver `docs/architecture/TECHNOLOGY_DECISIONS.md`) |
+| Base de datos de persistencia de Juval | **IMPLEMENTED para ExecutionRun/records** (SQLite/Supabase según configuración); no es una fuente externa de Product Intelligence |
+
+## 6. Requisitos de ejecución futura
+
+El enriquecimiento externo debe ejecutarse en backend como trabajo asíncrono,
+persistente, reanudable e idempotente por record/etapa. Debe ofrecer resultados
+parciales, retry/backoff, prioridad, etapas condicionales, batch, monitor de
+throughput y monitor de coste/uso. Esto no selecciona queue, worker ni
+tecnología. La PWA observa/controla/prioriza/muestra progreso: no hace llamadas
+al proveedor, no conserva la cola y no depende de permanecer abierta.

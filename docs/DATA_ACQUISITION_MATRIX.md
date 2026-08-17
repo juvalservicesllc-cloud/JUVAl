@@ -9,6 +9,17 @@
 
 This is the source of truth for *where* JUVAl may obtain commercial data. It is deliberately not an implementation plan, vendor commitment, fee schedule, or legal opinion.
 
+### Documentation hierarchy
+
+| Document | Owns | Must not become |
+| --- | --- | --- |
+| `docs/PRODUCT_CAPABILITY_MATRIX.md` | What JUVAl should enable for an operator: purpose, priority, current backend/frontend support and data dependency. | Provider/manual/API reference. |
+| **This document** | Field-level data requirement, source facts, access, status, provenance, fallback, conflicts and operational policies. | An implementation commitment or provider selection. |
+| `docs/architecture/DATA_SOURCES.md` | Cross-cutting source and operational safety rules. | A duplicate field inventory. |
+| Provider documentation | Vendor-specific capabilities, terms, rates and responses. | A JUVAl domain contract. |
+
+The current capability matrix is intentionally read together with this one: “data source missing” in a capability never authorizes a source merely because it was named in a benchmark.
+
 - A field is **not obtainable** merely because it appears on an Amazon page.
 - Amazon facts, supplier declarations, account-specific outcomes, third-party observations and derived values remain separate.
 - No Amazon or provider scraping is approved. `docs/architecture/DATA_SOURCES.md` already prohibits it.
@@ -59,19 +70,34 @@ This is a recommendation to evaluate, not a vendor selection. The existing `infr
 
 Abbreviations: **P0** core sourcing/profitability gate; **P1** strongly improves decision/risk; **P2** enrichment; **P3** optional. Impact: Display, Filter, Profitability, Risk, Decision, Future. Access: `SF` supplier file, `SP` authorized Selling Partner API, `KP` licensed Keepa candidate. “API” below means an integration not yet implemented.
 
+### Master-row control fields
+
+For readability, the inventory groups related fields in a cell, but every row
+is governed by the following fixed schema. `Candidate / selected` never means
+that a provider has been procured or approved; the selected value means only
+the preferred source *if* the documented access conditions are met.
+
+| Required control | Where it is recorded in each inventory row |
+| --- | --- |
+| FIELD; BUSINESS PURPOSE; CRITICALITY | `Field` and `Purpose / criticality / impact` |
+| CURRENT SOURCE; PRIMARY SOURCE; SECONDARY SOURCE; SOURCE TYPE | `Current source and status` and `Candidate / selected source` |
+| ACCESS MODEL; BATCH SIZE; RATE-LIMIT MODEL; FRESHNESS; HISTORY | `Access, cost, batch, freshness/history` |
+| PROVENANCE RULE; FALLBACK; CONFLICT POLICY | `Provenance, validation and fallback`, plus §§10–11 |
+| CURRENT STATUS | `Final status` using the controlled vocabulary in §14 |
+
 | Field | Purpose / criticality / impact | Current source and status | Candidate / selected source | Access, cost, batch, freshness/history | Provenance, validation and fallback | Final status |
 | --- | --- | --- | --- | --- | --- | --- |
 | supplier_sku | Identity; P0; Display/trace | Supplier Excel; current | SF / SF | File; no external cost; catalog batch | Plain supplier identifier; non-empty + duplicate policy; no fallback | VERIFIED SOURCE |
-| UPC / EAN / GTIN | Match key; P0; Filter/Decision | Supplier Excel only when supplied; EAN/GTIN column gaps exist | SF → SP Catalog identifier search / SF then SP | SP accepts UPC/EAN/GTIN, max 20 IDs; 5 rps default; current only | Verify checksum before query; retain raw supplier ID; no match → NOT_FOUND | MULTIPLE VALID SOURCES |
+| UPC / EAN / GTIN | Match key; P0; Filter/Decision | Supplier Excel only when supplied; EAN/GTIN column gaps exist | SF → SP Catalog identifier search / SF then SP | SP accepts UPC/EAN/GTIN, max 20 IDs; current only; rate is provider+operation and the applied header prevails | Verify checksum before query; retain raw supplier ID; no match → NOT_FOUND | MULTIPLE VALID SOURCES |
 | ISBN | Matching only where product type applies; P2 | Not imported | SF → SP Catalog ISBN / SF then SP | Same Catalog constraints | Format/type validation; no ISBN on non-book is NOT NEEDED | VERIFIED SOURCE |
 | supplier title / brand / category | Supplier description; P1; Display/match | SF; imported | SF / SF | File; slow-changing | `SUPPLIER_FILE`, VERIFIED only as supplier declaration; no overwrite by Amazon fields | VERIFIED SOURCE |
 | COG | Profitability; P0; Profitability/Decision | SF | SF / SF | File; per catalog | Decimal/currency/non-negative validation; absent blocks profitability; no default 0 | VERIFIED SOURCE |
 | supplier shipping | Profitability; P0; Profitability/Decision | SF | SF / SF | File; per catalog | Unit/currency basis must be explicit; absent requires user input, not estimate | VERIFIED SOURCE |
 | supplier package weight / H/W/L | FBA cost/risk; P0/P1; Profitability/Risk | SF | SF / SF | File; slow-changing | Preserve as supplier package values; normalize lb/in; invalid raw retained; no replacement fallback | VERIFIED SOURCE |
 | Amazon ASIN / marketplace | Catalog identity; P0; all | Supplier-declared ASIN may be present but not remotely confirmed | SP Catalog search/get / SP | Seller/vendor + Product Listing role; marketplace required; current only | Exact identifier candidate becomes VERIFIED only after deterministic reconciliation; no result → NOT_FOUND | VERIFIED SOURCE (after authorized query) |
-| Amazon title / brand / category / product type | Match confirmation, display; P1 | No Amazon source current | SP Catalog summaries/attributes/classifications / SP | Catalog current response; 20 identifiers/search, 5 rps default | Store separately from supplier declarations; source response reference + marketplace | VERIFIED SOURCE |
+| Amazon title / brand / category / product type | Match confirmation, display; P1 | No Amazon source current | SP Catalog summaries/attributes/classifications / SP | Catalog current response; up to 20 identifiers/search; rate is operation-specific and header-controlled | Store separately from supplier declarations; source response reference + marketplace | VERIFIED SOURCE |
 | Amazon images | Display/enrichment; P3 | None | SP Catalog `images` / SP | Current; URL only, no automatic download | `OFFICIAL_API`; allow missing; policy before asset storage | VERIFIED SOURCE |
-| Parent/child ASIN, variation family, attributes | Variation risk; P1; Risk/Filter | None | SP Catalog `relationships` / SP | Current; 5 rps default | Preserve parent/children/theme and marketplace; no relation is not necessarily invalid | VERIFIED SOURCE |
+| Parent/child ASIN, variation family, attributes | Variation risk; P1; Risk/Filter | None | SP Catalog `relationships` / SP | Current; operation-specific rate and applied header control | Preserve parent/children/theme and marketplace; no relation is not necessarily invalid | VERIFIED SOURCE |
 | Matching by UPC/EAN/GTIN/ISBN | High-precision candidate generation; P0 | Not performed | SP Catalog IDs / SP | 20 IDs/request; identifier type mandatory | Exact identifier + catalog response; if multiple candidates, do not auto-choose without policy | VERIFIED SOURCE |
 | Matching by supplier SKU | Seller listing lookup; P1 | Not performed | SP Catalog `SKU` + sellerId / SP | Account-specific; sellerId required | Only verifies the authorized seller's SKU mapping; not universal supplier-SKU matching | ACCOUNT-SPECIFIC |
 | Matching by title + brand + model/MPN | Candidate discovery; P1 | Not performed | SP Catalog keyword search, supplier facts / SP + derived resolver | No documented exact precision/recall; result may be paginated | Candidate generation is VERIFIED source data; final selected match is INFERRED until business-approved deterministic policy/evidence | BUSINESS DECISION REQUIRED |
@@ -96,7 +122,7 @@ Abbreviations: **P0** core sourcing/profitability gate; **P1** strongly improves
 | Supplier-declared HazMat | Risk; P1 | Excel boolean | SF / SF | File | Supplier declaration can be VERIFIED as a declaration, not Amazon dangerous-goods approval; severity remains separate provenance | VERIFIED SOURCE |
 | Amazon dangerous-goods/HazMat status | FBA eligibility/risk; P1 | None | FBA storage report for seller inventory; inbound eligibility; selected SP payloads / SP | Account/inventory dependent; no verified public catalog-wide endpoint identified | Treat FBA dangerous-goods storage type as account-specific observation. Do not derive a universal HazMat boolean from it. | ACCOUNT-SPECIFIC |
 | JUVAl HazMat policy/severity | Risk/Decision; P0 once adopted | Provisional existing mapping only | Business-approved policy / derived | No source can decide JUVAl severity | Presence and severity are separate (`ADR-020`); no default policy expansion | BUSINESS DECISION REQUIRED |
-| Seller eligibility to list | Go/no-go; P0 | None | SP Listings Restrictions / SP | Seller authorization + Product Listing role; per ASIN request, default 5 rps | Empty restriction list is a result for the specified context, not a global claim; recheck near listing | ACCOUNT-SPECIFIC |
+| Seller eligibility to list | Go/no-go; P0 | None | SP Listings Restrictions / SP | Seller authorization + Product Listing role; per-ASIN request; documented defaults and applied header must be recorded per operation | Empty restriction list is a result for the specified context, not a global claim; recheck near listing | ACCOUNT-SPECIFIC |
 | FBA inbound / commingling eligibility | Go/no-go; P0/P1 | None | SP FBA Inbound Eligibility / SP | Amazon Fulfillment role; 1 rps; single preview | Record preview type, seller, marketplace, reason codes and retrieval time; no batch documented | ACCOUNT-SPECIFIC |
 | Brand/category/ASIN restriction, approval-required | Go/no-go; P0 | None | SP Listings Restrictions / SP | Same as eligibility | Restriction reason/action links are evidence; never infer eligibility from listing existence | ACCOUNT-SPECIFIC |
 | Meltable/adult/restricted product | Risk; P1 | None | Account restrictions where returned; product-type/policy review / mixed | No single catalog-wide verified source identified | Preserve individual risk types; source absence is UNKNOWN/NOT_FOUND, not ABSENT | BLOCKED |
@@ -107,7 +133,7 @@ Abbreviations: **P0** core sourcing/profitability gate; **P1** strongly improves
 | Method | Candidate source | Precision / recall position | Batch | Final match status |
 | --- | --- | --- | --- | --- |
 | Exact UPC/EAN/GTIN/ISBN | SP Catalog identifier search | Highest expected precision, but multi-result/packaging collisions remain possible; recall depends on catalog identifier coverage | 20 identifiers/request | Candidate source VERIFIED; automatic selection requires collision policy. |
-| Existing ASIN | SP `getCatalogItem` | Exact identity verification for a syntactically valid supplied ASIN; does not prove supplier item equivalence | Single ASIN; 5 rps default | VERIFIED catalog existence; supplier-to-ASIN equivalence still needs evidence. |
+| Existing ASIN | SP `getCatalogItem` | Exact identity verification for a syntactically valid supplied ASIN; does not prove supplier item equivalence | Single ASIN; operation-specific rate and applied header control | VERIFIED catalog existence; supplier-to-ASIN equivalence still needs evidence. |
 | Seller SKU | SP Catalog SKU + `sellerId` | Only maps an authorized seller's SKU; not a supplier SKU lookup | API constrained/account-specific | ACCOUNT-SPECIFIC. |
 | Title + brand + model/MPN | Catalog keyword search plus supplier values | Better recall, material false-positive risk, especially variants/bundles | Keyword pagination; no safe automated matching policy documented | Candidate discovery only; selected match remains INFERRED. |
 
@@ -118,7 +144,7 @@ Abbreviations: **P0** core sourcing/profitability gate; **P1** strongly improves
 | Provider | Available data / US coverage | Auth model | Public price | Rate/batch | History/freshness | Reliability, terms and lock-in |
 | --- | --- | --- | --- | --- | --- | --- |
 | Supplier catalog/feed | Supplier SKU, IDs, descriptive facts, COG, shipping, declared dimensions/HazMat; supplier-specific | Supplier file/feed authority | Contract-specific | File batch; no API guarantee | At catalog issuance; no inherent history | Strong for supplier facts, never proof of Amazon facts; supplier format/quality risk. |
-| Amazon SP-API | US (and NA/EU/FE documented) catalog, current ranks, current offers/competitive info, fees, restrictions, FBA eligibility | Registered/authorized seller or vendor; required roles | API operational pricing not confirmed publicly; seller plan page public but not an API price model | Per operation, headers authoritative; Catalog 20 IDs/5 rps default; pricing/fees slower | Current snapshot; account reports have stated schedules; no market history service | Official/high authority, but account authorization and operation-specific access; vendor lock-in to Amazon. |
+| Amazon SP-API | US (and NA/EU/FE documented) catalog, current ranks, current offers/competitive info, fees, restrictions, FBA eligibility | Registered/authorized seller or vendor; required roles | API operational pricing not confirmed publicly; seller plan page public but not an API price model | Per operation, headers authoritative; Catalog supports up to 20 identifier inputs; pricing/fees are operation-specific | Current snapshot; account reports have stated schedules; no market history service | Official/high authority, but account authorization and operation-specific access; vendor lock-in to Amazon. |
 | Keepa API candidate | Product identity, parent, historical price/rank and optional offers/stats suggested by official API model; US domain supported by product locale model | Paid API key/entitlement required | **PRICE NOT PUBLIC in verifiable primary source** | Request model says up to 100 product codes in a request; token/refill and actual quota require account validation | Historical payload exists; offer model warns gaps/stale/incomplete offers | Established specialized provider, but proprietary schema/tokens/retention contract create lock-in. |
 | SellerAmp SAS | End-user research tool advertises fees, eligibility/IP alerts, historical price/sales charts and Buy Box analysis | Subscription / lookup allocation | Public subscription tiers and 1,000-or-unlimited lookup allocations are published | No documented provider API/batch contract was found | Product feature claims are not a reusable data contract | Useful functional benchmark only; do not integrate, scrape, proxy or treat it as a source. |
 | Amazon Creators API | Catalog/search/variations/browse nodes for affiliate product discovery | Associates enrollment, qualifying sales, credentials | Program/contract dependent | API reference must be checked post-onboarding | Not selected for seller account/fees/restrictions | Not appropriate primary source for seller eligibility or FBA economics; affiliate license constraints. |
@@ -159,6 +185,19 @@ No numeric third-party cost is invented. Therefore the 1K/10K/100K rows below ar
 | SP Listings Restrictions | 5 requests/s; no batch operation documented | 5 ASIN/s | 3 m 20 s | 33 m 20 s | 5 h 33 m | Per seller/account context. |
 | SP FBA eligibility preview | 1 request/s; no batch documented | 1 ASIN/s | 16 m 40 s | 2 h 47 m | 27 h 47 m | Per seller/account context. |
 | Keepa candidate | Token/refill/quota not independently public-verified | Unknown | BLOCKED | BLOCKED | BLOCKED | Must validate paid account documentation/sample first. |
+
+### Normative rate-limit and batch policy
+
+Rate limiting is scoped to **provider + operation**, never “Amazon” or a whole run. For every enabled operation, record documented default, observed `x-amzn-RateLimit-Limit` when supplied, batch size, burst, concurrency and retry result. The observed header prevails over a documented default; no adapter may scatter fixed `sleep` calls.
+
+| Outcome | Required handling | Never classify as |
+| --- | --- | --- |
+| 429 | Throttled; bounded retry/backoff under the operation policy, then operational failure | `NOT_FOUND` |
+| 5xx / timeout | Source failure; retry under policy, retain attempt evidence | `NOT_FOUND` |
+| LWA/auth failure | Configuration or authorization failure; do not retry blindly | `NOT_FOUND` |
+| Malformed provider response | Source/schema failure; preserve sanitized diagnostic evidence | `NOT_FOUND` |
+
+Batching is used only where provider documentation explicitly supports it. Catalog identifier search is up to 20 homogeneous identifiers; Product Fees batch is up to 20 products; no batch is assumed for Listings Restrictions or FBA eligibility. Provider documentation, not an endpoint name, is evidence for batch behavior.
 
 ## 9. Freshness, cache and history policy — conceptual only
 
@@ -228,6 +267,10 @@ The sample XLSX in `tests/fixtures/sample_sourcing_TEST_DATA.xlsx` remains techn
 
 ## 14. Unresolved data and required decisions
 
+### Controlled status vocabulary
+
+`IMPLEMENTED`, `VERIFIED SOURCE`, `DOC VERIFIED`, `AUTH BLOCKED`, `LIVE VALIDATION BLOCKED`, `PAID SOURCE REQUIRED`, `ACCOUNT-SPECIFIC`, `DERIVED`, `BUSINESS DECISION REQUIRED`, `NOT FOUND`, and `NOT NEEDED` are the only acquisition statuses used by this document. A combined label may retain two facts (for example, `VERIFIED SOURCE current; PAID SOURCE REQUIRED history`); it never hides an operational failure as a data result.
+
 1. **Vendor selection/procurement:** whether a licensed history provider is approved, including Keepa vs alternatives, price, tokens, data rights, retention, coverage and live sample validation.
 2. **ASIN collision/match acceptance policy:** especially packs, variations and keyword candidates.
 3. **FBA/FBM economic model:** explicit account/user inputs, which fees are queried, and when a missing fee blocks a decision.
@@ -235,6 +278,21 @@ The sample XLSX in `tests/fixtures/sample_sourcing_TEST_DATA.xlsx` remains techn
 5. **HazMat policy/severity:** source hierarchy and severity taxonomy require business approval; current provisional mapping is not approval.
 6. **IP risk model:** no reliable product-level complaint/enforcement source was verified; do not build a score without an approved business model and lawful source.
 7. **Retention/cache policy:** set only after selected vendor terms and data-use constraints are verified.
+
+### Unified unresolved decisions register
+
+| Decision | Why required | Blocks | Current state/default | Owner | Status |
+| --- | --- | --- | --- | --- | --- |
+| AMBIGUOUS matching model | `VerificationStatus` cannot represent multiple candidates honestly | Exact identifier matcher | Do not select; do not call it NOT_FOUND | Domain/product | PENDING DECISION |
+| HazMat severity | Presence and severity are distinct; current mapping is provisional | Automated risk/decision policy | `HAZMAT → HIGH` provisional | Business/domain | BUSINESS DECISION REQUIRED |
+| Bulky severity | Same separation and policy issue | Automated risk/decision policy | `BULKY → MEDIUM` provisional | Business/domain | BUSINESS DECISION REQUIRED |
+| Historical provider | History needs a licensed source | Price/BSR/Buy Box/competition history | Keepa is candidate, not selected | Product/procurement | PAID SOURCE REQUIRED |
+| Queue technology | Enrichment must survive browser/process lifecycle | Scalable enrichment execution | No technology selected | Architecture/backend | PENDING DECISION |
+| Enrichment DAG | Prevent needless calls and define partial results | Orchestration/stages | Conceptual only | Architecture/product | TO BE FORMALIZED IN ADR |
+| Decision Score | Formula and business thresholds are not approved | Score as decision input | Framework exists; use deferred | Business/domain | BUSINESS DECISION REQUIRED |
+| Sales-estimate methodology | Estimates are not source facts | Demand enrichment | Must remain INFERRED | Product/data | BUSINESS DECISION REQUIRED |
+| IP-risk model | No reliable lawful product-level source verified | IP risk score/automation | Do not score | Business/legal/product | NOT FOUND |
+| Eligibility scope | Eligibility is seller + marketplace + context specific | Can-I-sell claims | Use account-specific result only | Product/domain | BUSINESS DECISION REQUIRED |
 
 ## 15. Data-readiness conclusion
 
@@ -305,3 +363,15 @@ When authorization and the ambiguity decision exist, introduce only a catalog-fo
 The SP-API adapter will batch at most 20 homogeneous identifiers, observe `x-amzn-RateLimit-Limit` when present, and expose an injectable conservative throttle value. Its cache key, if a cache is later approved, is `(marketplace, identifier_type, normalized_identifier)`; TTL remains a slow-changing-policy decision, not an implementation assumption.
 
 Required tests after authorization/decision: exact match, zero match, multiple candidates, malformed response, source failure, provenance, 20-item batch and 21-item split. A credential-gated live integration test must stay outside the normal suite.
+
+## 18. Incremental enrichment and PWA responsibility — architecture requirements
+
+These are requirements for a future enrichment architecture, **not** an implementation or queue selection:
+
+- Enrichment is asynchronous, persistently queued and idempotent by record/stage; a browser closing must not cancel a run.
+- Runs must resume after restart, expose partial record/stage results, use bounded retry/backoff and support priority, conditional stages, batches, throughput monitoring and provider-operation cost/usage monitoring.
+- JUVAl must account for request count, item count, retries, provider, operation, run and estimated/actual cost.
+- The PWA only **observes, controls, prioritizes and displays progress**. It does not execute provider calls, own a queue, enforce provider rate limits or need to remain open.
+- The conceptual dependency path is `Supplier → Identity → Catalog → eligibility/restrictions → pricing → fees → history → decision`; it is **CONCEPTUAL / TO BE FORMALIZED IN ADR**. A stage that makes a later stage inapplicable should prevent that request.
+
+No TTL is set here. Freshness classes in §9 express refresh requirements, not a cache implementation.

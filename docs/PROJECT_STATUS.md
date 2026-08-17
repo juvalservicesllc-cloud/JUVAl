@@ -34,6 +34,17 @@ persistir es responsabilidad explícita del caller.
 
 **FRONTEND_READY_FOR_BACKEND_INTEGRATION** (frontend checkpoint `ffe2a36`, 2026-08-17). React/TypeScript PWA routing, responsive shell, mobile navigation, theme/branding, and the real Upload/download flow are implemented. Dashboard remains **DEMO**; Runs and Products remain **DEMO / API-ready** pending reconciliation with the implemented run-scoped FastAPI resources. This status does not declare the full product or all backend integrations complete. See `docs/FRONTEND_BACKEND_HANDOFF.md` for the operational contract and ownership boundary.
 
+## Data Acquisition Policy Status
+
+**DOCUMENTATION FREEZE (2026-08-17):**
+[`DATA_ACQUISITION_MATRIX.md`](DATA_ACQUISITION_MATRIX.md) is the field-level
+source of truth, and [`architecture/DATA_SOURCES.md`](architecture/DATA_SOURCES.md)
+owns shared acquisition rules. No external enrichment adapter is implemented.
+Amazon SP-API Catalog is **DOC VERIFIED / AUTH BLOCKED / LIVE VALIDATION
+BLOCKED**; Keepa remains a **candidate, not approved**. Product Intelligence
+cannot proceed until the documented authorization, matching-ambiguity and
+business decisions are reconciled.
+
 ## Completed Phases
 
 | Phase | Status |
