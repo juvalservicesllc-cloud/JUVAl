@@ -10,27 +10,46 @@ ARCHITECTURE.md §3 — dependency direction is Interfaces -> Application
 -> Processing -> Domain, with Infrastructure implementing ports defined
 inward).
 
-Deliberately two methods only — save by execution_id, load by
-execution_id. Not a generic Repository (list/delete/update/query are
-not needed by any caller today and would be speculative — see
-ADR-013).
+Originally deliberately two methods only — save by execution_id, load
+by execution_id; a Repository-style list was explicitly rejected as
+speculative ("not needed by any caller today", ADR-013). ADR-019
+(2026-08-17) revisits exactly that: a real caller now exists
+(`GET /api/v1/runs`), so `list_execution_runs` was added. Still not a
+generic Repository — no delete/update/query-by-arbitrary-field, only
+what that one caller needs.
+
+Record-level persistence (the individual `SourcingRecord`s a run
+produced) is a deliberately separate concern, not folded into this
+Protocol — see `record_snapshot_store.py::RecordSnapshotStore` and
+ADR-019 for why. `save_execution_run` grew an optional `records`
+parameter instead: writing an ExecutionRun and its records must be
+atomic (never one persisted without the other), and the only way to
+guarantee that without a Unit-of-Work framework is to have the
+concrete adapter -- which already owns the one connection/transaction
+that matters -- do both writes together.
 """
 
 from __future__ import annotations
 
-from typing import Optional, Protocol
+from typing import Any, Mapping, Optional, Protocol, Sequence
 
 from juval.domain.execution_run import ExecutionRun
 
 
 class ExecutionRunStore(Protocol):
-    def save_execution_run(self, run: ExecutionRun) -> None:
-        """Persist `run`.
+    def save_execution_run(self, run: ExecutionRun, records: Sequence[Mapping[str, Any]] = ()) -> None:
+        """Persist `run`, and -- atomically, same transaction -- `records`
+        if given (ADR-019). Each item of `records` is a JSON-safe snapshot
+        dict shaped like `record_snapshot.py::record_to_snapshot()` output;
+        never a domain SourcingRecord (this port stays free of any need to
+        re-import domain internals beyond ExecutionRun).
 
         Must raise if `run.execution_id` already exists in the store —
         an ExecutionRun is an audit record; silently overwriting one
         would destroy the trail this store exists to preserve (see
-        ADR-013, "comportamiento ante execution_id duplicado").
+        ADR-013, "comportamiento ante execution_id duplicado"). A
+        duplicate must leave neither the run nor any of its records
+        persisted (atomic failure, not a partial write).
         """
         ...
 
@@ -42,4 +61,9 @@ class ExecutionRunStore(Protocol):
         consistent with this codebase's existing convention for "not
         found" (see SourcingRecord.costs, FieldValue.not_found).
         """
+        ...
+
+    def list_execution_runs(self, limit: int = 20) -> list[ExecutionRun]:
+        """Most recently started runs first, capped at `limit` (ADR-019)
+        -- callers must never receive an unbounded scan of history."""
         ...

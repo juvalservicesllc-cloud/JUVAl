@@ -107,6 +107,54 @@ distinto: un solo operador de confianza en su propia máquina). En la
 API, permitir que el cliente elija su propio `execution_id` abriría la
 puerta a colisiones/adivinar IDs ajenos.
 
+## 2b. `GET /api/v1/runs` (ADR-019)
+
+Lista las ejecuciones más recientes primero (`started_at DESC`).
+Requiere `JUVAL_EXECUTION_STORE`/`JUVAL_EXECUTION_DB_PATH` configurado
+(mismo mecanismo que §5) — sin store configurado, 500 explícito.
+
+Query param: `limit` (entero, opcional, default `20`, mínimo `1`,
+máximo `100`) — tope explícito, nunca un catálogo completo sin límite.
+Un `limit` fuera de `[1, 100]` → 422 (validación de FastAPI/Pydantic,
+antes de tocar el store).
+
+### Respuesta 200 — `RunsListResponse`
+
+```json
+{ "items": [ { "execution_id": "...", "started_at": "2026-08-17T12:00:00+00:00",
+  "finished_at": "2026-08-17T12:05:00+00:00", "status": "SUCCESS",
+  "input_filename": "...", "input_hash": "...", "records_total": 5,
+  "records_processed": 5, "records_successful": 4, "records_with_errors": 1,
+  "warnings": 2 } ] }
+```
+
+Cada elemento (`RunSummaryOut`) usa exactamente los campos reales de
+`domain.execution_run.ExecutionRun` — deliberadamente **no** usa el
+vocabulario que el frontend de demo había anticipado
+(`created_at`/`valid`/`excluded`), porque esos términos no tienen
+equivalente en el dominio; inventarlos habría significado presentar
+una inferencia como si fuera un dato real (ver ADR-019 "Modelo de
+recurso"). Timestamps como string ISO 8601.
+
+## 2c. `GET /api/v1/runs/{execution_id}/records` (ADR-019)
+
+Devuelve los records persistidos de una ejecución — el mismo snapshot
+JSON que ya viajaba en `records[]` de `POST /api/v1/runs` en el momento
+del run, ahora recuperable después. Run-scoped únicamente, nunca
+cross-run (`record_ref` no es un identificador global, ADR-012).
+
+- 200 + `RunRecordsResponse` (`{"execution_id": "...", "records": [RecordOut, ...]}`,
+  mismo `RecordOut` que §1) — incluye el caso "run existe pero no tiene
+  records persistidos" (`records: []`, ej. si se guardó antes de
+  ADR-019, o si `persist=true` no se usó al crear ese run).
+- 404 si `execution_id` no existe en el store.
+- 500 si el store no está configurado (mismo mecanismo que §5).
+
+Requiere que el run se haya guardado con `persist=true` (ver §5) — un
+run nunca persistido no tiene records que recuperar, indistinguible de
+un `execution_id` desconocido solo por la ausencia total del row en
+`execution_runs` (404 en ambos casos).
+
 ## 3. Modelos de request (`models.py`)
 
 Reflejan exactamente `domain.decision.Thresholds` / `domain.costs.FeeInputs`
@@ -169,6 +217,12 @@ En todos los casos, `run_pipeline()` sigue sin persistir por sí mismo
 (Opción B, vigente) — la selección de store vive enteramente en
 `interfaces/api/`, nunca en `application/run_pipeline.py`.
 
+**Records (ADR-019)**: cuando `persist=true`, además del
+`ExecutionRun` agregado, se persiste el snapshot de cada
+`record` de `records[]`, **atómicamente en la misma transacción** —
+nunca un run guardado con sus records ausentes o parciales. Ver §2c
+para cómo recuperarlos después.
+
 ## 6. Almacenamiento temporal de archivos
 
 `JUVAL_RUN_STORAGE_DIR` (opcional, default: directorio temporal del
@@ -218,40 +272,21 @@ por defecto (ningún origen permitido), **nunca** `"*"`.
    opciones presentadas, ninguna aplicada todavía, pendientes de tu
    aprobación.
 
-## 9. `MISSING ARCHITECTURAL CAPABILITY` — listados persistentes (2026-08-17)
+## 9. Listados persistentes — `[IMPLEMENTADO 2026-08-17, ADR-019]`
 
-El frontend (`frontend/src/api/products.ts`, `frontend/src/api/runs.ts`)
-ya tiene clientes preparados para `GET /api/v1/products` y `GET
-/api/v1/runs`, y ambas páginas (`ProductsPage.tsx`, `RunsPage.tsx`)
-muestran explícitamente un banner "DEMO MODE" mientras tanto — Codex no
-presenta esto como implementado. **Ninguno de los dos endpoints existe
-en `main.py`.** Verificado, no inferido:
+La brecha documentada en una sesión anterior (`GET /api/v1/products` y
+`GET /api/v1/runs` sin fuente de datos persistida) quedó resuelta por
+ADR-019: ver §2b (`GET /api/v1/runs`) y §2c
+(`GET /api/v1/runs/{execution_id}/records`). Decisiones clave, ya
+tomadas y no repetidas aquí en detalle (ver ADR-019 completo):
 
-- **`GET /api/v1/products` — brecha arquitectónica, no solo ausencia de
-  ruta.** No existe ninguna persistencia de `SourcingRecord`/`RecordOut`
-  individuales, en ningún store. Lo único persistido tras un run es el
-  `ExecutionRun` agregado (contadores, ADR-013/017) — nunca las filas
-  procesadas. Las filas completas solo existen: (a) una vez, en el
-  cuerpo de la respuesta síncrona de `POST /api/v1/runs`, y (b) en
-  `output.xlsx` (almacenamiento temporal, sin política de retención,
-  nunca tratado como permanente, §6). Ninguna de las dos es una fuente
-  re-consultable por HTTP después de esa respuesta inicial. Además, un
-  `/products` **global** (cross-run) sería incorrecto respecto al
-  dominio: `record_ref` es único **solo dentro de una única ejecución**,
-  nunca globalmente (ADR-012, "Por qué no es globalmente único" —
-  decisión ya aceptada, no se reabre aquí). Si esta capacidad se
-  aprueba, el modelo de recurso correcto es **run-scoped**:
-  `GET /api/v1/runs/{execution_id}/products`, nunca `GET /api/v1/products`.
-- **`GET /api/v1/runs` (listado/historial) — brecha menor, pero también
-  bloqueada por diseño.** `ExecutionRunStore` (`application/execution_run_store.py`)
-  expone deliberadamente solo `save_execution_run`/`load_execution_run`
-  by id — su propio docstring documenta que un método de listado fue
-  evaluado y rechazado como especulativo en ADR-013 ("no needed by any
-  caller today"). El único caller nuevo es el frontend de demo de
-  Codex, no una necesidad de negocio confirmada — añadir un método de
-  listado ahora reabriría esa decisión sin la aprobación que ADR-013
-  reservó explícitamente para cuando apareciera un caller real.
-
-Ninguna de las dos capacidades se implementó en esta sesión — ver el
-reporte de la sesión 2026-08-17 correspondiente para las opciones
-presentadas y la decisión pendiente del usuario.
+- Modelo run-scoped, nunca un `/products` global — `record_ref` no es
+  identificador global (ADR-012).
+- Nueva tabla `execution_run_records` (SQLite y Supabase,
+  `supabase/migrations/20260817000001_execution_run_records.sql`),
+  snapshot JSON/JSONB, identidad `(execution_id, record_ref)`.
+- Escritura atómica de `ExecutionRun` + records
+  (`ExecutionRunStore.save_execution_run(run, records=())`, misma
+  transacción).
+- Lectura de records vive en un port separado y pequeño
+  (`application/record_snapshot_store.py::RecordSnapshotStore`).

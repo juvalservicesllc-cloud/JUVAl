@@ -691,6 +691,56 @@ vía `JUVAL_EXECUTION_STORE=supabase` (bloque anterior), así que el
 login` (interactivo, no completable por el agente) y, tras eso, vincule
 o cree el proyecto/servicio Railway.
 
+## Sesión 2026-08-17 (bloque 11) — ADR-019: persistencia run-scoped de records + GET /api/v1/runs[/records]
+
+Cerrada la brecha `MISSING ARCHITECTURAL CAPABILITY` documentada en el
+bloque anterior. Aprobado por el usuario explícitamente: persistencia
+detallada run-scoped (nunca `/products` global), `GET /api/v1/runs`
+(reabre parcialmente ADR-013 porque ya existe un caller real).
+
+**Implementado, verificado esta sesión**:
+- ADR-019 (`docs/adr/ADR-019-persistencia-records-run-scoped.md`,
+  siguiente número libre real tras inspeccionar `docs/adr/`).
+- `application/record_snapshot.py::record_to_snapshot` — única función
+  de mapeo `SourcingRecord -> JSON`, compartida por
+  `interfaces/api/service.py::record_to_json` (refactorizado, sin
+  duplicar lógica) y los adapters de persistencia.
+- `application/execution_run_store.py::ExecutionRunStore` extendido:
+  `save_execution_run(run, records=())` (atómico, misma transacción) y
+  `list_execution_runs(limit=20)`.
+- `application/record_snapshot_store.py::RecordSnapshotStore` — port
+  nuevo, pequeño, un solo método (`load_records`), responsabilidad de
+  lectura separada de la escritura atómica.
+- `SqliteExecutionRunStore` y `SupabaseExecutionRunStore` implementan
+  ambos ports ampliados. Nueva tabla `execution_run_records` en ambos
+  backends — SQLite vía `CREATE TABLE IF NOT EXISTS` (mismo patrón que
+  ADR-013), Supabase vía
+  `supabase/migrations/20260817000001_execution_run_records.sql`,
+  **aplicada y verificada contra el proyecto real** (`db push` +
+  `information_schema.columns` + `pg_tables.rowsecurity` +
+  `pg_policies`, mismo mecanismo ya usado en el bloque 5-10).
+- `GET /api/v1/runs` y `GET /api/v1/runs/{execution_id}/records`
+  implementados en `interfaces/api/main.py` — ver
+  `docs/architecture/API_CONTRACT.md` §2b/§2c para el contrato
+  completo.
+- Tests nuevos: 14 de integración SQLite
+  (`tests/integration/test_execution_run_records_store.py` — round-trip,
+  orden estable, `record_ref` repetido entre runs sin colisión,
+  provenance VERIFIED/INFERRED/NOT_FOUND, atomicidad ante fallo), 10 de
+  API (`tests/integration/test_api.py`), 2 estructurales Supabase
+  ampliados, y las 3 pruebas de integración real de Supabase
+  (`tests/integration/test_supabase_execution_run_store.py`, gated,
+  ejecutadas esta sesión con `JUVAL_SUPABASE_DB_URL`: `3 passed`).
+  Suite completa: `242 passed, 3 skipped` sin credencial cargada (los 3
+  tests reales de Supabase), `0 failed`.
+
+**No implementado, fuera de alcance explícito de esta sesión**: cablear
+Railway (sigue `EXTERNAL_BLOCKER`); ningún cambio en `frontend/`
+(Codex adapta `ProductsPage`/`RunsPage`/API client después); ninguna
+policy RLS nueva (misma postura fail-closed que `execution_runs`); sin
+paginación por cursor (limit acotado documentado como suficiente para
+el MVP, riesgo de escalabilidad explícito en ADR-019).
+
 ## Pending Decisions
 
 Todas `PENDING`, ninguna se resuelve en este documento (ver

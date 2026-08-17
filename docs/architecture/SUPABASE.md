@@ -71,11 +71,25 @@ mantiene la huella de dependencias mínima — coherente con `CLAUDE.md`
 
 ## 3. Schema
 
-Ver `supabase/migrations/20260817000000_execution_runs.sql` — una sola
-tabla, `execution_runs`, columnas idénticas a `domain/execution_run.py::ExecutionRun`
+`supabase/migrations/20260817000000_execution_runs.sql` — tabla
+`execution_runs`, columnas idénticas a `domain/execution_run.py::ExecutionRun`
 y al schema SQLite ya aceptado (ADR-013). **Ninguna columna comercial
-inventada**; no se persisten `SourcingRecord`s (fuera del alcance de
-ADR-013, sin cambios).
+inventada**.
+
+`supabase/migrations/20260817000001_execution_run_records.sql`
+(ADR-019, `[APLICADA Y VERIFICADA 2026-08-17]`) — tabla
+`execution_run_records`, snapshot JSON-safe (`JSONB`) de cada
+`SourcingRecord` procesado, run-scoped: PK `(execution_id,
+record_ref)`, `record_ref` único solo dentro de una ejecución
+(ADR-012, nunca global), FK a `execution_runs(execution_id)`. Esquema
+real verificado por consulta directa
+(`information_schema.columns`): `execution_id text`, `ordinal
+integer`, `record_ref text`, `snapshot jsonb`. RLS habilitado, 0
+policies (`pg_tables.rowsecurity=true`, `pg_policies` vacío), mismo
+comportamiento fail-closed que `execution_runs`. Prueba de integración
+real (`tests/integration/test_supabase_execution_run_store.py`):
+INSERT+SELECT+cleanup de records con round-trip de provenance
+(`NOT_FOUND`), y `list_execution_runs` — las 3 pasan (`3 passed`).
 
 ## 4. Row Level Security — `[DESPLEGADO, VERIFICADO 2026-08-17]`
 

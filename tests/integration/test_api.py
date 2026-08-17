@@ -218,3 +218,112 @@ def test_uploaded_input_file_is_deleted_after_processing(client, tmp_path):
     run_dir = tmp_path / "juval_runs" / execution_id
     assert not (run_dir / "input.xlsx").exists()
     assert (run_dir / "output.xlsx").exists()
+
+
+# -- GET /api/v1/runs/{execution_id}/records (ADR-019) ------------------
+
+
+def test_get_run_records_after_persist_returns_the_same_records(client):
+    resp = _upload(client, persist="true")
+    body = resp.json()
+
+    records_resp = client.get(f"/api/v1/runs/{body['execution_id']}/records")
+
+    assert records_resp.status_code == 200
+    records_body = records_resp.json()
+    assert records_body["execution_id"] == body["execution_id"]
+    assert records_body["records"] == body["records"]
+
+
+def test_get_run_records_unknown_execution_id_returns_404(client):
+    resp = client.get("/api/v1/runs/00000000-0000-0000-0000-000000000000/records")
+    assert resp.status_code == 404
+
+
+def test_get_run_records_for_run_with_no_persisted_records_returns_empty_list(client, tmp_path):
+    store = SqliteExecutionRunStore(tmp_path / "execution_runs.db")
+    store.save_execution_run(_run_without_records())
+
+    resp = client.get(f"/api/v1/runs/{_run_without_records().execution_id}/records")
+
+    assert resp.status_code == 200
+    assert resp.json()["records"] == []
+
+
+def test_get_run_records_requires_a_configured_store(monkeypatch, tmp_path):
+    monkeypatch.setenv("JUVAL_RUN_STORAGE_DIR", str(tmp_path))
+    monkeypatch.delenv("JUVAL_EXECUTION_DB_PATH", raising=False)
+    monkeypatch.delenv("JUVAL_EXECUTION_STORE", raising=False)
+    unconfigured_client = TestClient(app)
+
+    resp = unconfigured_client.get("/api/v1/runs/does-not-matter/records")
+
+    assert resp.status_code == 500
+
+
+def _run_without_records():
+    from datetime import datetime, timezone
+
+    from juval.domain.execution_run import ExecutionRun, ExecutionStatus
+
+    return ExecutionRun(
+        execution_id="pre-existing-run",
+        started_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 1, 1, 0, 5, tzinfo=timezone.utc),
+        status=ExecutionStatus.SUCCESS,
+        input_filename="in.xlsx",
+        input_hash="abc123",
+        application_version="0.1.0",
+        records_total=0,
+        records_processed=0,
+        records_successful=0,
+        records_with_errors=0,
+        warnings=0,
+    )
+
+
+# -- GET /api/v1/runs (ADR-019) ------------------------------------------
+
+
+def test_get_runs_list_is_empty_when_no_runs_persisted(client):
+    resp = client.get("/api/v1/runs")
+    assert resp.status_code == 200
+    assert resp.json()["items"] == []
+
+
+def test_get_runs_list_returns_newest_first(client):
+    first = _upload(client, persist="true").json()
+    second = _upload(client, persist="true").json()
+
+    resp = client.get("/api/v1/runs")
+
+    assert resp.status_code == 200
+    execution_ids = [item["execution_id"] for item in resp.json()["items"]]
+    assert execution_ids[0] == second["execution_id"]
+    assert execution_ids[1] == first["execution_id"]
+
+
+def test_get_runs_list_respects_limit(client):
+    for _ in range(3):
+        _upload(client, persist="true")
+
+    resp = client.get("/api/v1/runs", params={"limit": 2})
+
+    assert resp.status_code == 200
+    assert len(resp.json()["items"]) == 2
+
+
+def test_get_runs_list_rejects_limit_over_the_explicit_max(client):
+    resp = client.get("/api/v1/runs", params={"limit": 1000})
+    assert resp.status_code == 422
+
+
+def test_get_runs_list_requires_a_configured_store(monkeypatch, tmp_path):
+    monkeypatch.setenv("JUVAL_RUN_STORAGE_DIR", str(tmp_path))
+    monkeypatch.delenv("JUVAL_EXECUTION_DB_PATH", raising=False)
+    monkeypatch.delenv("JUVAL_EXECUTION_STORE", raising=False)
+    unconfigured_client = TestClient(app)
+
+    resp = unconfigured_client.get("/api/v1/runs")
+
+    assert resp.status_code == 500

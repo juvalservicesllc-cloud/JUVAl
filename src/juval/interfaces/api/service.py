@@ -17,18 +17,16 @@ import os
 import tempfile
 import uuid
 from datetime import datetime, timezone
-from decimal import Decimal
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
+from juval.application.record_snapshot import record_to_snapshot
 from juval.domain.costs import FeeInputs
 from juval.domain.decision import Thresholds
 from juval.domain.execution_run import ExecutionRun, ExecutionStatus
-from juval.domain.provenance import FieldValue
-from juval.domain.risk import RiskType
 from juval.domain.sourcing_record import SourcingRecord
 
-from .models import FeesIn, FieldValueOut, RecordOut, ThresholdsIn
+from .models import FeesIn, RecordOut, RunSummaryOut, ThresholdsIn
 
 
 def thresholds_from_in(data: ThresholdsIn) -> Thresholds:
@@ -52,66 +50,28 @@ def fees_from_in(data: FeesIn) -> FeeInputs:
     )
 
 
-def _fv(fv: Optional[FieldValue[Any]]) -> FieldValueOut:
-    if fv is None:
-        return FieldValueOut(value=None, status=None)
-    value = str(fv.value) if isinstance(fv.value, Decimal) else fv.value
-    return FieldValueOut(value=value, status=fv.status.value)
-
-
 def record_to_json(record: SourcingRecord) -> RecordOut:
-    ident = record.product.identification
-    dims = record.product.dimensions
-    price = record.product.price
+    """Thin wrapper: the actual SourcingRecord -> JSON mapping lives in
+    `application/record_snapshot.py::record_to_snapshot` (ADR-019),
+    shared with the record-snapshot persistence adapters -- never two
+    implementations of the same mapping."""
 
-    cog = record.costs.cog if record.costs is not None else None
-    shipping_per_unit = record.costs.shipping_per_unit if record.costs is not None else None
+    return RecordOut(**record_to_snapshot(record))
 
-    if record.profitability is not None:
-        profit = _fv(record.profitability.profit)
-        roi = _fv(record.profitability.roi)
-        margin = _fv(record.profitability.margin)
-        break_even_price = _fv(record.profitability.break_even_price)
-        max_cog_target_profit = _fv(record.profitability.max_cog_target_profit)
-        max_cog_target_roi = _fv(record.profitability.max_cog_target_roi)
-    else:
-        profit = roi = margin = break_even_price = FieldValueOut()
-        max_cog_target_profit = max_cog_target_roi = FieldValueOut()
 
-    hazmat_flag = record.risk.flag_for(RiskType.HAZMAT)
-    bulky_flag = record.risk.flag_for(RiskType.BULKY)
-
-    if record.decision is not None:
-        decision = record.decision.decision.value
-        decision_reasons = [f"{r.code}: {r.message}" for r in record.decision.reasons]
-    else:
-        decision = None
-        decision_reasons = []
-
-    return RecordOut(
-        record_ref=record.record_ref,
-        marketplace=ident.marketplace,
-        supplier_sku=ident.supplier_sku,
-        asin=_fv(ident.asin),
-        upc=_fv(ident.upc),
-        weight=_fv(dims.weight),
-        selling_price=_fv(price.selling_price_used),
-        cog=cog,
-        shipping_per_unit=shipping_per_unit,
-        profit=profit,
-        roi=roi,
-        margin=margin,
-        break_even_price=break_even_price,
-        max_cog_target_profit=max_cog_target_profit,
-        max_cog_target_roi=max_cog_target_roi,
-        hazmat_status=hazmat_flag.status.value if hazmat_flag is not None else None,
-        hazmat_severity=hazmat_flag.severity.value if hazmat_flag is not None else None,
-        bulky_status=bulky_flag.status.value if bulky_flag is not None else None,
-        bulky_severity=bulky_flag.severity.value if bulky_flag is not None else None,
-        decision=decision,
-        decision_reasons=decision_reasons,
-        issue_count=len(record.issues),
-        issues=[f"[{i.level.value}] {i.code}: {i.message}" for i in record.issues],
+def run_to_summary(run: ExecutionRun) -> RunSummaryOut:
+    return RunSummaryOut(
+        execution_id=run.execution_id,
+        started_at=run.started_at.isoformat(),
+        finished_at=run.finished_at.isoformat() if run.finished_at is not None else None,
+        status=run.status.value,
+        input_filename=run.input_filename,
+        input_hash=run.input_hash,
+        records_total=run.records_total,
+        records_processed=run.records_processed,
+        records_successful=run.records_successful,
+        records_with_errors=run.records_with_errors,
+        warnings=run.warnings,
     )
 
 

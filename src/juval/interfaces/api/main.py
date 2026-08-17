@@ -28,13 +28,14 @@ import os
 import zipfile
 from typing import Optional
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from openpyxl.utils.exceptions import InvalidFileException
 from pydantic import ValidationError
 
 import juval
+from juval.application.record_snapshot import record_to_snapshot
 from juval.application.run_pipeline import run_pipeline
 from juval.domain.execution_run import ExecutionStatus
 from juval.application.execution_run_store import ExecutionRunStore
@@ -43,7 +44,18 @@ from juval.infrastructure.logging.sqlite_execution_run_store import SqliteExecut
 from juval.infrastructure.persistence.supabase_execution_run_store import SupabaseExecutionRunStore
 
 from . import service
-from .models import FeesIn, RunFailedResponse, RunResponse, ThresholdsIn
+from .models import (
+    FeesIn,
+    RecordOut,
+    RunFailedResponse,
+    RunRecordsResponse,
+    RunResponse,
+    RunsListResponse,
+    ThresholdsIn,
+)
+
+_RUNS_LIST_DEFAULT_LIMIT = 20
+_RUNS_LIST_MAX_LIMIT = 100
 
 logger = logging.getLogger("juval.interfaces.api")
 
@@ -157,6 +169,8 @@ async def create_run(
         )
         return JSONResponse(status_code=422, content=body_out.model_dump(mode="json"))
 
+    record_snapshots = [record_to_snapshot(r) for r in records]
+
     persisted = False
     if persist:
         store = _execution_run_store()
@@ -165,7 +179,7 @@ async def create_run(
                 status_code=500,
                 detail="persist=true was requested but JUVAL_EXECUTION_DB_PATH is not configured",
             )
-        store.save_execution_run(run)
+        store.save_execution_run(run, record_snapshots)
         persisted = True
 
     export_excel(records, service.output_path(execution_id))
@@ -181,7 +195,7 @@ async def create_run(
         records_with_errors=run.records_with_errors,
         warnings=run.warnings,
         persisted=persisted,
-        records=[service.record_to_json(r) for r in records],
+        records=[RecordOut(**s) for s in record_snapshots],
     )
     return JSONResponse(status_code=200, content=response.model_dump(mode="json"))
 
@@ -196,6 +210,36 @@ async def download_run(execution_id: str) -> FileResponse:
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         filename=f"{execution_id}.xlsx",
     )
+
+
+def _require_execution_run_store() -> ExecutionRunStore:
+    store = _execution_run_store()
+    if store is None:
+        raise HTTPException(
+            status_code=500,
+            detail="this endpoint requires JUVAL_EXECUTION_STORE/JUVAL_EXECUTION_DB_PATH to be configured",
+        )
+    return store
+
+
+@app.get("/api/v1/runs", response_model=RunsListResponse)
+async def list_runs(limit: int = Query(_RUNS_LIST_DEFAULT_LIMIT, ge=1, le=_RUNS_LIST_MAX_LIMIT)) -> JSONResponse:
+    store = _require_execution_run_store()
+    runs = store.list_execution_runs(limit=limit)
+    response = RunsListResponse(items=[service.run_to_summary(r) for r in runs])
+    return JSONResponse(status_code=200, content=response.model_dump(mode="json"))
+
+
+@app.get("/api/v1/runs/{execution_id}/records", response_model=RunRecordsResponse)
+async def get_run_records(execution_id: str) -> JSONResponse:
+    store = _require_execution_run_store()
+    run = store.load_execution_run(execution_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="unknown execution_id")
+
+    snapshots = store.load_records(execution_id)
+    response = RunRecordsResponse(execution_id=execution_id, records=[RecordOut(**s) for s in snapshots])
+    return JSONResponse(status_code=200, content=response.model_dump(mode="json"))
 
 
 @app.exception_handler(Exception)

@@ -97,3 +97,31 @@ class RunFailedResponse(BaseModel):
     input_filename: str
     input_hash: str
     message: str
+
+
+class RunSummaryOut(BaseModel):
+    """One row of `GET /api/v1/runs` -- ExecutionRun's own real fields,
+    not the frontend-demo vocabulary ("created_at"/"valid"/"excluded")
+    that has no backend equivalent (ADR-019 "Modelo de recurso" /
+    API_CONTRACT.md §9-§10 -- never invent a field to match a mock)."""
+
+    execution_id: str
+    started_at: str
+    finished_at: Optional[str] = None
+    status: str
+    input_filename: str
+    input_hash: str
+    records_total: int
+    records_processed: int
+    records_successful: int
+    records_with_errors: int
+    warnings: int
+
+
+class RunsListResponse(BaseModel):
+    items: list[RunSummaryOut]
+
+
+class RunRecordsResponse(BaseModel):
+    execution_id: str
+    records: list[RecordOut]
