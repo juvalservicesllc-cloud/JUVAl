@@ -39,7 +39,7 @@ export function RunForm({ disabled, onSubmit }: Props) {
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
     if (!file) {
-      setFormError("Selecciona un archivo .xlsx o .csv.")
+      setFormError("Selecciona un archivo .xlsx.")
       return
     }
     if (!targetProfit || !targetRoi || !minMonthlySales || !maxRiskSeverity || !referralFee || !referralFeeRate) {
@@ -73,7 +73,7 @@ export function RunForm({ disabled, onSubmit }: Props) {
       <fieldset disabled={disabled}>
         <legend>Archivo</legend>
         <label>
-          Catalog (.xlsx or .csv) *
+          Catalog (.xlsx; .csv pending) *
           <input
             type="file"
             accept=".xlsx,.csv"

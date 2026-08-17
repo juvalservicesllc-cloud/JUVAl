@@ -10,7 +10,7 @@ function makeFile() {
 }
 
 async function fillAndSubmit(user: ReturnType<typeof userEvent.setup>) {
-  await user.upload(screen.getByLabelText(/catalog \(\.xlsx or \.csv\)/i), makeFile())
+  await user.upload(screen.getByLabelText(/catalog \(\.xlsx; \.csv pending\)/i), makeFile())
   await user.type(screen.getByLabelText(/target profit/i), "5")
   await user.type(screen.getByLabelText(/target roi/i), "0.3")
   await user.type(screen.getByLabelText(/ventas mensuales/i), "0")
@@ -39,11 +39,23 @@ describe("App", () => {
     expect(screen.getByText("NOT FOUND")).toBeInTheDocument()
   })
 
+  it("switches the dashboard chart between line and bars", async () => {
+    const user = userEvent.setup()
+    window.history.pushState({}, "", "/")
+    render(<App />)
+
+    expect(screen.getByRole("button", { name: "Line" })).toHaveAttribute("aria-pressed", "true")
+    await user.click(screen.getByRole("button", { name: "Bars" }))
+    expect(screen.getByRole("button", { name: "Bars" })).toHaveAttribute("aria-pressed", "true")
+    expect(screen.getByTestId("analytics-chart")).toHaveAttribute("aria-label", "bar chart of dashboard metrics")
+  })
+
   it("shows the results table and download link on a successful run -- never invents a value the backend didn't send", async () => {
     const user = userEvent.setup()
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
+        ok: true,
         status: 200,
         json: async () => ({
           execution_id: "e1",
@@ -104,6 +116,7 @@ describe("App", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
+        ok: false,
         status: 422,
         json: async () => ({ detail: "invalid fees: referral_fee_rate must be within [0, 1)" }),
       }),

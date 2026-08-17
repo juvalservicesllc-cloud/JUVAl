@@ -12,7 +12,7 @@ function makeFile() {
 describe("RunForm", () => {
   it("renders the file upload input and required parameter fields", () => {
     render(<RunForm disabled={false} onSubmit={vi.fn()} />)
-    expect(screen.getByLabelText(/catalog \(\.xlsx or \.csv\)/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/catalog \(\.xlsx; \.csv pending\)/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/target profit/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/target roi/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/severidad de riesgo máxima/i)).toBeInTheDocument()
@@ -35,7 +35,7 @@ describe("RunForm", () => {
     const user = userEvent.setup()
     render(<RunForm disabled={false} onSubmit={onSubmit} />)
 
-    await user.upload(screen.getByLabelText(/catalog \(\.xlsx or \.csv\)/i), makeFile())
+    await user.upload(screen.getByLabelText(/catalog \(\.xlsx; \.csv pending\)/i), makeFile())
     await user.click(screen.getByRole("button", { name: /procesar/i }))
 
     expect(onSubmit).not.toHaveBeenCalled()
@@ -47,7 +47,7 @@ describe("RunForm", () => {
     const user = userEvent.setup()
     render(<RunForm disabled={false} onSubmit={onSubmit} />)
 
-    const fileInput = screen.getByLabelText(/catalog \(\.xlsx or \.csv\)/i)
+    const fileInput = screen.getByLabelText(/catalog \(\.xlsx; \.csv pending\)/i)
     await user.upload(fileInput, makeFile())
 
     await user.type(screen.getByLabelText(/target profit/i), "5")

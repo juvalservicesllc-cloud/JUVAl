@@ -10,7 +10,7 @@ const FIXTURE = path.resolve(__dirname, "../../tests/fixtures/sample_sourcing_TE
 test("upload Excel -> real backend -> results -> download", async ({ page }) => {
   await page.goto("/upload")
 
-  await page.getByLabel(/catalog \(\.xlsx or \.csv\)/i).setInputFiles(FIXTURE)
+  await page.getByLabel(/catalog \(\.xlsx; \.csv pending\)/i).setInputFiles(FIXTURE)
   await page.getByLabel(/target profit/i).fill("5")
   await page.getByLabel(/target roi/i).fill("0.3")
   await page.getByLabel(/ventas mensuales/i).fill("0")

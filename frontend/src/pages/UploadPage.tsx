@@ -3,6 +3,7 @@ import { ApiError, downloadUrl, submitRun } from "../api"
 import { ResultsTable } from "../components/ResultsTable"
 import { RunForm, type RunFormValues } from "../components/RunForm"
 import type { RunResponse, RunState } from "../types"
+import { apiErrorMessage } from "../api/client"
 
 export function UploadPage() {
   const [state, setState] = useState<RunState>({ status: "idle" })
@@ -17,7 +18,7 @@ export function UploadPage() {
       const result = await submitRun(values.file, values.thresholds, values.fees, values.persist)
       setState("message" in result ? { status: "error", message: result.message } : { status: "success", result: result as RunResponse })
     } catch (error) {
-      const message = error instanceof ApiError ? (typeof error.body === "object" && error.body && "detail" in error.body ? String(error.body.detail) : JSON.stringify(error.body)) : error instanceof Error ? error.message : String(error)
+      const message = error instanceof ApiError ? apiErrorMessage(error) : error instanceof Error ? error.message : String(error)
       setState({ status: "error", message })
     }
   }

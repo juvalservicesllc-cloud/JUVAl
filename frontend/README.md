@@ -1,13 +1,14 @@
 # JUVAl frontend
 
-React + TypeScript + Vite PWA. Routes:
+React + TypeScript + Vite PWA.
 
-- `/` — dashboard summary and recent runs (typed demo data)
-- `/upload` — real `.xlsx` processing; `.csv` is visibly pending backend support
-- `/products` — product/provenance table (typed demo data)
-- `/runs` — execution history (typed demo data)
+- `/` — dashboard with typed demo data.
+- `/upload` — real `.xlsx` processing through FastAPI; CSV remains unsupported.
+- `/products` — typed demo product/provenance rows; the historical global client is disconnected because backend records are run-scoped.
+- `/runs` — typed demo execution history; `GET /api/v1/runs` exists, but the page remains disconnected until its historical DTO is reconciled with the backend contract.
+- `/appearance` — local browser-only visual customization: presets, CSS tokens, logo, and background image.
 
-Demo fixtures live only in `src/data/demo.ts` and are labelled `DEMO MODE` in the UI. The frontend never calculates profitability, risk, provenance, or sourcing decisions.
+Fixtures live only in `src/data/demo.ts` and are visibly marked `DEMO MODE`. The frontend never calculates profitability, risk, provenance, or sourcing decisions.
 
 ## Local development
 
@@ -16,7 +17,9 @@ npm install
 npm run dev
 ```
 
-`VITE_API_BASE_URL` is a public backend URL, never a secret. See `.env.example`.
+`VITE_API_BASE_URL` is the only public frontend connection variable. It contains the FastAPI base URL and never a secret.
+
+Appearance preferences use browser `localStorage`; local logo/background assets are limited to PNG, JPEG, or WEBP at 400 KB each. Remote brand asset storage is intentionally deferred.
 
 ## Checks
 
@@ -27,12 +30,4 @@ npm run build
 npm run test:e2e
 ```
 
-## Backend contract required
-
-These are proposals, not implemented backend behavior:
-
-- `GET /api/v1/dashboard` → `{ total_products, processable, excluded, hazmat, bulky, missing_asin, recent_runs }`.
-- `GET /api/v1/products` → `{ items: ProductRow[], total }`. Every sensitive value must retain `VERIFIED | INFERRED | NOT_FOUND | INVALID`; pagination/filtering can wait for measured need.
-- `GET /api/v1/runs` → `{ items: ExecutionRunSummary[] }`, with `execution_id`, `created_at`, `status`, `total_records`, `valid`, `excluded`, and `errors`.
-
-Expected errors: `500` without internal paths or tracebacks. Authentication remains out of scope. CSV processing additionally requires extending `POST /api/v1/runs` to accept `.csv` or a separate documented endpoint.
+For the real API contract, CORS/local demo setup, provenance rules, and backend handoff, read [`../docs/FRONTEND_BACKEND_HANDOFF.md`](../docs/FRONTEND_BACKEND_HANDOFF.md).

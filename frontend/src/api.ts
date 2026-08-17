@@ -3,18 +3,9 @@
 // HTTP request and parses the response. The backend base URL is never
 // hardcoded (VITE_API_BASE_URL, see .env.example / README).
 import type { FeesIn, RunFailedResponse, RunResponse, ThresholdsIn } from "./types"
+import { ApiError, apiUrl, requestJson } from "./api/client"
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000"
-
-export class ApiError extends Error {
-  status: number
-  body: unknown
-  constructor(status: number, body: unknown) {
-    super(`API request failed with status ${status}`)
-    this.status = status
-    this.body = body
-  }
-}
+export { ApiError }
 
 export async function submitRun(
   file: File,
@@ -28,21 +19,13 @@ export async function submitRun(
   form.append("fees", JSON.stringify(fees))
   form.append("persist", String(persist))
 
-  const response = await fetch(`${API_BASE_URL}/api/v1/runs`, {
+  const body = await requestJson("/api/v1/runs", {
     method: "POST",
     body: form,
   })
-
-  const body = await response.json()
-  if (response.status === 200) {
-    return body as RunResponse
-  }
-  if (response.status === 422 && body?.status === "FAILED") {
-    return body as RunFailedResponse
-  }
-  throw new ApiError(response.status, body)
+  return body as RunResponse | RunFailedResponse
 }
 
 export function downloadUrl(executionId: string): string {
-  return `${API_BASE_URL}/api/v1/runs/${encodeURIComponent(executionId)}/download`
+  return apiUrl(`/api/v1/runs/${encodeURIComponent(executionId)}/download`)
 }

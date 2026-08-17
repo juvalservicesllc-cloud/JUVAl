@@ -114,3 +114,33 @@ export interface ExecutionRunSummary {
   excluded: number
   errors: number
 }
+
+export interface RunsListItem {
+  execution_id: string
+  created_at: string
+  status: "SUCCESS" | "PARTIAL_SUCCESS" | "FAILED"
+  total_records: number
+  valid: number
+  excluded: number
+  errors: number
+}
+
+export interface RunsResponse {
+  items: RunsListItem[]
+}
+
+export interface ProductListItem {
+  record_ref: string
+  supplier_sku: string | null
+  title: FieldValueOut
+  brand: FieldValueOut
+  cog: string | null
+  asin: FieldValueOut
+  hazmat_status: string | null
+  bulky_status: string | null
+  decision: string | null
+}
+
+export interface ProductsResponse {
+  items: ProductListItem[]
+}
