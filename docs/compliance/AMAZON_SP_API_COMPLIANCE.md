@@ -17,11 +17,11 @@ they never modify or override the Agreement, DPP or AUP.
 | Fact | State | Evidence |
 | --- | --- | --- |
 | Developer type / intended use | PRIVATE DEVELOPER; INTERNAL / OWN ORGANIZATION / OWN SELLER ACCOUNT | DATA_ACQUISITION_MATRIX §17 |
-| Developer registration | UNDER REVIEW — Amazon approval not evidenced | User-confirmed Developer Central state |
+| Developer registration | REJECTED_REMEDIATION_REQUIRED — NOT ELIGIBLE FOR SP-API ACCESS; reapplication requires an updated Developer Profile and a new case | Amazon decision communicated 2026-08-17; no case ID retained |
 | Production application client | NOT CREATED | Same |
 | Self-authorization | NOT PERFORMED | Same |
 | Credentials | NOT AVAILABLE | No credential was requested, read or used |
-| Live SP-API calls | NOT PERFORMED; Catalog validation blocked by review | DATA_ACQUISITION_MATRIX §§13, 17 |
+| Live SP-API calls | NOT PERFORMED; Catalog validation blocked pending remediation, reapplication and approval | DATA_ACQUISITION_MATRIX §§13, 17; compliance/SP_API_REGISTRATION_REMEDIATION.md |
 
 ## 2. Source register
 
@@ -43,6 +43,24 @@ translations.
 | S10 | [Vulnerability Management](https://developer-docs.amazon.com/sp-api/docs/vulnerability-management) | OFFICIAL_IMPLEMENTATION_GUIDANCE | Living guidance | Guidance for DPP implementation. |
 | S11 | [Changes to the Acceptable Use Policy](https://developer-docs.amazon.com/sp-api/changelog/changes-to-the-acceptable-use-policy) | OPERATIONAL_DOCUMENTATION | 2023-06-20 | Change notice; current S3 controls. |
 
+## 2a. Amazon registration findings (reviewer event, 2026-08-17)
+
+The reviewer decision is recorded separately from policy interpretation.
+`AMAZON_REJECTION_FINDING` is not, by itself, a universal normative rule;
+where public policy does not expose the same specificity, the traceability
+state is `REVIEWER_REQUIREMENT / POLICY TRACEABILITY NEEDS VERIFICATION`.
+
+| Finding ID | AMAZON_REJECTION_FINDING | Related AC | Policy traceability / authority | Scope | JUVAl state and evidence | Gap / required evidence | Blocks reapplication |
+|---|---|---|---|---|---|---|---|
+| RF-01 | Report incidents involving Amazon Information to `security@amazon.com` within 24 hours of detection. | AC-12 | DPP §1.6; S2; NORMATIVE_POLICY / AMAZON_MANDATORY for Security Incidents. Reviewer-specific address is also an onboarding/reviewer requirement pending exact public-policy trace. | Information / incident-dependent | NOT_IMPLEMENTED; no incident plan, IMPOC, notification runbook or exercise. | Approved plan, named role, clock, evidence preservation and notification procedure. | YES |
+| RF-02 | Maintain firewall, IDS/IPS, antivirus/anti-malware and network segmentation. | AC-06 | DPP §1.1; S2; NORMATIVE_POLICY / AMAZON_MANDATORY. | Systems handling Information | NOT_IMPLEMENTED; no deployed topology or provider control evidence. | Network diagram, provider configuration and control-validation records. | YES |
+| RF-03 | Password/access controls: 12-character minimum, special characters, MFA, 365-day expiration and annual rotation. | AC-07, AC-08 | DPP §§1.2–1.4.2; S2; NORMATIVE_POLICY / AMAZON_MANDATORY for the stated account/credential scope. | User and programmatic credentials; exact reviewer scope remains to be reconciled. | NOT_IMPLEMENTED; API has no application auth; no MFA/password/access lifecycle evidence; no SP-API credential. | Identity policy/configuration, MFA proof, rotation/revocation records and access review. | YES |
+| RF-04 | Restrict access to Amazon Information by job duties/business functions. | AC-07, AC-14A | DPP §§1.2–1.3 and AUP §§4.6–4.9; S2/S3; NORMATIVE_POLICY / AMAZON_MANDATORY. | Personnel and service accounts with Information access | NOT_IMPLEMENTED; no roles, access review, RLS evidence or production identity lifecycle. | Role matrix, least-privilege grants, quarterly review and revocation evidence. | YES |
+| RF-05 | Incident-response plan must define roles, be reviewed every six months, and contain 24-hour notification procedures. | AC-12 | DPP §1.6; S2; NORMATIVE_POLICY / AMAZON_MANDATORY for plan/review/notification. | Security incidents involving Information | NOT_IMPLEMENTED; no plan, accountable roles, six-month review record or exercise. | Approved plan, six-month review schedule, notification drill and preserved evidence. | YES |
+
+The complete remediation matrix and reapplication gate are maintained in
+[`SP_API_REGISTRATION_REMEDIATION.md`](SP_API_REGISTRATION_REMEDIATION.md).
+
 ## 3. Traceability contract and control matrix
 
 Status values: COMPLIANT, PARTIAL, NOT_IMPLEMENTED, NOT_APPLICABLE, BLOCKED,
@@ -52,7 +70,7 @@ without operating evidence.
 | ID | Requirement | Authority type / origin | Official source title, section, source reference, verified | Scope / level | Current evidence / status | Gap, remediation, validation |
 | --- | --- | --- | --- | --- | --- | --- |
 | AC-01 | Use API only for acceptable activities, authorized users and data necessary to functionality. | NORMATIVE_POLICY / AMAZON_MANDATORY | Acceptable Use Policy §§1.1, 3.8; S3; 2026-08-17 | All Information / MUST | Own-account intent; no adapter/call. BLOCKED | Amazon approval and operation-purpose/minimum-data inventory. Validate before each scope change. |
-| AC-02 | Keep Portal Registration Data accurate/current and notify Amazon immediately if Portal credentials are compromised. | NORMATIVE_POLICY / AMAZON_MANDATORY | Agreement §1; S1; 2026-08-17 | Portal registration / MUST | Under review; no accountable owner/runbook. PARTIAL | Assign owner and update/compromise process. Quarterly and event-driven evidence. |
+| AC-02 | Keep Portal Registration Data accurate/current and notify Amazon immediately if Portal credentials are compromised. | NORMATIVE_POLICY / AMAZON_MANDATORY | Agreement §1; S1; 2026-08-17 | Portal registration / MUST | Registration rejected with remediation required; no accountable owner/runbook. PARTIAL | Assign owner and update/compromise process. Quarterly and event-driven evidence. |
 | AC-03 | Request and qualify only roles aligned with intended operations. Do not infer unrestricted scope from Product Listing alone. | ONBOARDING_REQUIREMENT / AMAZON_ONBOARDING | Prepare for Registration, roles; Role Mappings; S5/S7; 2026-08-17 | Roles and returned payload / CONDITIONAL | Product Listing is documented planning target; no role/client/payload. NEEDS_VERIFICATION | GATE 3 current operation/role/payload review, including PII/restricted determination. |
 | AC-04A | A private application must be self-authorized before calls for the organization account. | OPERATIONAL_DOCUMENTATION / AMAZON_ONBOARDING | Authorize Private Applications, self-authorization workflow; S8; 2026-08-17 | Private app after client exists / CONDITIONAL | No client or authorization. BLOCKED | Perform only after Amazon approval and client creation. Validate Portal authorization evidence. |
 | AC-04B | Store tokens securely; do not put them in client code, logs or URLs; restrict access. | OFFICIAL_IMPLEMENTATION_GUIDANCE / AMAZON_GUIDANCE | Authorize Private Applications, Token storage details; S8; 2026-08-17 | Tokens after issuance / SHOULD | .env is ignored; no SP-API token exists; no secret manager. PARTIAL | Backend-only encrypted store and redaction/access controls. Validate no browser/log exposure. |
