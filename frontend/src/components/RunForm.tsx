@@ -34,6 +34,7 @@ export function RunForm({ disabled, onSubmit }: Props) {
   const [referralFeeRate, setReferralFeeRate] = useState("")
   const [fulfillmentFee, setFulfillmentFee] = useState("0")
   const [otherSellingFees, setOtherSellingFees] = useState("0")
+  const [persist, setPersist] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
 
   function handleSubmit(event: FormEvent) {
@@ -64,7 +65,7 @@ export function RunForm({ disabled, onSubmit }: Props) {
         fulfillment_fee: fulfillmentFee,
         other_selling_fees: otherSellingFees,
       },
-      persist: false,
+      persist,
     })
   }
 
@@ -147,6 +148,12 @@ export function RunForm({ disabled, onSubmit }: Props) {
         <label>
           Other selling fees
           <input value={otherSellingFees} onChange={(e) => setOtherSellingFees(e.target.value)} />
+        </label>
+
+        <legend>Persistence</legend>
+        <label className="checkbox">
+          <input type="checkbox" checked={persist} onChange={(e) => setPersist(e.target.checked)} />
+          Persist this run (makes it appear under Runs / Records)
         </label>
 
         {formError && (

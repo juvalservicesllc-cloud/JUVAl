@@ -76,5 +76,25 @@ describe("RunForm", () => {
       fulfillment_fee: "0",
       other_selling_fees: "0",
     })
+    expect(values.persist).toBe(false)
+  })
+
+  it("submits persist=true when the persistence checkbox is checked", async () => {
+    const onSubmit = vi.fn()
+    const user = userEvent.setup()
+    render(<RunForm disabled={false} onSubmit={onSubmit} />)
+
+    await user.upload(screen.getByLabelText(/catalog \(\.xlsx; \.csv pending\)/i), makeFile())
+    await user.type(screen.getByLabelText(/target profit/i), "5")
+    await user.type(screen.getByLabelText(/target roi/i), "0.3")
+    await user.type(screen.getByLabelText(/ventas mensuales/i), "0")
+    await user.selectOptions(screen.getByLabelText(/severidad de riesgo máxima/i), "LOW")
+    await user.type(screen.getByLabelText(/referral fee \*/i), "3")
+    await user.type(screen.getByLabelText(/referral fee rate/i), "0.15")
+    await user.click(screen.getByLabelText(/persist this run/i))
+
+    await user.click(screen.getByRole("button", { name: /procesar/i }))
+
+    expect(onSubmit.mock.calls[0][0].persist).toBe(true)
   })
 })

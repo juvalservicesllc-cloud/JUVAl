@@ -1,8 +1,10 @@
 # JUVAl — Frontend → Backend Handoff
 
-## Frontend Status: READY FOR BACKEND INTEGRATION
+## Frontend Status: INTEGRATION IN PROGRESS
 
-Frontend implementation is complete for the current MVP scope and is ready for backend API integration. This does **not** mean that every view consumes real backend data: Dashboard, Products, and Runs deliberately retain their clearly labelled demo fixtures until their real contracts are reconciled. Current frontend checkpoint: `ffe2a36` (`feat(frontend): refine light and dark appearance modes`).
+Frontend implementation was complete for the MVP scope and ready for backend API integration. This does **not** mean that every view consumes real backend data: Dashboard and Products deliberately retain their clearly labelled demo fixtures until their real contracts are reconciled. **Runs is now REAL** (`GET /api/v1/runs`, wired 2026-08-17 — see §15 Priority 1, now closed). Current frontend checkpoint: `ffe2a36` (`feat(frontend): refine light and dark appearance modes`); Runs integration is a Claude Code change on top of it (commit to follow this doc update).
+
+Starting this session, Claude Code owns integrating the approved visual system with the real JUVAl backend end-to-end (not just documenting the gap) — see project instructions for the "Product Integration Phase". This handoff doc remains the shared reconciliation record; sections below are updated in place as each capability moves from DEMO to REAL, not duplicated.
 
 ## 1. Purpose
 
@@ -45,18 +47,20 @@ application / domain / persistence
 | `/` | `DashboardPage.tsx` | Metrics and recent-run display | **DEMO**, `src/data/demo.ts` | None; no Dashboard API is designed. |
 | `/upload` | `UploadPage.tsx` | Submit XLSX, render result, download Excel | **REAL**, FastAPI | `POST /api/v1/runs`, `GET /api/v1/runs/{execution_id}/download`. |
 | `/products` | `ProductsPage.tsx` | Current product table | **DEMO**, `src/data/demo.ts` | Historical global-client proposal is disconnected. Records are backend run-scoped. |
-| `/runs` | `RunsPage.tsx` | Execution-history table | **DEMO / API-ready**, `src/data/demo.ts` | `GET /api/v1/runs` exists; its historical consumer DTO must be reconciled first. |
+| `/runs` | `RunsPage.tsx` | Execution-history table | **REAL**, FastAPI (2026-08-17) | `GET /api/v1/runs`. Loading/empty/error states; retry on error; no demo fallback. |
 | `/appearance` | `AppearancePage.tsx` | Local workspace appearance and branding | **LOCAL REAL**, `ThemeProvider` / browser `localStorage` | None. |
 
-Dashboard, Products, and Runs visibly render `DEMO MODE`. Upload renders the contextual `Live processing` marker. Fixtures live only in `frontend/src/data/demo.ts`; API failure never becomes fixture data.
+Dashboard and Products visibly render `DEMO MODE`; Runs renders a `LIVE API` marker instead. Upload renders the contextual `Live processing` marker. Dashboard/Products fixtures live only in `frontend/src/data/demo.ts`; API failure never becomes fixture data anywhere, including Runs.
 
 | View | State | Data source |
 | --- | --- | --- |
 | Dashboard | **DEMO** | Frontend fixtures |
 | Upload | **REAL** | FastAPI |
 | Products | **DEMO / API-ready** | Frontend fixtures |
-| Runs | **DEMO / API-ready** | Frontend fixtures |
+| Runs | **REAL** | FastAPI |
 | Appearance | **LOCAL REAL** | `ThemeProvider` and `localStorage` |
+
+`RunForm.tsx` now exposes "Persist this run" (previously hardcoded `persist: false`) — a run only appears under `/runs` when this is checked, matching the backend's own opt-in persistence model (ADR-013 "Option B").
 
 ## 4. Frontend API Boundary
 
@@ -64,7 +68,7 @@ Dashboard, Products, and Runs visibly render `DEMO MODE`. Upload renders the con
 | --- | --- | --- |
 | `frontend/src/api/client.ts` | Reads public `VITE_API_BASE_URL`, constructs URLs, uses `fetch`, parses JSON, and throws `ApiError` for non-2xx responses. | Used by all API modules. |
 | `frontend/src/api.ts` | Upload multipart request and download URL. | Connected to Upload. |
-| `frontend/src/api/runs.ts` | Historical `getRuns(signal?)` consumer with runtime response checks. | Disconnected: it expects older demo vocabulary, not `RunSummaryOut`. |
+| `frontend/src/api/runs.ts` | `getRuns({limit?, signal?})` consumer, runtime shape checks against real `RunSummaryOut`. | **Connected** — used by `RunsPage.tsx` (2026-08-17). |
 | `frontend/src/api/products.ts` | Historical `getProducts(signal?)` consumer with runtime checks. | Disconnected: global Products is not registered and conflicts with the run-scoped records model. |
 
 There is no frontend SDK, repository/service layer, direct Supabase client, state manager, or silent API-to-demo fallback.
@@ -95,7 +99,7 @@ The actual decorators in `src/juval/interfaces/api/main.py` register these PWA-f
 - **Ordering:** newest first, from `ExecutionRunStore.list_execution_runs(limit=...)`.
 - **Empty:** `200 { "items": [] }`.
 - **Error:** safe `500` when no execution-run store is configured.
-- **Frontend state:** route exists but Runs remains demo until Codex reconciles its DTO/page.
+- **Frontend state:** connected (2026-08-17) — `RunsPage.tsx` fetches on mount, renders loading/empty/error/success states, no demo fallback. `RunForm.tsx` now exposes the `persist` checkbox needed to produce listable runs.
 
 ### IMPLEMENTED — `GET /api/v1/runs/{execution_id}/records`
 
@@ -262,7 +266,7 @@ CSV remains visibly unsupported/pending and is not a real alternative to XLSX.
 | Real XLSX upload/download E2E | `frontend/e2e/smoke.spec.ts` | `npm run test:e2e` with both local servers |
 | Lint / production PWA build | `frontend/package.json`, `frontend/vite.config.ts` | `npm run lint`; `npm run build` |
 
-Last verified at frontend checkpoint `ffe2a36`: **29 frontend tests** and **16 Playwright tests** passed; lint and production build passed. The real Upload/download E2E is included in the Playwright suite. Automated screenshots were reviewed; integrated interactive browser inspection was not available, so this is not claimed as complete manual visual QA.
+Last verified at frontend checkpoint `ffe2a36`: **29 frontend tests** and **16 Playwright tests** passed; lint and production build passed. Re-verified 2026-08-17 after the Runs integration (Claude Code): **34 frontend tests** and **17 Playwright tests** passed (adds `runs-persistence.spec.ts`, a real-browser E2E for Upload-with-persist → Runs), lint and production build still passing. The real Upload/download E2E is included in the Playwright suite. Automated screenshots were reviewed; integrated interactive browser inspection was not available, so this is not claimed as complete manual visual QA.
 
 ## 14. Mobile and PWA Contract
 
@@ -277,12 +281,9 @@ Last verified at frontend checkpoint `ffe2a36`: **29 frontend tests** and **16 P
 
 ## 15. WHAT CLAUDE CODE OWNS NEXT
 
-### Priority 1 — Finalize handoff of implemented Runs resource
+### Priority 1 — CLOSED 2026-08-17: Runs resource connected
 
-1. Preserve `RunsListResponse`, newest-first ordering, limit behavior, and configured-store failure semantics.
-2. Confirm/document counter semantics from `ExecutionRun`.
-3. Retain backend tests for empty list, ordering, limit, and missing store.
-4. Give Codex the final contract. Codex then replaces the historical Runs DTO and connects the page. No new Runs endpoint is required.
+`frontend/src/types.ts` (`RunSummaryOut`/`RunsListResponse`), `frontend/src/api/runs.ts`, and `frontend/src/pages/RunsPage.tsx` now match the real backend contract exactly — no new backend endpoint, no backend change. `RunForm.tsx` exposes "Persist this run" so the slice is demonstrable end to end. Verified with a real browser E2E (`frontend/e2e/runs-persistence.spec.ts`): Upload with persist checked → run appears in `/runs` with its real `execution_id`/status/counters. 34 frontend unit tests + 17 Playwright E2E passing.
 
 ### Priority 2 — Complete run-scoped records, not global Products
 
@@ -330,10 +331,9 @@ Shared boundary: HTTP DTOs, status/counter semantics, safe errors, and provenanc
 
 ## 18. Known Blockers
 
-- Runs UI is demo because its prepared frontend DTO predates the implemented list contract.
-- Products UI is demo; its global endpoint proposal is not registered and does not match ADR-019's run-scoped record model.
-- Upload defaults to `persist=false`, so a persisted/configured run is needed to demonstrate real list/records data.
-- Manual browser visual inspection is pending; automated responsive E2E exists.
+- Products UI is demo; its global endpoint proposal is not registered and does not match ADR-019's run-scoped record model. Blocked on a title/brand-in-`RecordOut` decision (§15 Priority 2), not started.
+- Upload's "Persist this run" checkbox defaults to unchecked (`persist=false`), matching the backend's opt-in model — the operator must explicitly opt in for a run to be listable/queryable later.
+- Manual interactive browser visual inspection is pending; automated responsive E2E exists and was run against a real local backend+frontend for the Runs integration (2026-08-17).
 
 ## 19. Approved Decisions and ADR Candidates
 
@@ -352,7 +352,7 @@ This handoff was reconciled against current frontend modules, actual FastAPI rou
 | PWA shell, routing, responsive layout, and mobile navigation | **READY** |
 | Theme, Light/Dark mode, and local branding | **READY** |
 | Upload API and download | **READY / REAL** |
-| Runs consumer | **READY / WAITING FOR DTO RECONCILIATION** |
+| Runs consumer | **READY / REAL** |
 | Products consumer | **READY / WAITING FOR RUN-SCOPED CONTRACT RECONCILIATION** |
 | Dashboard | **DEMO / WAITING FOR A CONCRETE CONTRACT** |
 | Frontend tests, E2E, and production PWA build | **READY** |

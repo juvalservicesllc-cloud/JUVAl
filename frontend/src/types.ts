@@ -115,18 +115,25 @@ export interface ExecutionRunSummary {
   errors: number
 }
 
-export interface RunsListItem {
+// GET /api/v1/runs -- real ExecutionRun fields (API_CONTRACT.md §2b).
+// Deliberately not "created_at"/"valid"/"excluded": those have no
+// domain equivalent (see docs/FRONTEND_BACKEND_HANDOFF.md §6).
+export interface RunSummaryOut {
   execution_id: string
-  created_at: string
-  status: "SUCCESS" | "PARTIAL_SUCCESS" | "FAILED"
-  total_records: number
-  valid: number
-  excluded: number
-  errors: number
+  started_at: string
+  finished_at: string | null
+  status: "RUNNING" | "SUCCESS" | "PARTIAL_SUCCESS" | "FAILED"
+  input_filename: string
+  input_hash: string
+  records_total: number
+  records_processed: number
+  records_successful: number
+  records_with_errors: number
+  warnings: number
 }
 
-export interface RunsResponse {
-  items: RunsListItem[]
+export interface RunsListResponse {
+  items: RunSummaryOut[]
 }
 
 export interface ProductListItem {
