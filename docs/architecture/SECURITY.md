@@ -10,15 +10,15 @@ ya existiera.
 
 | Área | Estado | Evidencia |
 |---|---|---|
-| Secrets / API keys en el código | **Ninguno encontrado** | No hay ningún adapter de fuente externa implementado (`infrastructure/enrichment/` vacío) que requeriría credenciales; no hay archivos `.env` en el repo |
-| Control de versiones | **NOT INITIALIZED** | No existe `.git` en el repositorio (`git status` falla con "not a git repository"). Decisión explícitamente pendiente del usuario (`ARCHITECTURE.md` §14.7) — no se ejecuta `git init` sin autorización. |
-| `.gitignore` | **IMPLEMENTED** (para cuando se inicialice git) | Excluye `.venv/`, `__pycache__/`, `*.pyc`, `.pytest_cache/`, `*.egg-info/`. No incluye todavía una entrada para `.env` — no hace falta hoy porque no existe ningún `.env`, pero debe agregarse en el mismo cambio que introduzca el primer secreto real. |
+| Secrets / API keys en el código | **Ninguno encontrado en el scan de worktree de la baseline 2026-08-17** | No hay adapter de fuente externa implementado (`infrastructure/enrichment/` vacío); el scan no sustituye una revisión de historial/CI antes de introducir secretos reales. |
+| Control de versiones | **INITIALIZED** | Repositorio Git activo; el estado debe verificarse con `git status` antes de cambios. |
+| `.gitignore` | **IMPLEMENTED** | Excluye artefactos Python, `.env`/`.env.*` (con excepción de las plantillas), Node y logs; las credenciales reales siguen prohibidas en Git. |
 | Autenticación de usuarios | **NOT IMPLEMENTED** | Sin interfaz alguna (CLI/API/desktop no implementadas), no hay superficie de autenticación que asegurar todavía. Ver Fase 9 en `PROJECT_PLAN.md` (bloqueada, Clerk PENDING). |
 | Autorización / aislamiento de datos por usuario | **NOT IMPLEMENTED** | No aplica sin autenticación ni persistencia multiusuario. |
-| Persistencia de datos | **NOT IMPLEMENTED** | Todo el procesamiento es in-memory por corrida (ver `EXECUTION_MODEL.md`); no hay base de datos que asegurar. |
+| Persistencia de datos | **IMPLEMENTED (local/remota, parcial)** | SQLite persiste runs/snapshots locales y Supabase/PostgreSQL existe para persistencia JUVAl según `SUPABASE.md`; su seguridad operativa, backups, retention y acceso de producción siguen sin evidenciarse aquí. |
 | Validación de input (Excel) | **IMPLEMENTED (parcial)** | `infrastructure/excel/importer.py` valida tipo y formato celda a celda (número/booleano/ASIN/UPC), y columnas requeridas ausentes abortan el import (`FATAL`). No se ha evaluado explícitamente contra amenazas específicas de `openpyxl` (ver §3). |
 | Ejecución de contenido del usuario como código | **No aplica / no ocurre** | El importer solo lee valores de celda como datos (texto/número/booleano); no evalúa fórmulas de Excel como código ni ejecuta macros. `openpyxl.load_workbook(..., data_only=True)` lee el último valor calculado de una fórmula, no la fórmula misma, y no ejecuta macros VBA. |
-| Logging de datos sensibles | **No aplica todavía** | No existe logging operacional implementado (`infrastructure/logging/` vacío, solo `README.md`); no hay riesgo actual de que un log exponga PII/tokens porque no hay logs. Ver §4 para la regla que debe aplicarse cuando se implemente. |
+| Logging de datos sensibles | **PARTIAL / no suficiente para Amazon Information** | `interfaces/api/main.py` registra excepciones con método/ruta, pero no existe logging operacional centralizado, retención, redacción verificada, alerting ni revisión de seguridad. Ver `compliance/AMAZON_SP_API_COMPLIANCE.md` AC-11. |
 | PII | **Mínima exposición hoy** | El dominio no modela datos de personas (clientes, empleados) — modela productos. `top_seller_fba`/`top_seller_fbm` (`Competition`) podrían contener nombres de vendedores de terceros si una fuente externa los provee; hoy no hay ninguna fuente que los llene. |
 
 ## 2. Reglas duras (`CLAUDE.md` §16) — aplican a todo trabajo futuro
@@ -44,9 +44,9 @@ review formal ni tareas aprobadas para ejecutar:
    memoria (`read_only=True` mitiga parcialmente el uso de memoria, pero
    no hay un límite explícito ni un manejo de `MemoryError`). Relevante
    si Juval llega a aceptar archivos de fuentes no confiables.
-2. **Sin límite de tasa ni cuota** en `import_excel`/`run_pipeline` — no
-   aplica hoy porque no hay interfaz expuesta a usuarios externos, pero
-   es una consideración pendiente para cuando exista una API (Fase 4).
+2. **Sin límite de tasa ni cuota de aplicación** en el endpoint API actual.
+   Esto debe evaluarse antes de exponer una interfaz pública o manejar Amazon
+   Information; no confundirlo con los límites futuros por operación SP-API.
 3. **`openpyxl` como dependencia externa** — cualquier vulnerabilidad en
    la librería de parseo de `.xlsx` afecta directamente la superficie de
    ataque del Excel Importer. No se ha hecho un audit de la versión
