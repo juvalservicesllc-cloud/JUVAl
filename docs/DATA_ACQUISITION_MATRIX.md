@@ -252,3 +252,56 @@ The sample XLSX in `tests/fixtures/sample_sourcing_TEST_DATA.xlsx` remains techn
 ## 16. Relationship to existing capability matrix
 
 `docs/PRODUCT_CAPABILITY_MATRIX.md` is currently an untracked concurrent-work file. To avoid overwriting work outside this research task, it was inspected but intentionally not edited. Once its owner stages it, reconcile its “External Data Source Roadmap” and this authoritative acquisition matrix in a deliberate documentation-only change.
+
+## 17. SP-API Catalog / ASIN matching POC — 2026-08-17
+
+### Status
+
+| Checkpoint | Status | Evidence |
+| --- | --- | --- |
+| SP-API Catalog documentation | **DOC VERIFIED** | Catalog Items `searchCatalogItems` accepts UPC/EAN/GTIN identifiers, up to 20 identifiers per request; Catalog Items requires Product Listing role. See A1/A2. |
+| Local credentials | **AUTH BLOCKED** | No SP-API/LWA/AWS credential variable is present in the process environment; no `.env` contents were read. |
+| Production authorization | **AUTH BLOCKED** | No authorized seller refresh token is available. |
+| Live Catalog call / rate-limit header | **LIVE CALL BLOCKED** | No authenticated call was attempted; `x-amzn-RateLimit-Limit` therefore has not been observed. |
+| Adapter, provider port and tests | **NOT STARTED BY DESIGN** | This POC must not create a production adapter or mock authentication before real authorization exists. |
+
+### Access model for the US Catalog POC
+
+- **Application type:** use a **private application** only if JUVAl is initially used solely by its own organization. A private application self-authorizes and does not need an Appstore listing. If JUVAl will authorize independent seller organizations, stop and register a **public application** with the OAuth/Appstore authorization flow instead. This is an ownership/business decision, not a code shortcut.
+- **Required role:** `Product Listing` for `searchCatalogItems` and `getCatalogItem` (A2). Pricing, Fees, restrictions and FBA roles are explicitly out of this POC.
+- **Authorization:** Catalog Items is not grantless. Use the authorized selling partner's LWA refresh token to exchange for a short-lived LWA access token. `client_credentials` scopes are for grantless operations and are not a substitute for this call.
+- **US marketplace:** `ATVPDKIKX0DER`; NA endpoint `https://sellingpartnerapi-na.amazon.com`; region `us-east-1` (A1 and [Marketplace IDs](https://developer-docs.amazon.com/sp-api/lang-zh/docs/marketplace-ids)).
+- **AWS signing:** current Amazon documentation states that AWS IAM and SigV4 have not been required since 2023-10-02. Do not create IAM keys or a SigV4 implementation for this POC. LWA remains required ([Amazon announcement](https://developer-docs.amazon.com/sp-api/changelog/sp-api-will-no-longer-require-aws-iam-or-aws-signature-version-4)).
+- **Request headers:** obtain an LWA token at runtime and use the documented `host`, `x-amz-access-token`, `x-amz-date` and `user-agent` headers. Never send a token to the browser.
+
+### Manual external action required
+
+1. Decide and record whether this first application is **private/internal** or must support third-party sellers. For the stated POC, choose private only if that is true.
+2. In Amazon's Solution Provider Portal, create/complete the developer profile and request the `Product Listing` role.
+3. Register the corresponding production application and, for a private application, self-authorize it against the intended US selling-partner account. For a public app, implement Amazon's OAuth flow first; do not reuse a private token for other sellers.
+4. Keep the issued LWA `client_id`, `client_secret` and authorized seller `refresh_token` in a backend-only secret store. Do not paste them into chat, source code, frontend configuration or a committed `.env` file.
+5. Set backend-only environment variables through the local/deployment secret mechanism after agreeing names with the backend owner. The proposed names are `JUVAL_SP_API_LWA_CLIENT_ID`, `JUVAL_SP_API_LWA_CLIENT_SECRET` and `JUVAL_SP_API_REFRESH_TOKEN`; they are documentation only until an adapter exists. No `VITE_*` variable may contain any of them.
+6. Tell the implementation owner only that the variables are configured. Do not transmit their values. The next permitted action is one minimal authenticated Catalog identifier request using a public/non-sensitive test identifier and recording only sanitized metadata: HTTP status, request ID, returned ASIN(s), marketplace, identifier type and `x-amzn-RateLimit-Limit` if supplied.
+
+Amazon documents the token exchange at `https://api.amazon.com/auth/o2/token` using the refresh token, client ID and client secret; the returned access token is short-lived. See [Connect to SP-API](https://developer-docs.amazon.com/sp-api/lang-zh_CN/docs/connecting-to-the-selling-partner-api) and [authorization workflow](https://developer-docs.amazon.com/sp-api/lang-zh_CN/docs/onboarding-step-6-set-up-the-authorization-workflow).
+
+### Matching semantics — decision required before implementation
+
+The existing `VerificationStatus` is intentionally exhaustive: `VERIFIED`, `INFERRED`, `NOT_FOUND`, `INVALID`. It represents the verification state of **one field value**, so it cannot truthfully encode “multiple exact candidates exist.”
+
+| Provider result | Safe current interpretation | Required future representation |
+| --- | --- | --- |
+| 0 exact candidates | `asin = NOT_FOUND`, `source=AMAZON_SP_API`, `method=EXACT_IDENTIFIER_MATCH`, query evidence/timestamp retained | Existing `FieldValue.not_found` is suitable. |
+| 1 candidate whose returned identifiers include the queried normalized identifier | ASIN candidate may be `VERIFIED` after the explicit exact-match guard | Existing `FieldValue.verified` is suitable; preserve request/response reference. |
+| More than 1 candidate | Do not select or mark an ASIN `NOT_FOUND`; candidates exist and the field has no resolved value | **PENDING DECISION:** add a small match-result outcome such as `AMBIGUOUS` separate from `VerificationStatus`, carrying candidate ASINs/evidence. Do not alter the global provenance enum. |
+| Network/auth/HTTP/schema error | Operational/source failure, never `NOT_FOUND` | **PENDING DECISION:** adapter-level typed source error plus `ProcessingIssue`; no FieldValue claim is made. |
+
+This is an ADR candidate only if implementation begins: a match-specific result/outcome preserves ADR-004 rather than deforming it. It is not approved by this document.
+
+### Minimal future port and adapter boundary
+
+When authorization and the ambiguity decision exist, introduce only a catalog-focused port, for example `ProductCatalogSource.search_by_identifiers(marketplace, identifier_type, identifiers)`. It returns source observations/candidates and leaves acceptance to a matching use case. It must not include pricing, fees, history, eligibility or other product intelligence.
+
+The SP-API adapter will batch at most 20 homogeneous identifiers, observe `x-amzn-RateLimit-Limit` when present, and expose an injectable conservative throttle value. Its cache key, if a cache is later approved, is `(marketplace, identifier_type, normalized_identifier)`; TTL remains a slow-changing-policy decision, not an implementation assumption.
+
+Required tests after authorization/decision: exact match, zero match, multiple candidates, malformed response, source failure, provenance, 20-item batch and 21-item split. A credential-gated live integration test must stay outside the normal suite.
