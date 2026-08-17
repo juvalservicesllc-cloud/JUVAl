@@ -84,15 +84,6 @@ export type RunState =
 export type ProvenanceStatus = "VERIFIED" | "INFERRED" | "NOT_FOUND"
 export type Decision = "BUY" | "REVIEW" | "PASS"
 
-export interface DashboardSummary {
-  totalProducts: number
-  processable: number
-  excluded: number
-  hazmat: number
-  bulky: number
-  missingAsin: number
-}
-
 export interface ProductRow {
   sku: string
   product: string
@@ -103,16 +94,6 @@ export interface ProductRow {
   hazmat: boolean
   bulky: boolean
   decision: Decision
-}
-
-export interface ExecutionRunSummary {
-  executionId: string
-  createdAt: string
-  status: "SUCCESS" | "PARTIAL_SUCCESS" | "FAILED"
-  totalRecords: number
-  valid: number
-  excluded: number
-  errors: number
 }
 
 // GET /api/v1/runs -- real ExecutionRun fields (API_CONTRACT.md §2b).

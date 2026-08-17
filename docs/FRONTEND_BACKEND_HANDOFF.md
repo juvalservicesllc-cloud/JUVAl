@@ -45,7 +45,7 @@ application / domain / persistence
 
 | Route | Page | Purpose | State / source | Backend dependency |
 | --- | --- | --- | --- | --- |
-| `/` | `DashboardPage.tsx` | Metrics and recent-run display | **DEMO**, `src/data/demo.ts` | None; no Dashboard API is designed. |
+| `/` | `DashboardPage.tsx` | Real analytics for one selected persisted run (latest by default, switchable) | **REAL**, FastAPI (2026-08-17) | `GET /api/v1/runs` (run selector), `GET /api/v1/runs/{execution_id}/records` (analytics source). No new endpoint -- see §15 Priority 3. |
 | `/upload` | `UploadPage.tsx` | Submit XLSX, render result, download Excel | **REAL**, FastAPI | `POST /api/v1/runs`, `GET /api/v1/runs/{execution_id}/download`. |
 | `/products` | `ProductsPage.tsx` | Current product table | **DEMO**, `src/data/demo.ts` | Historical global-client proposal is disconnected. Records are backend run-scoped. |
 | `/runs` | `RunsPage.tsx` | Execution-history table | **REAL**, FastAPI (2026-08-17) | `GET /api/v1/runs`. Loading/empty/error states; retry on error; no demo fallback. Execution IDs link to Run Detail. |
@@ -56,7 +56,7 @@ Dashboard and Products visibly render `DEMO MODE`; Runs renders a `LIVE API` mar
 
 | View | State | Data source |
 | --- | --- | --- |
-| Dashboard | **DEMO** | Frontend fixtures |
+| Dashboard | **REAL** | FastAPI (single-run analytics, client-aggregated -- see §15 Priority 3) |
 | Upload | **REAL** | FastAPI |
 | Products | **DEMO / API-ready** | Frontend fixtures |
 | Runs | **REAL** | FastAPI |
@@ -276,7 +276,7 @@ CSV remains visibly unsupported/pending and is not a real alternative to XLSX.
 | Real XLSX upload/download E2E | `frontend/e2e/smoke.spec.ts` | `npm run test:e2e` with both local servers |
 | Lint / production PWA build | `frontend/package.json`, `frontend/vite.config.ts` | `npm run lint`; `npm run build` |
 
-Last verified at frontend checkpoint `ffe2a36`: **29 frontend tests** and **16 Playwright tests** passed; lint and production build passed. Re-verified 2026-08-17 after the Runs integration (Claude Code): **34 frontend tests** and **17 Playwright tests**. Re-verified again 2026-08-17 after Run Detail (Claude Code): **41 frontend tests** and **18 Playwright tests** passed (adds `RunDetailPage.test.tsx` and extends `runs-persistence.spec.ts` through Run Detail: click-through from Runs, real records/decision/provenance, refresh-from-URL, download, plus an unknown-execution-id not-found case), lint and production build still passing. The real Upload/download E2E is included in the Playwright suite. Automated screenshots were reviewed; integrated interactive browser inspection was not available, so this is not claimed as complete manual visual QA.
+Last verified at frontend checkpoint `ffe2a36`: **29 frontend tests** and **16 Playwright tests** passed; lint and production build passed. Re-verified 2026-08-17 after the Runs integration (Claude Code): **34 frontend tests** and **17 Playwright tests**. Re-verified again 2026-08-17 after Run Detail (Claude Code): **41 frontend tests** and **18 Playwright tests**. Re-verified again 2026-08-17 after Dashboard analytics (Claude Code): **54 frontend tests** and **19 Playwright tests** passed (adds `runAnalytics.test.ts`, `DashboardPage.test.tsx`, a Dashboard-through-App integration test, and `dashboard-analytics.spec.ts` -- a real-browser E2E for Upload-with-persist → Dashboard KPIs/charts → Run Detail), lint and production build still passing. The real Upload/download E2E is included in the Playwright suite. Automated screenshots were reviewed; integrated interactive browser inspection was not available, so this is not claimed as complete manual visual QA.
 
 ## 14. Mobile and PWA Contract
 
@@ -304,29 +304,32 @@ Run-scoped records are now consumed for real by **Run Detail** (`/runs/:executio
 2. Decide whether to expose `severity.status` (ADR-020 already flagged this as a deliberately deferred, additive-only change).
 3. Only then adapt `ProductsPage.tsx` to the run-scoped resource (likely: list of runs → pick one → its records, i.e. reuse Run Detail's own records view rather than inventing a separate "Products" concept at all).
 
-### Priority 3 — Dashboard: still demo, observations recorded for the next slice
+### Priority 3 — CLOSED 2026-08-17 (single-run scope): Dashboard connected
 
-Still not designed/implemented — no dashboard endpoint, no aggregation. While building Run Detail, real per-run metrics were observed as actually available without inventing anything:
+`DashboardPage.tsx` now shows real analytics for **one selected persisted run** (latest by default via `GET /api/v1/runs`, switchable via a `<select>`, records fetched per selection via `GET /api/v1/runs/{execution_id}/records`) — no dashboard/aggregation endpoint was added; both calls already existed. Cross-run/historical analytics remain explicitly out of scope (table below).
 
-| Metric | Status | Notes |
+Aggregation lives in `frontend/src/runAnalytics.ts::deriveRunAnalytics(records)` — a pure, unit-tested function, no JSX, no recalculation of anything the backend already computed (profit/ROI/margin/decision/risk severity all pass through unchanged). Per-metric definition (kept here so backend aggregation can replace this later without changing semantics):
+
+| NAME | SOURCE | FORMULA | MISSING POLICY |
+| --- | --- | --- | --- |
+| Total / Successful / With errors records | `RunSummaryOut.records_total/records_successful/records_with_errors` | Direct, no aggregation | n/a -- always present on a persisted run |
+| Records with issues | `RecordOut.issue_count` per record | Count where `issue_count > 0` | n/a -- `issue_count` is always a number, never missing |
+| Decision distribution | `RecordOut.decision` per record | Count by exact value (`BUY`/`REVIEW`/`PASS`); a `null` decision counts as its own `UNKNOWN` bucket, never dropped or folded into an existing one | n/a |
+| Risk overview (HAZMAT/BULKY present) | `RecordOut.hazmat_status`/`bulky_status` per record | Count where `status === "PRESENT"` (RiskStatus/presence only, ADR-020 -- **not** `severity`, never treated as externally verified) | `ABSENT` and `UNKNOWN` both count as "neither present" -- `RecordOut` doesn't expose enough to distinguish confirmed-absent from unknown-presence today (same gap as risk `verification_status`, §9) |
+| Average ROI / Profit / Margin | `RecordOut.roi`/`profit`/`margin` (`FieldValueOut`) per record | Arithmetic mean over records where `status` is `VERIFIED` or `INFERRED` only (mirrors `FieldValue.is_usable` in `domain/provenance.py`) | `NOT_FOUND`/`INVALID` records are excluded from both the numerator and the sample-size denominator -- **never coerced to 0**. Sample size is always displayed next to the average; the average shows "No usable data" (not `0%`/`$0`) when sample size is 0. |
+
+**Explicitly not implemented, and why (NEEDS BUSINESS DEFINITION / NEEDS BACKEND AGGREGATION / NOT USEFUL YET):**
+
+| Candidate | Classification | Why |
 | --- | --- | --- |
-| Records total/processed/successful/with errors, warnings, per run | **AVAILABLE NOW** | Already in `RunSummaryOut`, already rendered per-run in Runs/Run Detail. |
-| Decision (BUY/REVIEW/PASS) distribution, per run | **AVAILABLE NOW (frontend-computable)** | `RecordOut.decision` per record, already fetched by Run Detail — a per-run count is a client-side reduction over already-fetched records, no backend change needed for a single run's distribution. |
-| Cross-run aggregates (e.g. "BUY rate this week") | **NEEDS AGGREGATION** | Would require summing across many runs' records — not fetched together today; backend aggregation vs. many-request client aggregation is an open scaling question, not decided here. |
-| Average ROI/profit across a catalog | **NEEDS AGGREGATION** | Same reasoning; also raises which runs to include (latest only? all time?) — a **BUSINESS DEFINITION**, not just a technical one. |
-| HAZMAT/BULKY prevalence across a catalog | **NEEDS AGGREGATION + BUSINESS DEFINITION** | Same as above. |
-| Data quality (issue/warning rate) | **NEEDS AGGREGATION** | Per-run issue counts already exist (`RunSummaryOut.warnings`); a cross-run rate is aggregation, not new data. |
+| Cross-run aggregates (e.g. "BUY rate this week") | **NEEDS BACKEND AGGREGATION** | Would require fetching and summing records across many runs -- not fetched together today; backend aggregation vs. many-request client aggregation is an open scaling question, not decided here (§19 of this session's brief). |
+| Average ROI/profit across a whole catalog (not one run) | **NEEDS BACKEND AGGREGATION + BUSINESS DEFINITION** | Same fetching problem, plus which runs to include (latest only? all time? a date range?) is a business question, not a technical one. |
+| HAZMAT/BULKY prevalence across a catalog | **NEEDS BACKEND AGGREGATION + BUSINESS DEFINITION** | Same as above. |
+| Profit/ROI histogram with buckets (e.g. low/medium/high) | **NEEDS BUSINESS DEFINITION** | Bucket boundaries would be an invented commercial threshold with no approval -- deferred exactly as instructed, not built with arbitrary buckets. |
+| Overall VERIFIED/INFERRED/NOT_FOUND/INVALID rollup across all fields | **NOT USEFUL YET (no unambiguous formula)** | Summing statuses across heterogeneous fields (ASIN vs. weight vs. profit) without a precise definition of what's being counted would be a misleading single number; "records with issues" was implemented instead as the one data-quality metric with an unambiguous formula. |
+| Run outcome history chart (SUCCESS/PARTIAL_SUCCESS/FAILED over time) | **NOT USEFUL YET** | `GET /api/v1/runs` already has everything needed technically, but the current dev dataset has too few persisted runs to be meaningful -- not fabricated now. |
 
-None implemented this session — Dashboard remains untouched, demo. This table is only the input for whichever slice tackles it next.
-
-### Chart candidates identified, not built (documentation only, per this session's scope)
-
-| Candidate | Question answered | Data source | Transformation | Business value |
-| --- | --- | --- | --- | --- |
-| Decision distribution (single run) | "How many BUY/REVIEW/PASS did this run produce?" | `RunDetailPage`'s already-fetched `records[].decision` | Client-side count by value | Immediate read of a run's outcome mix — no backend change to build. |
-| Run outcome history (SUCCESS/PARTIAL_SUCCESS/FAILED over time) | "Is catalog processing getting more or less reliable?" | `GET /api/v1/runs` (already fetched by RunsPage) | Client-side count by `status`, ordered by `started_at` | Useful once enough persisted runs exist; not fabricated now — no chart added this session because the current SQLite/dev dataset has too few real runs to be meaningful, not because the code would be hard. |
-
-Not built: no chart added to any page this session (per instruction — document, don't implement).
+Decision distribution and risk overview charts (identified as candidates in the previous session's handoff update) **are now implemented** -- see `AnalyticsChart.tsx`, extended (not replaced) to accept an optional per-bar `color`, reusing the same fixed semantic tokens `StatusBadge`'s CSS already uses (`var(--success)`/`var(--warning)`/`var(--danger)`, never the personalizable `var(--accent)`) so BUY/REVIEW/PASS/HAZMAT/BULKY stay visually distinct regardless of accent customization. No second chart library, no chart engine built.
 
 ## 16. WHAT CODEX OWNS / FRONTEND-BACKEND OWNERSHIP
 
@@ -387,7 +390,7 @@ This handoff was reconciled against current frontend modules, actual FastAPI rou
 | Runs consumer | **READY / REAL** |
 | Run Detail consumer | **READY / REAL** |
 | Products consumer | **READY / WAITING FOR RUN-SCOPED CONTRACT RECONCILIATION** (title/brand, risk provenance -- both confirmed NOT AVAILABLE in current `RecordOut`) |
-| Dashboard | **DEMO / WAITING FOR A CONCRETE CONTRACT** |
+| Dashboard | **READY / REAL** (single-run analytics; cross-run analytics remain a future slice) |
 | Frontend tests, E2E, and production PWA build | **READY** |
 
 ## 22. Local Appearance / Branding

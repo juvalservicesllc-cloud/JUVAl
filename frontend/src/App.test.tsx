@@ -25,12 +25,13 @@ describe("App", () => {
     vi.unstubAllGlobals()
   })
 
-  it("navigates the demo shell and keeps provenance states distinct", async () => {
+  it("navigates the shell and keeps Products' provenance states distinct (Products remains demo)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ items: [] }) }))
     const user = userEvent.setup()
     window.history.pushState({}, "", "/")
     render(<App />)
 
-    expect(screen.getByText("Total Products")).toBeInTheDocument()
+    expect(await screen.findByText(/no persisted runs yet/i)).toBeInTheDocument()
     await user.click(screen.getByRole("link", { name: /products/i }))
 
     expect(screen.getByText("Marine Sealant 3 oz")).toBeInTheDocument()
@@ -39,15 +40,30 @@ describe("App", () => {
     expect(screen.getByText("NOT FOUND")).toBeInTheDocument()
   })
 
-  it("switches the dashboard chart between line and bars", async () => {
-    const user = userEvent.setup()
+  it("dashboard renders real run analytics from the API, not demo KPIs", async () => {
+    const run = {
+      execution_id: "run-1", started_at: "2026-08-17T12:00:00Z", finished_at: "2026-08-17T12:05:00Z",
+      status: "PARTIAL_SUCCESS", input_filename: "catalog.xlsx", input_hash: "abc",
+      records_total: 2, records_processed: 2, records_successful: 1, records_with_errors: 1, warnings: 0,
+    }
+    const records = [
+      { record_ref: "row_1", marketplace: "US", supplier_sku: "S1", asin: { value: "B0X", status: "VERIFIED" }, upc: { value: null, status: null }, weight: { value: null, status: null }, selling_price: { value: null, status: null }, cog: null, shipping_per_unit: null, profit: { value: "5", status: "VERIFIED" }, roi: { value: "0.4", status: "VERIFIED" }, margin: { value: null, status: null }, break_even_price: { value: null, status: null }, max_cog_target_profit: { value: null, status: null }, max_cog_target_roi: { value: null, status: null }, hazmat_status: "PRESENT", hazmat_severity: "HIGH", bulky_status: "ABSENT", bulky_severity: "NONE", decision: "BUY", decision_reasons: [], issue_count: 0, issues: [] },
+      { record_ref: "row_2", marketplace: "US", supplier_sku: "S2", asin: { value: null, status: "NOT_FOUND" }, upc: { value: null, status: null }, weight: { value: null, status: null }, selling_price: { value: null, status: null }, cog: null, shipping_per_unit: null, profit: { value: null, status: "NOT_FOUND" }, roi: { value: null, status: "NOT_FOUND" }, margin: { value: null, status: null }, break_even_price: { value: null, status: null }, max_cog_target_profit: { value: null, status: null }, max_cog_target_roi: { value: null, status: null }, hazmat_status: "ABSENT", hazmat_severity: "NONE", bulky_status: "ABSENT", bulky_severity: "NONE", decision: "REVIEW", decision_reasons: [], issue_count: 1, issues: ["[WARNING] x"] },
+    ]
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) => Promise.resolve({
+        ok: true, status: 200,
+        json: async () => (url.includes("/records") ? { execution_id: "run-1", records } : { items: [run] }),
+      })),
+    )
     window.history.pushState({}, "", "/")
     render(<App />)
 
-    expect(screen.getByRole("button", { name: "Line" })).toHaveAttribute("aria-pressed", "true")
-    await user.click(screen.getByRole("button", { name: "Bars" }))
-    expect(screen.getByRole("button", { name: "Bars" })).toHaveAttribute("aria-pressed", "true")
-    expect(screen.getByTestId("analytics-chart")).toHaveAttribute("aria-label", "bar chart of dashboard metrics")
+    expect(await screen.findByText("catalog.xlsx")).toBeInTheDocument()
+    expect(await screen.findByText(/40\.0%/)).toBeInTheDocument() // average ROI over the one usable record only, waits for records to load
+    expect(screen.getByText("2")).toBeInTheDocument() // total records, from the real run summary
+    expect(screen.getByText(/\$5\.00/)).toBeInTheDocument() // average profit over the one usable record only
   })
 
   it("shows the results table and download link on a successful run -- never invents a value the backend didn't send", async () => {

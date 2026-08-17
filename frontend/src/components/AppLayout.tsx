@@ -19,9 +19,9 @@ function pageTitle(pathname: string): string {
 export function AppLayout() {
   const { pathname } = useLocation()
   const { settings } = useTheme()
-  // Upload and Runs (list + detail) are real backend data -- everything
-  // else (Dashboard, Products) is still demo fixtures (docs/FRONTEND_BACKEND_HANDOFF.md).
-  const isLiveRoute = pathname === "/upload" || pathname.startsWith("/runs")
+  // Upload, Runs (list + detail), and Dashboard are real backend data --
+  // only Products is still a demo fixture (docs/FRONTEND_BACKEND_HANDOFF.md).
+  const isLiveRoute = pathname === "/upload" || pathname === "/" || pathname.startsWith("/runs")
   return (
     <div className="shell">
       <aside className="sidebar">
