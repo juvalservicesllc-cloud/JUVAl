@@ -89,7 +89,7 @@ pendiente #2). Cuando se apruebe una fuente concreta, su adapter deberá:
 | Fuente | Estado |
 |---|---|
 | Excel (proveedor) | **IMPLEMENTED** — `infrastructure/excel/importer.py`, única fuente de datos real hoy; 17 tests de integración |
-| Amazon SP-API Catalog Items | **DOC VERIFIED / AUTH BLOCKED / LIVE VALIDATION BLOCKED** — requirements, Product Listing role y POC están documentados; no hay adapter ni credenciales configuradas |
+| Amazon SP-API Catalog Items | **DOC VERIFIED / DEVELOPER REGISTRATION UNDER REVIEW / LIVE VALIDATION BLOCKED** — JUVAl se registró como **PRIVATE DEVELOPER** para uso interno, propia organización y propia cuenta seller; no hay production application client, self-authorization ni credenciales disponibles, y no hay adapter |
 | Fuente de datos de mercado (BSR/Buy Box histórico, tipo Keepa) | **NOT IMPLEMENTED** — pendiente de aprobación explícita, no asumida |
 | Base de datos de persistencia de Juval | **IMPLEMENTED para ExecutionRun/records** (SQLite/Supabase según configuración); no es una fuente externa de Product Intelligence |
 

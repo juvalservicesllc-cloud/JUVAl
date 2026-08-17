@@ -40,10 +40,14 @@ persistir es responsabilidad explícita del caller.
 [`DATA_ACQUISITION_MATRIX.md`](DATA_ACQUISITION_MATRIX.md) is the field-level
 source of truth, and [`architecture/DATA_SOURCES.md`](architecture/DATA_SOURCES.md)
 owns shared acquisition rules. No external enrichment adapter is implemented.
-Amazon SP-API Catalog is **DOC VERIFIED / AUTH BLOCKED / LIVE VALIDATION
-BLOCKED**; Keepa remains a **candidate, not approved**. Product Intelligence
-cannot proceed until the documented authorization, matching-ambiguity and
-business decisions are reconciled.
+Amazon SP-API Catalog is **DOC VERIFIED / DEVELOPER REGISTRATION UNDER
+REVIEW / LIVE VALIDATION BLOCKED**: JUVAl is registered as a **PRIVATE
+DEVELOPER** for internal use by its own organization and seller account, but
+Amazon has not yet approved it. No production application client,
+self-authorization or credentials exist. Keepa remains a **candidate, not
+approved**. Product Intelligence cannot proceed until Amazon approval, the
+documented authorization gates, matching-ambiguity and business decisions are
+reconciled.
 
 ## Completed Phases
 

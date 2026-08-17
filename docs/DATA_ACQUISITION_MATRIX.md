@@ -269,7 +269,7 @@ The sample XLSX in `tests/fixtures/sample_sourcing_TEST_DATA.xlsx` remains techn
 
 ### Controlled status vocabulary
 
-`IMPLEMENTED`, `VERIFIED SOURCE`, `DOC VERIFIED`, `AUTH BLOCKED`, `LIVE VALIDATION BLOCKED`, `PAID SOURCE REQUIRED`, `ACCOUNT-SPECIFIC`, `DERIVED`, `BUSINESS DECISION REQUIRED`, `NOT FOUND`, and `NOT NEEDED` are the only acquisition statuses used by this document. A combined label may retain two facts (for example, `VERIFIED SOURCE current; PAID SOURCE REQUIRED history`); it never hides an operational failure as a data result.
+`IMPLEMENTED`, `VERIFIED SOURCE`, `DOC VERIFIED`, `AUTH BLOCKED`, `LIVE VALIDATION BLOCKED`, `PAID SOURCE REQUIRED`, `ACCOUNT-SPECIFIC`, `DERIVED`, `BUSINESS DECISION REQUIRED`, `NOT FOUND`, and `NOT NEEDED` are the acquisition statuses used by this document. SP-API onboarding may additionally use `UNDER REVIEW`, `NOT CREATED`, `NOT PERFORMED` and `NOT AVAILABLE`; these describe Amazon onboarding state, never field provenance or an operational result. A combined label may retain two facts (for example, `VERIFIED SOURCE current; PAID SOURCE REQUIRED history`); it never hides an operational failure as a data result.
 
 1. **Vendor selection/procurement:** whether a licensed history provider is approved, including Keepa vs alternatives, price, tokens, data rights, retention, coverage and live sample validation.
 2. **ASIN collision/match acceptance policy:** especially packs, variations and keyword candidates.
@@ -318,8 +318,10 @@ The sample XLSX in `tests/fixtures/sample_sourcing_TEST_DATA.xlsx` remains techn
 | Checkpoint | Status | Evidence |
 | --- | --- | --- |
 | SP-API Catalog documentation | **DOC VERIFIED** | Catalog Items `searchCatalogItems` accepts UPC/EAN/GTIN identifiers, up to 20 identifiers per request; Catalog Items requires Product Listing role. See A1/A2. |
-| Local credentials | **AUTH BLOCKED** | No SP-API/LWA/AWS credential variable is present in the process environment; no `.env` contents were read. |
-| Production authorization | **AUTH BLOCKED** | No authorized seller refresh token is available. |
+| Developer registration | **UNDER REVIEW** | JUVAl was submitted in Developer Central as a **PRIVATE DEVELOPER** for internal use by its own organization and own seller account. Amazon has not approved the registration. |
+| Production application client | **NOT CREATED** | Developer Central shows no application clients; Amazon prevents creating a production client while registration is under review. |
+| Self-authorization | **NOT PERFORMED** | It cannot occur until Amazon approves registration and a production client exists. |
+| Credentials | **NOT AVAILABLE** | No LWA client ID, LWA client secret or refresh token exists for JUVAl. No credential was requested, read or used. |
 | Live Catalog call / rate-limit header | **LIVE CALL BLOCKED** | No authenticated call was attempted; `x-amzn-RateLimit-Limit` therefore has not been observed. |
 | Adapter, provider port and tests | **NOT STARTED BY DESIGN** | This POC must not create a production adapter or mock authentication before real authorization exists. |
 
@@ -332,14 +334,15 @@ The sample XLSX in `tests/fixtures/sample_sourcing_TEST_DATA.xlsx` remains techn
 - **AWS signing:** current Amazon documentation states that AWS IAM and SigV4 have not been required since 2023-10-02. Do not create IAM keys or a SigV4 implementation for this POC. LWA remains required ([Amazon announcement](https://developer-docs.amazon.com/sp-api/changelog/sp-api-will-no-longer-require-aws-iam-or-aws-signature-version-4)).
 - **Request headers:** obtain an LWA token at runtime and use the documented `host`, `x-amz-access-token`, `x-amz-date` and `user-agent` headers. Never send a token to the browser.
 
-### Manual external action required
+### Onboarding gates — next external actions
 
-1. Decide and record whether this first application is **private/internal** or must support third-party sellers. For the stated POC, choose private only if that is true.
-2. In Amazon's Solution Provider Portal, create/complete the developer profile and request the `Product Listing` role.
-3. Register the corresponding production application and, for a private application, self-authorize it against the intended US selling-partner account. For a public app, implement Amazon's OAuth flow first; do not reuse a private token for other sellers.
-4. Keep the issued LWA `client_id`, `client_secret` and authorized seller `refresh_token` in a backend-only secret store. Do not paste them into chat, source code, frontend configuration or a committed `.env` file.
-5. Set backend-only environment variables through the local/deployment secret mechanism after agreeing names with the backend owner. The proposed names are `JUVAL_SP_API_LWA_CLIENT_ID`, `JUVAL_SP_API_LWA_CLIENT_SECRET` and `JUVAL_SP_API_REFRESH_TOKEN`; they are documentation only until an adapter exists. No `VITE_*` variable may contain any of them.
-6. Tell the implementation owner only that the variables are configured. Do not transmit their values. The next permitted action is one minimal authenticated Catalog identifier request using a public/non-sensitive test identifier and recording only sanitized metadata: HTTP status, request ID, returned ASIN(s), marketplace, identifier type and `x-amzn-RateLimit-Limit` if supplied.
+1. **GATE 1:** Amazon approves the developer registration. This is the immediate next gate; do not treat `UNDER REVIEW` as approved.
+2. **GATE 2:** Create the minimum-privilege JUVAl production application client.
+3. **GATE 3:** Verify the exact roles required against current official SP-API documentation before selecting them.
+4. **GATE 4:** Self-authorize against Juval Logistics' own US Seller account.
+5. **GATE 5:** Store `JUVAL_SP_API_LWA_CLIENT_ID`, `JUVAL_SP_API_LWA_CLIENT_SECRET` and `JUVAL_SP_API_REFRESH_TOKEN` only in a backend-only secret store; never use `VITE_*` names and never commit them to Git. Do not transmit their values in chat, source code or frontend configuration.
+6. **GATE 6:** Perform one minimal authenticated Catalog Items validation using a public/non-sensitive identifier and record only sanitized metadata: HTTP status, request ID, returned ASIN(s), marketplace, identifier type and `x-amzn-RateLimit-Limit` if supplied.
+7. **GATE 7:** Record the actual observed rate-limit metadata and reconcile it with this matrix.
 
 Amazon documents the token exchange at `https://api.amazon.com/auth/o2/token` using the refresh token, client ID and client secret; the returned access token is short-lived. See [Connect to SP-API](https://developer-docs.amazon.com/sp-api/lang-zh_CN/docs/connecting-to-the-selling-partner-api) and [authorization workflow](https://developer-docs.amazon.com/sp-api/lang-zh_CN/docs/onboarding-step-6-set-up-the-authorization-workflow).
 

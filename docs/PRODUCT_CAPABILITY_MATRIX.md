@@ -550,7 +550,7 @@ integration begins.
 
 | Capability | Data needed | Possible source | Cost / rate-limit risk | Provenance requirement |
 |---|---|---|---|---|
-| Amazon matching | ASIN lookup from UPC/EAN/GTIN | Amazon SP-API Catalog Items (DOC VERIFIED; auth/live call blocked) | Requires SP-API developer + selling-partner authorization; provider+operation rate policy | 0 exact → `NOT_FOUND`; 1 exact → `VERIFIED` candidate; >1 → `AMBIGUOUS`, never auto-picked or downgraded to `NOT_FOUND` |
+| Amazon matching | ASIN lookup from UPC/EAN/GTIN | Amazon SP-API Catalog Items (DOC VERIFIED; developer registration UNDER REVIEW; live call blocked) | Private-developer registration must be approved before a production client, roles and self-authorization; provider+operation rate policy | 0 exact → `NOT_FOUND`; 1 exact → `VERIFIED` candidate; >1 → `AMBIGUOUS`, never auto-picked or downgraded to `NOT_FOUND` |
 | Demand (BSR, est. sales, velocity) | BSR history, sales estimates | Licensed historical provider **not selected**; SP-API only for current BSR | Paid provider price/tokens/rights/throughput remain unverified; do not assume Keepa | Per `domain/product.py::Demand` docstring: estimated demand remains `INFERRED` with named method |
 | Price history / Buy Box | Historical Buy Box price, ownership, stability | Licensed historical provider **not selected**; SP-API only for current state | Same procurement/rights gap as Demand | Live current observation can be `VERIFIED`; history observation must retain provider evidence; derived stability is `INFERRED` |
 | Competition | Offer counts, seller counts, Buy Box share | SP-API Product Pricing / Competitive Summary APIs | Operation-specific and rate-limited: `getItemOffersBatch` documents 1–20 items, while Competitive Summary batch scope must be revalidated from its current schema | `VERIFIED` only with a timestamped live response; `validate_freshness` (already coded in `data_quality.py`, not yet wired into `pipeline.py`) should gate staleness before trusting it |
@@ -576,7 +576,7 @@ not ready to implement merely because a candidate provider is documented.
 
 | Capability | Data required | Source status | Decision required before implementation |
 |---|---|---|---|
-| ASIN matching | Supplier identifier plus Amazon catalog candidate | SP-API Catalog documentation verified; authorization and live validation blocked | Model the `AMBIGUOUS` outcome separately from `VerificationStatus`. |
+| ASIN matching | Supplier identifier plus Amazon catalog candidate | SP-API Catalog documentation verified; private-developer registration is UNDER REVIEW, so production client, self-authorization and live validation are blocked | Model the `AMBIGUOUS` outcome separately from `VerificationStatus`. |
 | Demand/history | Current BSR plus licensed historical observations | Current catalog data documented; historical provider not selected | Choose provider, rights, cost model and sales-estimate methodology. |
 | Eligibility/restrictions | Seller, marketplace and ASIN-specific restriction result | Account-specific SP-API operation documented | Define the seller/account scope and UI/business handling of unavailable context. |
 | HazMat/Bulky decision impact | Presence, provenance and business severity | Supplier declarations supported; Amazon signals account-specific | Approve final severity mappings; do not promote ADR-010 defaults to business policy. |
