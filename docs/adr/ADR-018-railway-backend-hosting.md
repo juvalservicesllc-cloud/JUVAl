@@ -81,11 +81,19 @@ Railway inyecta en cada deploy — nunca un puerto fijo hardcodeado.
 - **No se verificó Railway contra una cuenta real** — `railway whoami`
   confirma que no hay sesión iniciada; el CLI está instalado y
   funcional, pero nunca se autenticó.
-- **No cablea `SupabaseExecutionRunStore` en `main.py`** — el extra
-  `postgres` se instala preventivamente (para que el entorno de Railway
-  ya tenga `psycopg` disponible cuando esa decisión se tome), pero
-  `main.py` sigue instanciando únicamente `SqliteExecutionRunStore`,
-  sin cambios de código en esta sesión.
+- ~~No cablea `SupabaseExecutionRunStore` en `main.py`~~ — **RESUELTO
+  2026-08-17**: `main.py::_execution_run_store` selecciona por
+  `JUVAL_EXECUTION_STORE` (`sqlite`|`supabase`), ver
+  `docs/architecture/API_CONTRACT.md` §5. El extra `postgres` del
+  `buildCommand` (`pip install .[postgres]`) ya instala `psycopg` en el
+  build de Railway, que es exactamente lo que este cableado necesita en
+  runtime — no requiere cambios adicionales en `railway.toml`.
+- **Sigue sin verificarse Railway contra una cuenta real** —
+  `[REVERIFICADO 2026-08-17]`: `railway --version` → `5.41.2` (CLI
+  instalada globalmente), `railway whoami` → `Unauthorized`. `railway
+  login` requiere OAuth interactivo (navegador o `--browserless` con
+  device-code) — no completable por el agente, comando exacto queda
+  documentado en `docs/PROJECT_STATUS.md`.
 
 ## Alternativas descartadas (ver comparación completa, bloque 7)
 

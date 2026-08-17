@@ -649,6 +649,48 @@ sustituta — en particular, `GET /health` seguía explícitamente
 prohibida esta sesión salvo aprobación, y no se tocó. Sesión de
 verificación, no de ejecución.
 
+## Sesión 2026-08-17 (bloque 10) — Supabase e2e + Git/GitHub baseline resueltos; Railway sigue bloqueado
+
+De los cuatro bloqueos externos re-verificados sin cambio en los
+bloques 5-9, **dos quedaron resueltos** en sesiones posteriores (no
+detalladas bloque a bloque aquí, ver commits/ADRs para el detalle
+exacto):
+
+- **Supabase**: el usuario ejecutó `supabase login` fuera de la sesión
+  del agente. Proyecto real identificado sin ambigüedad
+  (`juvalservicesllc-cloud's Project`, ref `twrgzsbpazcjhhfolaju`),
+  repositorio vinculado, migración `20260817000000_execution_runs.sql`
+  aplicada y verificada contra el esquema remoto real (columnas, PK,
+  índices, RLS habilitado, 0 policies desplegadas — fail-closed
+  esperado). `SupabaseExecutionRunStore` probado con una prueba de
+  integración real (INSERT + SELECT + cleanup,
+  `tests/integration/test_supabase_execution_run_store.py`) — requirió
+  el **Connection Pooler** de Supabase, no el host directo (que resuelve
+  solo IPv6, sin ruta IPv6 en este entorno). Selector
+  `JUVAL_EXECUTION_STORE` (`sqlite`|`supabase`) implementado en
+  `main.py::_execution_run_store`, fail-fast, sin fallback implícito
+  entre modos — ver `docs/architecture/SUPABASE.md` y
+  `docs/architecture/API_CONTRACT.md` §5. ADR-017 actualizado, sin ADR
+  nuevo.
+- **Git/GitHub**: identidad Git configurada por el usuario. Primer
+  commit del repositorio creado (`ee412f4 — chore: establish Juval
+  project baseline`, 157 archivos, incluye backend/docs/frontend hasta
+  ese punto). `origin` configurado a
+  `https://github.com/juvalservicesllc-cloud/JUVAl.git` y publicado
+  (`master` → `origin/master`), verificado con `git ls-remote`.
+
+**Railway sigue bloqueado, re-verificado en esta sesión**: `railway
+--version` → `5.41.2` (CLI instalada globalmente, sin cambios),
+`railway whoami` → `Unauthorized` (idéntico a bloques 5-9). `railway.toml`
+ya estaba correctamente preparado (`buildCommand: pip install
+.[postgres]`, `startCommand` con `$PORT`/`0.0.0.0`, entrypoint real
+`juval.interfaces.api.main:app`) — no requirió ningún cambio esta
+sesión. `main.py` ya soporta seleccionar `SupabaseExecutionRunStore`
+vía `JUVAL_EXECUTION_STORE=supabase` (bloque anterior), así que el
+único paso pendiente para desplegar es que el usuario ejecute `railway
+login` (interactivo, no completable por el agente) y, tras eso, vincule
+o cree el proyecto/servicio Railway.
+
 ## Pending Decisions
 
 Todas `PENDING`, ninguna se resuelve en este documento (ver
