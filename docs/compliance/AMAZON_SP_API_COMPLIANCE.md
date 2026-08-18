@@ -61,6 +61,30 @@ state is `REVIEWER_REQUIREMENT / POLICY TRACEABILITY NEEDS VERIFICATION`.
 The complete remediation matrix and reapplication gate are maintained in
 [`SP_API_REGISTRATION_REMEDIATION.md`](SP_API_REGISTRATION_REMEDIATION.md).
 
+### 2b. Remediation progress (2026-08-18)
+
+The `JUVAl state` column in the RF table above records the state **at the time
+of the rejection**. Current state per finding, superseding it:
+
+| Finding | Current | Implemented | Tested | Evidenced | Remaining blocker |
+|---|---|---|---|---|---|
+| RF-01 | **PARTIAL** | [`INCIDENT_RESPONSE_PLAN.md`](INCIDENT_RESPONSE_PLAN.md) | structure verified mechanically | NO | roles unnamed, plan unapproved, no exercise |
+| RF-02 | **PARTIAL** | [`NETWORK_SECURITY.md`](NETWORK_SECURITY.md) | workstation measured | workstation only | backend not deployed; finding F-01 (host unpatched since 2025-11-19) |
+| RF-03 | **PARTIAL** | backend OIDC validation (`interfaces/api/auth.py`); IdP chosen (ADR-022) | 33 negative security tests | backend only | no IdP tenant; commercial approval pending |
+| RF-04 | **PARTIAL** | least-privilege RBAC enforced server-side | positive + negative + bypass tests | technical half only | no users; no access review; no RLS policies |
+| RF-05 | **PARTIAL** | roles, six-month cadence, tabletop process | review currency checked mechanically | NO | unapproved, unexercised |
+
+No finding is `COMPLIANT`. Detail, evidence index and the ordered external
+actions are in [`SP_API_REGISTRATION_REMEDIATION.md`](SP_API_REGISTRATION_REMEDIATION.md) §20.
+
+Supporting documents added since the rejection:
+[`SECRETS.md`](SECRETS.md) (credential lifecycle, RF-03 programmatic half),
+[`ACCESS_CONTROL.md`](ACCESS_CONTROL.md) (RF-04),
+[`NETWORK_SECURITY.md`](NETWORK_SECURITY.md) (RF-02),
+[`INCIDENT_RESPONSE_PLAN.md`](INCIDENT_RESPONSE_PLAN.md) (RF-01/RF-05),
+`templates/` (incident, tabletop, access-review records), and
+`tools/compliance_check.py` (mechanical verification).
+
 ## 3. Traceability contract and control matrix
 
 Status values: COMPLIANT, PARTIAL, NOT_IMPLEMENTED, NOT_APPLICABLE, BLOCKED,

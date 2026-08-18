@@ -629,3 +629,100 @@ directing research into providers not yet evaluated. None is chosen here.
 requirement set under verified evidence.`
 `IDENTITY SECURITY GATE = BLOCKED.`
 `REAPPLICATION GATE = BLOCKED.`
+
+## 20. Remediation execution status (2026-08-18)
+
+This section supersedes the per-finding `CURRENT_JUVAL_STATE` column of §2 for
+every item it names. §§1–19 are preserved as the historical record.
+
+Compliance states used: `COMPLIANT` (identified + implemented + validated +
+evidenced), `PARTIAL`, `NOT_IMPLEMENTED`, `BLOCKED`, `NEEDS_VERIFICATION`.
+Documentation alone is never `COMPLIANT`.
+
+### 20.1 Finding status
+
+| Finding | Was | Now | Implemented | Tested | Evidenced | Blocking gap |
+|---|---|---|---|---|---|---|
+| **RF-01** | `NOT_IMPLEMENTED` | **PARTIAL** | Yes — [`INCIDENT_RESPONSE_PLAN.md`](INCIDENT_RESPONSE_PLAN.md) §5 defines the 24-hour `security@amazon.com` procedure, the detection clock, the Amazon Information determination and evidence preservation | Structure verified mechanically by `tools/compliance_check.py` (15 tests) | **NO** | Roles unnamed; plan unapproved; no tabletop exercise run (§12 A-1…A-5) |
+| **RF-02** | `NOT_IMPLEMENTED` | **PARTIAL** | Workstation controls verified; cloud controls not deployed — [`NETWORK_SECURITY.md`](NETWORK_SECURITY.md) | Workstation measured 2026-08-18 | Partially — workstation only | **Backend is not deployed**, so there is no system to evidence. Plus finding F-01 (host ~9 months unpatched, OS past end-of-support) |
+| **RF-03** | `NOT_IMPLEMENTED` | **PARTIAL** | Backend half implemented (OIDC validation, `interfaces/api/auth.py`); IdP half designed and provider identified (ADR-022) | Yes — 33 negative security tests | Backend only | No IdP tenant. Okta requires a $1,500/year contract (**commercial approval**) |
+| **RF-04** | `NOT_IMPLEMENTED` | **PARTIAL** | Yes — least-privilege RBAC enforced server-side on every endpoint; [`ACCESS_CONTROL.md`](ACCESS_CONTROL.md) | Yes — positive, negative, and direct-API-bypass tests | Technical half only | No users exist to govern; quarterly review never run; Supabase RLS policies absent |
+| **RF-05** | `NOT_IMPLEMENTED` | **PARTIAL** | Yes — roles, six-month review cadence, tabletop process and templates | Review currency checked mechanically | **NO** | Same as RF-01: unapproved, unexercised |
+
+**No finding is `COMPLIANT`.** Every one advanced from `NOT_IMPLEMENTED` to
+`PARTIAL`; none can close on documentation and code alone.
+
+### 20.2 What was actually built
+
+| Artifact | Purpose | Validation |
+|---|---|---|
+| `src/juval/interfaces/api/auth.py` | Provider-agnostic OIDC/JWT verification and capability-based RBAC | 33 tests |
+| `interfaces/api/main.py` | Permission enforced on all five routes, server-side | `compliance_check.py::check_auth_posture` |
+| `docs/adr/ADR-022` | Okta selected as the only candidate satisfying all 11 HARD IdP requirements | Verbatim primary-source citations |
+| `docs/compliance/INCIDENT_RESPONSE_PLAN.md` | RF-01/RF-05 operational runbook | 15 tests |
+| `docs/compliance/SECRETS.md` | Credential classes, rotation, redaction, access boundaries | Secret scan + redaction tests |
+| `docs/compliance/NETWORK_SECURITY.md` | RF-02 audit with measured workstation values | Reproducible PowerShell commands |
+| `docs/compliance/ACCESS_CONTROL.md` | RF-04 organizational half | Cross-referenced to the test suite |
+| `tools/compliance_check.py` | Mechanical verification: plan completeness, review currency, auth posture, dependency CVEs, secret scan | Self-tested (proves it detects failure) |
+| `docs/compliance/templates/` | Incident, tabletop and access-review records | — |
+
+Test suite: **303 passed, 3 skipped** (`SKIPPED_EXPECTED` — Supabase tests
+requiring a live database). `pip-audit`: no known vulnerabilities.
+
+### 20.3 The identity blocker is resolved, technically
+
+ADR-021 concluded `RECOMMENDED IdP = NONE`. That conclusion stood on a survey
+of three **CIAM** products (Cognito, Entra External ID, Clerk), none of which
+offers minimum password age or name-exclusion — controls that are standard in
+**workforce** IAM. Re-framing the search resolved it:
+
+`GAP A (minimum password age 1 day)` — Okta: "Minimum password age is N units
+… up to 9,999 minutes" → 1,440 minutes. **`A — NATIVE_VERIFIED`.**
+
+`GAP B (password must not contain username/name)` — Okta: "Does not contain
+part of username" / "Does not contain first name" / "Does not contain last
+name". **`A — NATIVE_VERIFIED`.**
+
+All 11 HARD requirements are natively configurable. No managed control,
+scheduled job, or plaintext-password inspection is required — unlike the
+`PASSWORD_MAX_AGE_CONTROL` design Cognito would have needed.
+
+`AMAZON COGNITO = REJECTED` (unchanged)
+`RECOMMENDED IdP = OKTA WORKFORCE IDENTITY`
+`ADR-022 = PROPOSED / PENDING COMMERCIAL APPROVAL`
+
+### 20.4 Gates
+
+`IDENTITY SECURITY GATE = BLOCKED`
+— technical design complete and the backend half implemented and tested, but
+no tenant exists, no policy is applied, and no configuration evidence has been
+exported. Opens when: ADR-022 is approved and paid for, the tenant is
+configured to Amazon's exact values, MFA is enforced, and the password-policy
+export is filed.
+
+`REAPPLICATION GATE = BLOCKED`
+— RF-01 through RF-05 are all `PARTIAL`. Reapplying now would require
+answering the Developer Profile with the same unevidenced "YES" that produced
+the original rejection.
+
+`AMAZON_COMPLIANCE_READINESS = NOT_READY`
+
+### 20.5 Ordered external actions
+
+Everything technically executable without an external account has been done.
+The remaining path is gated on user actions, in dependency order:
+
+| # | Action | Unblocks | Cost |
+|---|---|---|---|
+| **E-1** | Approve ADR-022 and purchase Okta Workforce Identity | RF-03, RF-04 | $1,500/yr minimum |
+| **E-2** | Configure the tenant to Amazon's values (12 chars, all four character classes, name exclusion, history 10, min age 1 day, max age 365 days, MFA all accounts, lockout ≤10) and export the policy as evidence | RF-03 | — |
+| **E-3** | Name the Incident Commander, Security Owner, IMPOC and Deputy; approve the incident response plan | RF-01, RF-05 | — |
+| **E-4** | Run the first tabletop exercise and file the record (**never send a test mail to `security@amazon.com`**) | RF-05 | — |
+| **E-5** | Resolve `NETWORK_SECURITY.md` F-01: patch the workstation and move to a supported OS, or formally exclude it from the boundary | RF-02 | — |
+| **E-6** | `railway login` and deploy the backend with `JUVAL_AUTH_MODE=oidc` and `JUVAL_EXECUTION_STORE=supabase` | RF-02, RF-03, RF-04 | Hosting |
+| **E-7** | After E-6: apply and negatively test Supabase RLS policies; verify TLS; capture provider configuration evidence | RF-02, RF-04 | — |
+| **E-8** | Run the first quarterly access review and one ≤24-hour removal drill | RF-04 | — |
+| **E-9** | Only then: update the Developer Profile truthfully and open a **new** case (never reopen the prior one) | Reapplication | — |
+
+E-1, E-3 and E-5 are independent and can proceed in parallel. E-6 gates E-7.
+E-9 gates on everything above reaching `COMPLIANT`.
