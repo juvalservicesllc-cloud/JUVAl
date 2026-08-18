@@ -643,11 +643,11 @@ Documentation alone is never `COMPLIANT`.
 
 | Finding | Was | Now | Implemented | Tested | Evidenced | Blocking gap |
 |---|---|---|---|---|---|---|
-| **RF-01** | `NOT_IMPLEMENTED` | **PARTIAL** | Yes — [`INCIDENT_RESPONSE_PLAN.md`](INCIDENT_RESPONSE_PLAN.md) §5 defines the 24-hour `security@amazon.com` procedure, the detection clock, the Amazon Information determination and evidence preservation | Structure verified mechanically by `tools/compliance_check.py` (15 tests); **now also exercised** — `JUVAL-TT-20260818` | **PARTIAL** — §12 A-1…A-5 all `DONE` (checklist-complete, `USER_CONFIRMED_CONTROL`); one real exercise filed (`CONTROL_EXERCISED`, partially — see §26) | **Checklist closed 2026-08-18** (A-2 custody confirmed — external hard drive, outside Git, restricted access, `USER-CONFIRMED OPERATIONAL CUSTODY`, no device details recorded). **Not `COMPLIANT`**: the one exercise never reached §5 (resolved `RULED_OUT` before drafting a notification), and one exercise is not `RECURRING_OPERATIONAL_EVIDENCE`. See §26 |
+| **RF-01** | `NOT_IMPLEMENTED` | **PARTIAL** | Yes — [`INCIDENT_RESPONSE_PLAN.md`](INCIDENT_RESPONSE_PLAN.md) §5 defines the 24-hour `security@amazon.com` procedure, the detection clock, the Amazon Information determination and evidence preservation | Structure verified mechanically by `tools/compliance_check.py` (15 tests); **now also exercised** — `JUVAL-TT-20260818` | **PARTIAL** — §12 A-1…A-5 all `DONE` (checklist-complete, `USER_CONFIRMED_CONTROL`); one real exercise filed (`CONTROL_EXERCISED`, partially — see §26) | **Checklist closed 2026-08-18** (A-2 custody confirmed — external hard drive, outside Git, restricted access, `USER-CONFIRMED OPERATIONAL CUSTODY`, no device details recorded). **Not `COMPLIANT`**: the one exercise never reached §5 (resolved `RULED_OUT` before drafting a notification), and one exercise is not `RECURRING_OPERATIONAL_EVIDENCE`. `CA-01` remediation made testable, `CA-01` still `OPEN`; TABLETOP-002 prepared (not run) to specifically reach §5. See §26, §28 |
 | **RF-02** | `NOT_IMPLEMENTED` | **PARTIAL** | Workstation controls verified; **both cloud services now deployed and verified** — [`NETWORK_SECURITY.md`](NETWORK_SECURITY.md) §3 | Workstation measured 2026-08-18; **cloud re-verified live 2026-08-18** (TLS, CORS, RLS all `VERIFIED_CONFIGURATION` via direct probes, not provider claims) | Workstation + cloud (real HTTP/DB evidence) | **Finding F-01 alone** (host still 9 months unpatched, re-measured unchanged) — this is now the *only* blocking gap for RF-02 |
 | **RF-03** | `NOT_IMPLEMENTED` | **PARTIAL** | Backend half implemented (OIDC validation, `interfaces/api/auth.py`) and **deployed**; IdP half designed and provider identified (ADR-022) | Yes — 33 negative security tests (unit-level; not re-run against production since no IdP exists to test against) | Backend code only — **not `OPERATIONALLY_VERIFIED_IDENTITY_CONTROL`**: `JUVAL_AUTH_MODE` is deliberately unset in production, so the control is dormant, not enforcing | No IdP tenant. Okta requires a $1,500/year contract (**commercial approval**), itself blocked on Amazon's pending response to the identity clarification |
 | **RF-04** | `NOT_IMPLEMENTED` | **PARTIAL** | Yes — least-privilege RBAC enforced server-side on every endpoint (code); [`ACCESS_CONTROL.md`](ACCESS_CONTROL.md) | Yes — positive, negative, and direct-API-bypass tests (unit-level) | Technical half only, and **dormant in production for the same reason as RF-03** — no requests are actually authenticated/authorized today (`JUVAL_AUTH_MODE` unset) | No users exist to govern; quarterly review never run |
-| **RF-05** | `NOT_IMPLEMENTED` | **PARTIAL** | Yes — roles, six-month review cadence, tabletop process and templates; **automation implemented and confirmed recurring**: `pip-audit` + `compliance_check.py` run in CI on every push and weekly by schedule (`.github/workflows/ci.yml`); GitHub secret scanning/push protection **and now Dependabot security updates** confirmed `enabled` | Review currency checked mechanically; secret scanning and Dependabot confirmed via live GitHub API query, before and after; CI schedule confirmed by reading the workflow file; **plan itself now exercised** — `JUVAL-TT-20260818` | **PARTIAL** — scanning is `RECURRING_OPERATIONAL_EVIDENCE`; the incident-response half is `CONTROL_EXERCISED` once, not recurring; Dependabot is `CONTROL_ENABLED`, not yet `CONTROL_EXERCISED` (no PR has ever been generated, because no vulnerability has ever existed to fix) | **Checklist closed 2026-08-18** (§12 A-1…A-5 all `DONE`); **Dependabot enabled and verified 2026-08-18** (§27). **Not `COMPLIANT`**: one tabletop isn't a proven six-month cadence yet (next required by 2027-02-18); two corrective actions from the exercise remain open (CA-01, CA-02); Dependabot has never actually fired a remediation PR, so that specific workflow is untested. See §26, §27 |
+| **RF-05** | `NOT_IMPLEMENTED` | **PARTIAL** | Yes — roles, six-month review cadence, tabletop process and templates; **automation implemented and confirmed recurring**: `pip-audit` + `compliance_check.py` run in CI on every push and weekly by schedule (`.github/workflows/ci.yml`); GitHub secret scanning/push protection **and now Dependabot security updates** confirmed `enabled` | Review currency checked mechanically; secret scanning and Dependabot confirmed via live GitHub API query, before and after; CI schedule confirmed by reading the workflow file; **plan itself now exercised** — `JUVAL-TT-20260818` | **PARTIAL** — scanning is `RECURRING_OPERATIONAL_EVIDENCE`; the incident-response half is `CONTROL_EXERCISED` once, not recurring; Dependabot is `CONTROL_ENABLED`, not yet `CONTROL_EXERCISED` (no PR has ever been generated, because no vulnerability has ever existed to fix) | **Checklist closed 2026-08-18** (§12 A-1…A-5 all `DONE`); **Dependabot enabled and verified 2026-08-18** (§27). **Not `COMPLIANT`**: one tabletop isn't a proven six-month cadence yet (next required by 2027-02-18); Dependabot has never actually fired a remediation PR, so that specific workflow is untested. `CA-01`/`CA-02` remediation made testable this pass, both still `OPEN`. See §26, §27, §28 |
 
 **No finding is `COMPLIANT`.** Every one advanced from `NOT_IMPLEMENTED` to
 `PARTIAL`; none can close on documentation and code alone.
@@ -1174,6 +1174,159 @@ cadence; and, ideally, an actual (even minor) dependency advisory someday
 resolved by a real Dependabot PR, which would be the first genuine
 evidence that the remediation half of this control — not just the
 scanning half — works.
+
+```
+IDENTITY SECURITY GATE = BLOCKED (unchanged)
+REAPPLICATION GATE = BLOCKED (unchanged — RF-01–RF-05 still not COMPLIANT)
+AMAZON_COMPLIANCE_READINESS = NOT_READY (unchanged)
+```
+
+## 28. CA-01/CA-02 remediation and TABLETOP-002 readiness (2026-08-18)
+
+Explicit architectural decision this pass: **do not run a second tabletop
+immediately merely to manufacture recurrence.** Two exercises back-to-back
+would not demonstrate a mature cadence — it would just be two data points
+close together. This pass instead: (1) fixes the procedural ambiguity
+`CA-01` exposed, (2) makes evidence preservation executable for `CA-02`,
+(3) prepares `TABLETOP-002` to verify both later, and (4) leaves both
+corrective actions `OPEN`.
+
+### 28.1 CA-01 — root cause and remediation
+
+**Original finding** (`JUVAL-TT-20260818`, verbatim): "El primer instinto
+del IC es confirmar si algo es real antes de actuar, pero el plan (§4.2)
+indica contener/revocar primero y confirmar después — la brecha entre el
+reflejo natural y el procedimiento escrito."
+
+**Root issue, on inspection — not just "the human didn't follow the
+rule":** `INCIDENT_RESPONSE_PLAN.md` §4.2 said "revoke first" but never
+stated a concrete *threshold* (how much suspicion is enough to act?), nor
+whether confirmation could run in parallel with containment, nor what
+minimal evidence capture was allowed to precede it. It also sat in mild
+tension with §4.5's "before remediating, preserve — remediation destroys
+evidence," which a careful reader could plausibly read as "check/preserve
+first, then act." Daniel's instinct to confirm first was a reasonable
+response to a genuinely underspecified rule, not a disregard for it.
+
+**Remediation (done this pass):** `INCIDENT_RESPONSE_PLAN.md` §4.2 amended
+(v`0.1.1-DRAFT`) with an explicit threshold (any §1 trigger match, T-01…
+T-10 — not full confirmation), explicit authority (already existed in §2,
+now cross-referenced), an explicit "confirm in parallel, never first"
+rule, and an explicit boundary on what may precede containment (only the
+few-seconds §4.1 capture). §4.5 amended to state explicitly that
+preservation runs alongside containment, resolving the apparent tension
+with §4.2.
+
+**Future test — CA-01_TEST:**
+
+```
+CA-01_TEST: Given evidence meeting a §1 trigger (T-01...T-10), does the
+  responder initiate the applicable §4.3 containment action within the
+  §4.2 target (1 hour of detection), without waiting for confirmation of
+  authenticity to conclude first?
+
+PASS CONDITION: the timestamp containment was initiated is at or before
+  the timestamp confirmation concluded (or containment and confirmation
+  proceed visibly in parallel).
+
+FAIL CONDITION: the responder waits for confirmation to conclude before
+  initiating any §4.3 action.
+
+REQUIRED EVIDENCE: a tabletop or incident record with both timestamps
+  (containment-initiated, confirmation-concluded) explicitly captured —
+  not a verbal assertion that "we'd contain first."
+```
+
+**Current status:** `CA-01 = OPEN`. The plan is clarified; the behavior is
+unverified. Documentation improvement is not operational closure.
+
+### 28.2 CA-02 — root cause and remediation
+
+**Original finding** (`JUVAL-TT-20260818`, verbatim): "El paso de
+preservación de evidencia (§4.5) no se ejercitó en este ejercicio — no se
+sabe cómo se vería en la práctica (qué exportar, dónde guardarlo)."
+
+**Root issue:** §4.5 was a prose checklist ("export the relevant logs...")
+with no structured artifact format — nothing forced a responder to
+actually produce a record, as opposed to describing an intention.
+
+**Remediation (done this pass):** created
+`templates/EVIDENCE_MANIFEST_TEMPLATE.md` — a structured, row-per-artifact
+manifest (category, source system, description, event/retrieval
+timestamps, collector, custody reference, integrity hash where
+applicable), scoped to source systems JUVAl actually has (application
+security log, Railway/Vercel/Supabase/GitHub dashboards, CI run output;
+explicitly not an invented SIEM or log aggregator). §4.5 now points to it.
+
+**Future test — CA-02_TEST:**
+
+```
+CA-02_TEST: Does the responder produce a filled evidence manifest during
+  the exercise (or incident), not merely describe evidence preservation
+  in the abstract?
+
+PASS CONDITION: a completed EVIDENCE_MANIFEST_TEMPLATE.md copy with 2 or
+  more rows correctly filled -- real category, real source system, both
+  timestamps, a custody reference -- attached to the tabletop/incident
+  record.
+
+FAIL CONDITION: no manifest is produced, or the manifest lists a source
+  system JUVAl does not actually have.
+
+REQUIRED EVIDENCE: the filled manifest file itself.
+```
+
+**Current status:** `CA-02 = OPEN`. The template exists; no manifest has
+ever actually been filled.
+
+### 28.3 Evidence preservation — what was prepared
+
+`templates/EVIDENCE_MANIFEST_TEMPLATE.md`. Not populated with fictional
+evidence — every row in the template is a blank example (`EV-01`, `EV-02`)
+to be replaced, exactly like every other template in this directory.
+
+### 28.4 TABLETOP-002
+
+Prepared, **not executed**: `TABLETOP_002_PREPARED_SCENARIO.md`. Rotated
+scenario per §10's own rule (candidate (b), Supabase service-role key in a
+frontend bundle — TABLETOP-001 used candidate (a)). Designed specifically
+to exercise `CA-01`, `CA-02`, and the §5 notification-drafting branch that
+`JUVAL-TT-20260818` never reached, via one clearly-labeled simulated
+assumption (a hypothetical future state where Amazon Information exists
+in Supabase) — not a claim about JUVAl's actual current state, and not
+written back into any other document as if it were true today.
+
+### 28.5 Acceptance matrix
+
+Reproduced from `TABLETOP_002_PREPARED_SCENARIO.md` (see that file for
+full inject-by-inject detail):
+
+| Control | Scenario event | Pass criterion | Result |
+|---|---|---|---|
+| `CA-01` | Confirmed live Supabase key exposed | Rotation initiated before/parallel to usage-confirmation, within 1 hour | `NOT_EXECUTED` |
+| `CA-02` | Evidence must be captured | Filled evidence manifest, ≥2 rows, real source systems | `NOT_EXECUTED` |
+| §5 notification drafting | Simulated Amazon Information determination reaches CONFIRMED/SUSPECTED | Notification drafted (never sent), all 6 required elements, elapsed time recorded | `NOT_EXECUTED` |
+
+### 28.6 Cadence
+
+Not moved. `INCIDENT_RESPONSE_PLAN.md` §8/§10's six-month cadence stands:
+next tabletop and plan review both required **on or before 2027-02-18**.
+Running `TABLETOP-002` earlier than that is an **option** available to the
+user — there is a genuine compliance reason to consider it (two open,
+untested corrective actions plus an entirely unexercised §5 branch) — but
+it is not claimed as done, scheduled, or required earlier here.
+
+### 28.7 RF-01 / RF-05 — unchanged
+
+```
+RF-01 = PARTIAL (unchanged)
+RF-05 = PARTIAL (unchanged)
+```
+
+This pass produced `DOCUMENTED_CONTROL` improvements only (a clarified
+procedure, a new template, a prepared future exercise). None of that is
+`CONTROL_EXERCISED` or `RECURRING_OPERATIONAL_EVIDENCE` — preparing
+`TABLETOP-002` is not running it, and is not counted as either.
 
 ```
 IDENTITY SECURITY GATE = BLOCKED (unchanged)

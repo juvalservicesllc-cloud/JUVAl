@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | Document ID | `JUVAL-IRP` |
-| Version | `0.1.0-DRAFT` |
+| Version | `0.1.1-DRAFT` — §4.2 clarified 2026-08-18 in response to `CA-01` (`JUVAL-TT-20260818`); no Amazon obligation changed, see §8 review log |
 | Status | **APPROVED** (2026-08-18, §12 A-3). §12 A-1 through A-5 are all `DONE` as of 2026-08-18. Still not `COMPLIANT` as an Amazon control — see §12 for why a completed checklist is not yet a proven recurring control. |
 | Effective date | `2026-08-18` |
 | Last reviewed | `2026-08-18` |
@@ -136,6 +136,38 @@ report.
 Containment precedes root-cause analysis. Do not preserve an active
 compromise for the sake of investigation.
 
+> **Containment threshold and sequencing** (added 2026-08-18, in direct
+> response to `CA-01` / `JUVAL-TT-20260818` — the first tabletop found this
+> ambiguous in practice, not just in theory):
+>
+> - **Threshold:** containment begins the moment any trigger in §1
+>   (T-01…T-10) is met — a reasonable match, not full confirmation that the
+>   exposed item is genuine. "When in doubt, open the incident" (§1) applies
+>   to containment exactly as it applies to opening the incident.
+> - **Authority:** the IC, per §2, already has "authority to revoke
+>   credentials and take systems offline without further approval" — that
+>   authority exists precisely so nobody waits for a second opinion.
+> - **Confirmation runs in parallel, never first.** Verifying whether an
+>   exposed string is a real, live credential is useful work, but it is
+>   never a precondition for step 1 below. Rotating or revoking a credential
+>   is cheap and reversible — **rotate first, confirm in parallel** — never
+>   confirm first, rotate after. Confirmation and the full §4.4 Amazon
+>   Information determination proceed alongside containment (Technical
+>   Responder or IC), not before it.
+> - **What may precede containment:** only the few-seconds capture already
+>   required by §4.1 (`detected_at`, incident ID, IC name) and, when it
+>   costs nothing extra, the specific artifact that triggered the alert
+>   (commit SHA, alert ID). The full §4.5 evidence walkthrough continues
+>   *alongside* containment, never gates its start.
+>
+> **CA-01 acceptance test (for the next tabletop, not this one):** given
+> evidence meeting a §1 trigger, does the responder initiate the applicable
+> §4.3 containment action within the §4.2 target, without waiting for
+> confirmation of authenticity to conclude first? See
+> `SP_API_REGISTRATION_REMEDIATION.md` §28 for the full test definition.
+> This clarification does not itself close `CA-01` — only a future
+> exercise or real incident showing the behavior can.
+
 1. **Revoke first.** Rotate or revoke any credential in scope — see §4.3.
 2. Disable the affected user account(s) at the IdP and terminate their live
    sessions (disabling alone does not always invalidate an issued token).
@@ -184,7 +216,8 @@ that ruled it out — "we think not" is not a determination.
 
 ### 4.5 Preserve evidence
 
-Before remediating, preserve — remediation destroys evidence.
+Preservation runs *alongside* containment (§4.2), not before it — the two
+are not in tension: rotating a credential does not erase the logs below.
 
 - Export the relevant logs (application security log, IdP events, provider
   audit logs) to the incident folder with their retrieval timestamp.
@@ -196,6 +229,23 @@ Before remediating, preserve — remediation destroys evidence.
   the value.
 - Retain incident evidence for at least 12 months (aligns with the log
   retention expectation in DPP §2.6.1).
+
+**Use `templates/EVIDENCE_MANIFEST_TEMPLATE.md`** (added 2026-08-18, in
+response to `CA-02` / `JUVAL-TT-20260818`, which found this step untested
+and abstract) to record each artifact above as a discrete, structured row
+— artifact category, real source system, event/retrieval timestamps,
+collector, custody reference — rather than a free-text log export. Only
+source systems JUVAl actually has today may be listed (application
+security log, Railway/Vercel/Supabase/GitHub provider dashboards, CI run
+output); do not invent a capability (e.g. a SIEM, centralized logging)
+this project does not have.
+
+**CA-02 acceptance test (for the next tabletop, not this one):** does the
+responder actually produce a filled evidence manifest — not just state
+that evidence "was preserved" — using only real, available source systems?
+See `SP_API_REGISTRATION_REMEDIATION.md` §28. This template does not
+itself close `CA-02` — only a future exercise or real incident that
+produces a real manifest can.
 
 ### 4.6 Recover
 
@@ -287,6 +337,7 @@ it produces the illusion of a control while suppressing detection.
 |---|---|---|---|
 | 2026-08-18 | `ROLE PLACEHOLDER — Security Owner` | 0.1.0-DRAFT | Initial draft created in response to Amazon findings RF-01/RF-05. **Not yet approved.** |
 | 2026-08-18 | Daniel E. Liendo (Security Owner) | 0.1.0-DRAFT | Roles assigned (§2) and plan approved (§12 A-1, A-3, A-5). No content change to this plan; version unchanged. Not a six-month periodic review — logged here for traceability alongside it. |
+| 2026-08-18 | Daniel E. Liendo (Security Owner) | `0.1.0-DRAFT` → `0.1.1-DRAFT` | Targeted corrective-action amendment, not the six-month review (§7-style: findings from `JUVAL-TT-20260818` triggered a documentation fix). §4.2 clarified with an explicit containment threshold and confirm-in-parallel rule (`CA-01`); §4.5 now points to a structured evidence manifest template (`CA-02`). No Amazon obligation changed. `CA-01`/`CA-02` remain `OPEN` — this is the remediation of the *procedure*, not operational proof the *behavior* changed. |
 
 ---
 
