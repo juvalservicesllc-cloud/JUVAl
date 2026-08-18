@@ -433,16 +433,23 @@ sección, actualizadas:
 - Framework frontend: **RESUELTO e IMPLEMENTED** (React + Vite).
 - Deployment del frontend (Vercel): **aprobado como plataforma
   objetivo**, CLI instalada (59.1.3), `frontend/vercel.json` preparado;
-  **sin desplegar** — `vercel login` requiere interacción del usuario
-  (OAuth de navegador), no completable por el agente.
+  **sin desplegar** — re-confirmado 2026-08-18: `vercel whoami` →
+  `Logged out`; `vercel login` requiere interacción del usuario (OAuth
+  de navegador), no completable por el agente.
 - Hosting del backend: **RESUELTO** (Railway, ADR-018, 2026-08-17
   bloque 8) tras comparación con Render/Fly.io/VPS. `railway.toml`
-  preparado; **sin desplegar** — `railway login` requiere interacción
-  del usuario, no completable por el agente.
-- Supabase: **aprobado como persistencia de producción** (ADR-017),
-  CLI utilizable vía `npx supabase@latest`; **sin verificar contra un
-  proyecto real** — `supabase login` requiere interacción del usuario
-  (OAuth de navegador), no completable por el agente.
+  preparado; **sin desplegar** — re-confirmado 2026-08-18: `railway
+  whoami` → `Unauthorized`; `railway login` requiere interacción del
+  usuario, no completable por el agente. Ningún proyecto Railway está
+  vinculado (`.railway/` no existe en el repositorio).
+- Supabase: **aprobado como persistencia de producción** (ADR-017), y
+  **verificado contra un proyecto real 2026-08-17/18** — proyecto
+  `twrgzsbpazcjhhfolaju` (`ACTIVE_HEALTHY`), migración aplicada,
+  `SupabaseExecutionRunStore` probado end-to-end vía la API real
+  (`tests/integration/test_api_supabase.py`, commit `d5d0035`). Lo que
+  sigue sin verificar es su uso en producción real (Railway no está
+  desplegado, así que nadie ha confirmado el store `supabase` operando
+  fuera del entorno de desarrollo local).
 - Git: **repositorio local inicializado** (`git init`), 146 archivos
   staged y verificados sin secretos; **commit sin ejecutar** — requiere
   `git config user.name`/`user.email`, que el agente tiene prohibido
