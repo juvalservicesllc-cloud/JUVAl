@@ -726,3 +726,38 @@ The remaining path is gated on user actions, in dependency order:
 
 E-1, E-3 and E-5 are independent and can proceed in parallel. E-6 gates E-7.
 E-9 gates on everything above reaching `COMPLIANT`.
+
+## 21. Amazon identity clarification — submitted
+
+`AMAZON_IDENTITY_CLARIFICATION = SENT`
+`AMAZON_RESPONSE = PENDING`
+
+The user has confirmed the three-question clarification (passwordless
+scope of "Where passwords are used", whether a WebAuthn/passkey with
+mandatory user verification satisfies MFA on its own, and whether the
+username/name-exclusion control may be enforced by the Solution Provider
+rather than natively by the Identity Provider) was submitted through
+Amazon Developer Support.
+
+**Evidence gap, recorded rather than papered over**: the drafted message
+itself was produced and delivered as chat output in a prior session and was
+never written to a file in this repository. This document therefore cannot
+reproduce the exact submitted text, the submission date, or a Case ID —
+none of these were captured here at send time. **No Case ID is recorded
+because none exists in the repository**; do not treat any ID elsewhere in
+this document as related to this submission.
+
+Consequence for the gates below: no change. A sent clarification is not a
+received answer.
+
+`IDENTITY SECURITY GATE = BLOCKED` (unchanged — pending Amazon's response,
+then implementation and evidence regardless of outcome)
+`REAPPLICATION GATE = BLOCKED` (unchanged — RF-01 through RF-05 remain
+`PARTIAL` independent of this clarification)
+`IDP_SELECTION = BLOCKED_PENDING_AMAZON_RESPONSE` — no provider is
+approved; Okta remains the only candidate with a verified path to 11/11 if
+Amazon requires native IdP enforcement, but selecting it is a commercial
+decision not made here.
+
+**Action for the user**: if the Case ID or the exact submitted text is
+available, record it here so this section stops being evidence-incomplete.

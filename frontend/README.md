@@ -1,5 +1,14 @@
 # JUVAl frontend
 
+**Status (2026-08-18, commit `9127c64`): `FRONTEND/PWA = COMPLETE FOR
+CURRENT APPROVED SCOPE`.** 59/59 unit tests, 20/20 E2E (real backend, no
+mocks), lint clean, TypeScript clean, production build passes, PWA
+artifacts generated, local visibility verified. This status covers every
+capability the backend currently exposes — it does not cover Decision
+Score, AI Analyst, or authentication, which are separate backend/product
+capabilities with no frontend surface yet (see "Known blocked future
+features" below) and do not block this status.
+
 React + TypeScript + Vite PWA. The frontend is finalized for the current
 approved backend contracts (analytics + server-side catalog pagination);
 see [the full handoff](../docs/FRONTEND_BACKEND_HANDOFF.md) and

@@ -112,11 +112,11 @@ Fase 10 (production hardening) — depende de todas las fases relevantes al path
 | Decisión pendiente | Bloquea | Estado | Referencia |
 |---|---|---|---|
 | ~~PWA vs. `.exe` vs. ambos~~ | Fase 4, Fase 10 | **RESUELTO 2026-08-17**: PWA elegida explícitamente por el usuario | ADR-014 (`Estado: Aceptada`); ADR-005 sigue vigente para la independencia de diseño, no se modifica |
-| Framework frontend (React + Vite) | Fase 4B | **ELEGIDO 2026-08-17** por el usuario, **sin implementar** (sin Node/npm en este entorno) y sin ADR propio todavía | `docs/PROJECT_STATUS.md` §Sesión 2026-08-17 (bloque 3) |
+| ~~Framework frontend (React + Vite)~~ | Fase 4B | **RESUELTO 2026-08-18**: implementado y finalizado — Dashboard analítico, catálogo server-side (paginación/búsqueda/filtro/orden), Run Detail, Upload, Export, Appearance/branding; 59/59 tests unitarios, 20/20 E2E reales, build/PWA verificados, visibilidad local verificada contra backend/frontend reales | `frontend/README.md`; commit `9127c64` |
 | Vercel (deployment) | Fase 4, Fase 10 | **APROBADO como plataforma objetivo 2026-08-17**, restricciones reales (runtime Python, tamaño de payload, tiempo de ejecución) sin investigar todavía (sin Vercel CLI) | `docs/PROJECT_STATUS.md` §Sesión 2026-08-17 (bloque 3) |
 | ~~Framework backend de `interfaces/api/`~~ | Fase 4A | **RESUELTO 2026-08-17**: FastAPI, implementado (ADR-016, `Estado: Aceptada`, 19 tests) | `docs/adr/ADR-016-backend-fastapi.md` |
 | Supabase | Fase 8 (persistencia compartida) — **y ahora también persistencia de producción de `ExecutionRun`, adelantado a Fase 4A** | **APROBADO como decisión arquitectónica 2026-08-17** (ADR-017, `Estado: Aceptada`); implementación preparada, **no verificada contra un proyecto real** (sin CLI, sin credenciales) | `docs/adr/ADR-017-supabase-persistencia-remota.md`, `docs/architecture/SUPABASE.md` |
-| Clerk | Fase 9 | **PENDING** | `CLAUDE.md` §14 |
+| Identity Provider (Clerk descartado; Okta recomendado técnicamente) | Fase 9 | **BLOCKED_PENDING_AMAZON_RESPONSE** — aclaración enviada a Amazon Developer Support sobre passwordless/MFA/enforcement de contraseña; sin proveedor aprobado ni respuesta de Amazon todavía | `docs/adr/ADR-021-*.md`, `docs/adr/ADR-022-*.md` |
 | Fuente(s) externa(s) autorizada(s) concreta(s) | Fase 6 | **PENDING** | `DATA_SOURCES.md` §5 |
 | Proveedor/modelo de IA | Fase 7 | **PENDING** | `AI_ANALYST.md` §6 |
 | Fórmulas de negocio de Decision Score / thresholds reales | Fase 5 | **PENDING** | `DECISION_ENGINE.md` §7 |
@@ -411,12 +411,21 @@ operativa (no arquitectónica) tomada al ejecutar la implementación:
   Aceptada`), `POST /api/v1/runs` + `GET /api/v1/runs/{execution_id}/download`,
   19 tests de integración contra el Core real. Ver
   `docs/architecture/API_CONTRACT.md`.
-- **Fase 4B — Frontend PWA**: **IMPLEMENTED** (2026-08-17, bloque 4).
-  `frontend/` (React 19 + TypeScript + Vite 8 + `vite-plugin-pwa`), 9
-  tests de componente/integración (Vitest + Testing Library), 1 test
-  E2E real (Playwright) verificado contra el backend real en ejecución
-  (no mock) — ver `docs/PROJECT_STATUS.md` §Sesión 2026-08-17 (bloque
-  4). `npm run build` exitoso.
+- **Fase 4B — Frontend PWA**: **COMPLETE para el alcance actual aprobado**
+  (finalizado 2026-08-18, commit `9127c64`). `frontend/` (React 19 +
+  TypeScript + Vite 8 + `vite-plugin-pwa`): Dashboard dirigido por
+  `GET /analytics` (KPIs, decisión, HazMat/Bulky, provenance, profitability,
+  data quality), catálogo server-side (paginación/búsqueda/filtro/orden vía
+  `GET /records`), Run Detail, Upload, Export, Appearance/branding. 59/59
+  tests de componente/integración (Vitest + Testing Library), 20/20 tests
+  E2E reales (Playwright) contra backend real en ejecución (no mock), lint
+  limpio, TypeScript limpio, `npm run build` exitoso, artefactos PWA
+  generados, visibilidad local verificada (FastAPI + Vite reales,
+  0 errores de consola en las 6 rutas) — ver `frontend/README.md`.
+  Decision Score (`DOMAIN_NOT_INTEGRATED`), AI Analyst
+  (`NOT_IMPLEMENTED`) e identidad/IdP
+  (`BLOCKED_PENDING_AMAZON_RESPONSE`) permanecen fuera de alcance por
+  diseño — no bloquean este estado `COMPLETE`.
 
 Decisiones que quedaban `PENDING` en la versión anterior de esta
 sección, actualizadas:

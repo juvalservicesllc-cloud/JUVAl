@@ -155,8 +155,12 @@ hasta deployment real + Supabase verificado + resto del gate)
 - Test de aislamiento de datos si aplica; si no, explícitamente fuera de scope y anotado como tal.
 
 ### Fase 9 — Authentication / Authorization
-**Estado del gate: BLOCKED**
-- Gate previo bloqueante: aprobación explícita de Clerk + documento de diseño de auth aprobado antes del código.
+**Estado del gate: BLOCKED_PENDING_AMAZON_RESPONSE**
+- Gate previo bloqueante: Clerk fue descartado (ver ADR-022); ningún IdP está
+  aprobado. Aclaración enviada a Amazon Developer Support sobre passwordless/
+  MFA/enforcement de contraseña — respuesta pendiente (`docs/compliance/SP_API_REGISTRATION_REMEDIATION.md`
+  §21). El gate se mantiene bloqueado hasta que exista respuesta de Amazon y
+  un proveedor aprobado + documento de diseño de auth antes del código.
 - Test de aislamiento de datos: usuario A no puede acceder a datos de usuario B bajo ninguna ruta.
 - Test de permisos por rol.
 
