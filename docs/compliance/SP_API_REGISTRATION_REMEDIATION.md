@@ -643,11 +643,11 @@ Documentation alone is never `COMPLIANT`.
 
 | Finding | Was | Now | Implemented | Tested | Evidenced | Blocking gap |
 |---|---|---|---|---|---|---|
-| **RF-01** | `NOT_IMPLEMENTED` | **PARTIAL** | Yes — [`INCIDENT_RESPONSE_PLAN.md`](INCIDENT_RESPONSE_PLAN.md) §5 defines the 24-hour `security@amazon.com` procedure, the detection clock, the Amazon Information determination and evidence preservation | Structure verified mechanically by `tools/compliance_check.py` (15 tests); **now also exercised** — `JUVAL-TT-20260818` | **PARTIAL** — first tabletop record exists (`TABLETOP_RECORD_JUVAL-TT-20260818.md`) | **Narrowed further 2026-08-18**: roles named, plan approved, first tabletop run and filed (§12 A-1, A-3, A-4, A-5 — all user actions). Sole remaining gap: contact-detail custody outside this repository (A-2). See §25 |
+| **RF-01** | `NOT_IMPLEMENTED` | **PARTIAL** | Yes — [`INCIDENT_RESPONSE_PLAN.md`](INCIDENT_RESPONSE_PLAN.md) §5 defines the 24-hour `security@amazon.com` procedure, the detection clock, the Amazon Information determination and evidence preservation | Structure verified mechanically by `tools/compliance_check.py` (15 tests); **now also exercised** — `JUVAL-TT-20260818` | **PARTIAL** — §12 A-1…A-5 all `DONE` (checklist-complete, `USER_CONFIRMED_CONTROL`); one real exercise filed (`CONTROL_EXERCISED`, partially — see §26) | **Checklist closed 2026-08-18** (A-2 custody confirmed — external hard drive, outside Git, restricted access, `USER-CONFIRMED OPERATIONAL CUSTODY`, no device details recorded). **Not `COMPLIANT`**: the one exercise never reached §5 (resolved `RULED_OUT` before drafting a notification), and one exercise is not `RECURRING_OPERATIONAL_EVIDENCE`. See §26 |
 | **RF-02** | `NOT_IMPLEMENTED` | **PARTIAL** | Workstation controls verified; **both cloud services now deployed and verified** — [`NETWORK_SECURITY.md`](NETWORK_SECURITY.md) §3 | Workstation measured 2026-08-18; **cloud re-verified live 2026-08-18** (TLS, CORS, RLS all `VERIFIED_CONFIGURATION` via direct probes, not provider claims) | Workstation + cloud (real HTTP/DB evidence) | **Finding F-01 alone** (host still 9 months unpatched, re-measured unchanged) — this is now the *only* blocking gap for RF-02 |
 | **RF-03** | `NOT_IMPLEMENTED` | **PARTIAL** | Backend half implemented (OIDC validation, `interfaces/api/auth.py`) and **deployed**; IdP half designed and provider identified (ADR-022) | Yes — 33 negative security tests (unit-level; not re-run against production since no IdP exists to test against) | Backend code only — **not `OPERATIONALLY_VERIFIED_IDENTITY_CONTROL`**: `JUVAL_AUTH_MODE` is deliberately unset in production, so the control is dormant, not enforcing | No IdP tenant. Okta requires a $1,500/year contract (**commercial approval**), itself blocked on Amazon's pending response to the identity clarification |
 | **RF-04** | `NOT_IMPLEMENTED` | **PARTIAL** | Yes — least-privilege RBAC enforced server-side on every endpoint (code); [`ACCESS_CONTROL.md`](ACCESS_CONTROL.md) | Yes — positive, negative, and direct-API-bypass tests (unit-level) | Technical half only, and **dormant in production for the same reason as RF-03** — no requests are actually authenticated/authorized today (`JUVAL_AUTH_MODE` unset) | No users exist to govern; quarterly review never run |
-| **RF-05** | `NOT_IMPLEMENTED` | **PARTIAL** | Yes — roles, six-month review cadence, tabletop process and templates; **automation implemented**: `pip-audit` (clean) + GitHub secret scanning/push protection (confirmed `enabled`, not merely assumed) | Review currency checked mechanically; secret scanning confirmed via live GitHub API query; **plan itself now exercised** — `JUVAL-TT-20260818` | **PARTIAL** — one exercise on record is real operational evidence, not yet a demonstrated *ongoing* cadence (next due 2027-02-18) | **Narrowed further 2026-08-18**: plan approved, roles named, first tabletop run and filed. Remaining gaps: a single exercise isn't a proven cadence yet; the exercise itself found the IC's actual instinct diverges from §4.2 (open corrective action); enable Dependabot. See §25 |
+| **RF-05** | `NOT_IMPLEMENTED` | **PARTIAL** | Yes — roles, six-month review cadence, tabletop process and templates; **automation implemented and now confirmed recurring**: `pip-audit` + `compliance_check.py` run in CI on every push and weekly by schedule (`.github/workflows/ci.yml`), not just by hand; GitHub secret scanning/push protection confirmed `enabled` | Review currency checked mechanically; secret scanning confirmed via live GitHub API query; CI schedule confirmed by reading the workflow file, not assumed; **plan itself now exercised** — `JUVAL-TT-20260818` | **PARTIAL** — scanning is `RECURRING_OPERATIONAL_EVIDENCE`; the incident-response half is `CONTROL_EXERCISED` once, not recurring | **Checklist closed 2026-08-18** (§12 A-1…A-5 all `DONE`). **Not `COMPLIANT`**: one tabletop isn't a proven six-month cadence yet (next required by 2027-02-18); two corrective actions from the exercise remain open (CA-01, CA-02); GitHub Dependabot security updates remain `disabled`; no CVE has ever actually needed remediation, so that process is untested. See §26 |
 
 **No finding is `COMPLIANT`.** Every one advanced from `NOT_IMPLEMENTED` to
 `PARTIAL`; none can close on documentation and code alone.
@@ -977,6 +977,113 @@ RF-05 = PARTIAL
 `E-4 = DONE 2026-08-18`. Unlike E-3, E-4 had no organizational sub-gate
 left open by its own wording — running the exercise and filing the record
 was the entire action, and both happened.
+
+```
+IDENTITY SECURITY GATE = BLOCKED (unchanged)
+REAPPLICATION GATE = BLOCKED (unchanged — RF-01–RF-05 still not COMPLIANT)
+AMAZON_COMPLIANCE_READINESS = NOT_READY (unchanged)
+```
+
+## 26. A-2 closed; full checklist reconciliation (2026-08-18)
+
+### 26.1 A-2 — before / after
+
+**Before:** `PENDING` — no confirmation that contact details for the named
+roles were held anywhere outside this Git repository.
+
+**After:** `DONE 2026-08-18`. The user explicitly confirmed: contact
+custody for Daniel E. Liendo and Jocsimar C. Gonzalez is held on an
+external hard drive, outside Git, with restricted access.
+
+**Evidence classification: `USER-CONFIRMED OPERATIONAL CUSTODY`** — this is
+the user's own statement about their own operational arrangement, not
+something the agent inspected. The agent did not, and has no way to,
+independently verify the drive, its access controls, or its contents.
+
+**Privacy handling:** no email, phone, filesystem path, drive letter,
+serial number, or other device identifier was requested or recorded —
+here or anywhere else in this repository. Only the fact of custody, its
+location class ("external hard drive / external storage"), and the
+restricted-access confirmation are recorded.
+
+### 26.2 A-1…A-5 matrix (verified against the current file, not assumed)
+
+| # | State | Evidence | Evidence type | Remaining gap |
+|---|---|---|---|---|
+| A-1 | `DONE` (2026-08-18) | `INCIDENT_RESPONSE_PLAN.md` §2 names IC/Security Owner/IMPOC/Technical Responder = Daniel E. Liendo, Deputy = Jocsimar C. Gonzalez | `USER_CONFIRMED_CONTROL` | None |
+| A-2 | `DONE` (2026-08-18) | §12 A-2 row, §26.1 above | `USER_CONFIRMED_CONTROL` (custody not independently verifiable by design) | None at the checklist level |
+| A-3 | `DONE` (2026-08-18) | §12 A-3 row; approval statement quoted verbatim | `USER_CONFIRMED_CONTROL` | None |
+| A-4 | `DONE` (2026-08-18) | `TABLETOP_RECORD_JUVAL-TT-20260818.md` | `CONTROL_EXERCISED` (partial — see §26.3, the §5 branch was never reached) | Recurrence — one exercise only |
+| A-5 | `DONE` (2026-08-18) | §12 A-5 row — user confirmed an out-of-hours mechanism exists, without disclosing it | `USER_CONFIRMED_CONTROL` | None |
+
+All five are `DONE`. This closes `INCIDENT_RESPONSE_PLAN.md` §12 as a
+checklist. It does **not**, by itself, make RF-01 or RF-05 `COMPLIANT` —
+see below.
+
+### 26.3 RF-01 reassessment
+
+```
+RF-01 = PARTIAL
+```
+
+Evidence, by type:
+- `DOCUMENTED_CONTROL`: the full §4.1–§4.6/§5 procedure, unchanged and complete.
+- `USER_CONFIRMED_CONTROL`: A-1, A-2, A-3, A-5 (named roles, custody, approval, availability).
+- `CONTROL_EXERCISED` (partial): `JUVAL-TT-20260818` walked detection → containment → credential-matrix → the §4.4 determination → recovery. It did **not** exercise §5 — the determination resolved `AMAZON_INFORMATION_RULED_OUT`, so no notification was ever drafted. RF-01's actual obligation (draft and send within 24 hours of detection) has never been rehearsed, only the branch that skips it.
+- `RECURRING_OPERATIONAL_EVIDENCE`: **absent**. One exercise is one data point. DPP §1.6's periodic-review framing (and the plan's own six-month cadence, `INCIDENT_RESPONSE_PLAN.md` §8/§10) implies a demonstrated cadence, not a single event.
+
+**What remains before RF-01 could be considered for `COMPLIANT`:** at least
+one exercise (real or simulated) that actually reaches and drafts a §5
+notification, so that specific muscle is evidenced; and enough recurrence
+over time to show the cadence itself works, not just that it worked once.
+
+### 26.4 RF-05 reassessment
+
+```
+RF-05 = PARTIAL
+```
+
+Evidence, by type:
+- `DOCUMENTED_CONTROL`: roles, six-month cadence, tabletop procedure and templates.
+- `RECURRING_OPERATIONAL_EVIDENCE` (automation half, upgraded this pass): `pip-audit` and `tools/compliance_check.py` run in CI on every push to `master`, on every pull request, **and weekly on a schedule** (`.github/workflows/ci.yml` — verified by reading the file, not assumed). This is a genuinely recurring control, not a one-time manual run. GitHub secret scanning and push protection are provider-side, continuously active. GitHub Dependabot security updates are confirmed `disabled` (live `gh api` query, unchanged gap).
+- `CONTROL_EXERCISED` (once): the incident-response half, via `JUVAL-TT-20260818`.
+- **Untested**: no dependency vulnerability has ever actually been found by `pip-audit` in this project, so the remediation process it would trigger has never been exercised — only the scanning step has recurring evidence, not the fix-it-when-found step.
+
+**What remains:** enable Dependabot (a straightforward, still-unperformed
+repository setting — `NETWORK_SECURITY.md` §3.2, `SECRETS.md` §8 S-5);
+close CA-01 and CA-02 (§26.5); and, over time, a second and third tabletop
+to show the cadence, not just one instance of it.
+
+### 26.5 Corrective actions from `JUVAL-TT-20260818`
+
+Verified against the tabletop record's exact wording before converting —
+quoted, not paraphrased from memory.
+
+| Field | CA-01 | CA-02 |
+|---|---|---|
+| Action ID | `CA-01` | `CA-02` |
+| Source | `JUVAL-TT-20260818`, Gaps found #1 | `JUVAL-TT-20260818`, Gaps found #2 |
+| Finding (verbatim) | "El primer instinto del IC es confirmar si algo es real antes de actuar, pero el plan (§4.2) indica contener/revocar primero y confirmar después — la brecha entre el reflejo natural y el procedimiento escrito" | "El paso de preservación de evidencia (§4.5) no se ejercitó en este ejercicio — no se sabe cómo se vería en la práctica (qué exportar, dónde guardarlo)" |
+| Remediation | Reinforce the §4.2 "revoke first" rule before or during the next tabletop; the next exercise should specifically test containment-before-confirmation behavior | Explicitly walk §4.5 in the next tabletop: what gets exported, where it is stored, and with what retrieval timestamp |
+| Owner | Daniel E. Liendo (Security Owner) | Daniel E. Liendo (Security Owner) |
+| Status | `OPEN` | `OPEN` |
+| Target / review point | Next tabletop (§10 — rotate scenario), on or before the next plan review `2027-02-18` | Next tabletop, same window |
+| Evidence required for closure | A future tabletop or real incident record showing containment performed before confirmation, per §4.2 | A future tabletop or real incident record showing §4.5 steps actually performed, with an artifact list and retrieval timestamps |
+
+Neither is marked `DONE` — no evidence yet exists that either behavior has
+actually changed. Marking them closed now would be exactly the kind of
+premature "no gaps" result `INCIDENT_RESPONSE_PLAN.md` §10 warns against.
+
+### 26.6 Next tabletop
+
+Cadence is not invented here — it is `INCIDENT_RESPONSE_PLAN.md` §8/§10's
+existing six-month rule, already reflected in the plan's `Next review due:
+2027-02-18` field. The next tabletop is required **on or before
+2027-02-18**, alongside that review, and should rotate to a different
+scenario (§10 explicitly says don't repeat the same one) while
+deliberately exercising CA-01 (contain-before-confirm) and CA-02 (evidence
+preservation) — the two behaviors this first exercise showed were
+untested or divergent from the written procedure.
 
 ```
 IDENTITY SECURITY GATE = BLOCKED (unchanged)

@@ -4,7 +4,7 @@
 |---|---|
 | Document ID | `JUVAL-IRP` |
 | Version | `0.1.0-DRAFT` |
-| Status | **APPROVED** (2026-08-18, §12 A-3). First tabletop exercise run 2026-08-18 (`JUVAL-TT-20260818`, §12 A-4). Not yet fully evidenced as an Amazon control — contact-detail custody outside this repository (§12 A-2) remains unconfirmed. |
+| Status | **APPROVED** (2026-08-18, §12 A-3). §12 A-1 through A-5 are all `DONE` as of 2026-08-18. Still not `COMPLIANT` as an Amazon control — see §12 for why a completed checklist is not yet a proven recurring control. |
 | Effective date | `2026-08-18` |
 | Last reviewed | `2026-08-18` |
 | Next review due | `2027-02-18` (six months — DPP §1.6, RF-05) |
@@ -21,10 +21,13 @@ Data Protection Policy §1.6 (control `AC-12`).
 > three original prerequisites are now met: the roles in §2 name real people
 > (2026-08-18), §12 is approved and dated (2026-08-18), and the first
 > tabletop exercise (§10) has been run and filed — see
-> `TABLETOP_RECORD_JUVAL-TT-20260818.md`. One separate gap remains: §12 A-2
-> (contact-detail custody outside this repository) is unconfirmed. The state
-> is `IMPLEMENTED (documented) + ROLES NAMED + APPROVED + FIRST EXERCISE
-> FILED / NOT YET FULLY EVIDENCED (A-2 open)`.
+> `TABLETOP_RECORD_JUVAL-TT-20260818.md`. §12's full A-1…A-5 checklist,
+> including contact custody (A-2), is now `DONE`. That closes the checklist,
+> not the Amazon requirement: the one exercise run so far never reached the
+> §5 notification-drafting step, and a single exercise is not yet a
+> demonstrated recurring practice. The state is `IMPLEMENTED (documented) +
+> ROLES NAMED + APPROVED + CHECKLIST COMPLETE / NOT YET A DEMONSTRATED
+> RECURRING CONTROL`.
 
 ---
 
@@ -338,7 +341,7 @@ assert about itself:
 
 Run it: `python tools/compliance_check.py`. It exits non-zero when the plan is
 structurally incomplete or the review is overdue. It is exercised by
-`tests/compliance/test_incident_response_plan.py`, so a regression is caught
+`tests/compliance/test_compliance_check.py`, so a regression is caught
 by the normal test run.
 
 ---
@@ -353,12 +356,30 @@ performed it, not that the agent inferred or assumed it:
 | # | Action | Status |
 |---|---|---|
 | A-1 | Name a real Incident Commander, Security Owner, IMPOC and Deputy (§2) | `DONE 2026-08-18` — explicit user decision (this session): IC/Security Owner/IMPOC/Technical Responder = Daniel E. Liendo; Deputy = Jocsimar C. Gonzalez. Recorded in §2 |
-| A-2 | Record their contact details in an approved copy held **outside** this repository | `PENDING` — no email or phone was provided to, or recorded by, the agent (by design — see the rule above §2); the user still needs to independently confirm this custody exists |
+| A-2 | Record their contact details in an approved copy held **outside** this repository | `DONE 2026-08-18` — user confirmed, explicitly: contact custody for the IC/Security Owner/IMPOC/Technical Responder and the Deputy is held on an external hard drive, outside this Git repository, with restricted access. This is `USER-CONFIRMED OPERATIONAL CUSTODY` — the agent has not and cannot independently verify the drive, its access controls, or its contents; no path, drive identifier, email or phone was recorded, here or anywhere in this repository (§2 rule) |
 | A-3 | Management approval and signature, with a date; set `Effective date` and change `Status` to APPROVED | `DONE 2026-08-18` — user explicitly approved: *"Yo, [nombre y cargo], apruebo INCIDENT_RESPONSE_PLAN.md versión 0.1.0-DRAFT (document ID JUVAL-IRP, última revisión 2026-08-18) como el procedimiento vigente de respuesta a incidentes de JUVAl, con fecha efectiva 2026-08-18."* Approver: Daniel E. Liendo. `Status`/`Effective date` above updated accordingly |
 | A-4 | Run the first tabletop exercise (§10) and file its record | `DONE 2026-08-18` — `JUVAL-TT-20260818` run as a facilitated conversation (Daniel E. Liendo participated as IC/Security Owner/IMPOC/Technical Responder; Jocsimar C. Gonzalez, Deputy, did not participate in this exercise), filed at `TABLETOP_RECORD_JUVAL-TT-20260818.md`. Found 2 real gaps (see that record) — finding gaps is the exercise working, not failing |
 | A-5 | Confirm the IMPOC address is monitored outside business hours | `DONE 2026-08-18` — user confirmed an out-of-hours availability mechanism exists for the IC/Security Owner/IMPOC (one person); the mechanism itself is deliberately not recorded here, per the rule above §2 |
 
-Until A-2 is also complete:
+All of A-1 through A-5 are now `DONE` (2026-08-18). **This closes the
+checklist — it does not, by itself, make either finding `COMPLIANT`.**
+Amazon's findings ask for a working, exercised, recurring control, not a
+completed form:
 
-`RF-01 = PARTIAL (roles named, plan approved, and the first tabletop exercise run and filed, all 2026-08-18 — the sole remaining gap is A-2, contact-detail custody outside this repository)`
-`RF-05 = PARTIAL (plan approved, roles named, first exercise run and filed — real operational evidence now exists; the exercise itself surfaced a procedural gap between the IC's instinct and §4.2's "revoke first" rule, tracked as an open corrective action in the tabletop record)`
+`RF-01 = PARTIAL` — every organizational precondition (named roles,
+approval, contact custody) is now met, and one real exercise was run. But
+that exercise resolved via `AMAZON_INFORMATION_RULED_OUT` (§4.4) before
+ever reaching §5 — the actual 24-hour notification-drafting step has
+**never once been exercised**. A single exercise is also one data point,
+not the recurring practice DPP §1.6 implies. See
+`SP_API_REGISTRATION_REMEDIATION.md` §26 for the full evidence-type
+breakdown.
+
+`RF-05 = PARTIAL` — plan approved, roles named, first exercise run and
+filed, and the automation (pip-audit, GitHub secret scanning) now runs
+recurringly via CI (`.github/workflows/ci.yml`, on every push and weekly),
+not just once by hand. But: GitHub Dependabot security updates remain
+`disabled`; the exercise itself surfaced two open corrective actions
+(CA-01, CA-02 — see `SP_API_REGISTRATION_REMEDIATION.md` §26); and no CVE
+remediation cycle has ever actually been exercised, because pip-audit has
+always come back clean.
