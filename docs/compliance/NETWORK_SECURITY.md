@@ -2,8 +2,8 @@
 
 | Field | Value |
 |---|---|
-| Status | **PARTIAL.** Workstation controls measured and evidenced; cloud components are **not deployed**, so their controls cannot be evidenced. |
-| Audit date | `2026-08-18` |
+| Status | **PARTIAL.** Workstation controls measured and evidenced; both cloud services are now deployed and their TLS/segmentation/RLS controls are measured with real evidence (§3). The sole remaining blocking gap is workstation finding **F-01** (§2), unchanged and re-confirmed. |
+| Audit date | `2026-08-18` (initial); **re-verified 2026-08-18 against live production** (Railway + Vercel + Supabase) |
 | Method | Read-only inspection of the developer workstation; official provider documentation for capability claims. No configuration was changed. |
 | Amazon finding | **RF-02** — firewall, IDS/IPS, anti-virus/anti-malware, network segmentation |
 | Related control | `AC-06` (DPP §1.1), `AC-05` (TLS, DPP §1.5) |
@@ -85,26 +85,35 @@ Get-BitLockerVolume            # requires an elevated shell
 
 | ID | Severity | Finding | Required action |
 |---|---|---|---|
-| **F-01** | **HIGH** | The most recent operating-system update was installed **2025-11-19** — roughly nine months before this audit. Windows 10 also reached end of mainstream support in October 2025. A host that is nine months behind on patches, on an OS past end-of-support, cannot credibly be described to Amazon as a maintained endpoint within the security boundary. | **EXTERNAL USER ACTION:** either (a) bring the workstation fully up to date and move to a supported OS (Windows 11 or Windows 10 with an ESU subscription), or (b) formally remove the workstation from the Amazon Information boundary — never handle Amazon Information or credentials on it — and document that exclusion. Option (a) is strongly preferred. |
-| **F-02** | MEDIUM | Disk-encryption status could not be read without elevation, and Windows 10 **Home** does not include full BitLocker management (only "Device Encryption" where hardware supports it). An unencrypted disk holding supplier data or, later, cached credentials is a loss/theft exposure (`INCIDENT_RESPONSE_PLAN.md` T-07). | **EXTERNAL USER ACTION:** run `Get-BitLockerVolume` in an elevated PowerShell and record the result; enable device encryption if available, or record the compensating control. |
+| **F-01** | **HIGH** — **RE-MEASURED 2026-08-18, OPEN, UNCHANGED** | The most recent OS security hotfix is still `KB5072653`, installed **2025-11-19** — identical to the original measurement; **zero new OS security patches landed in the intervening period**. That is now exactly **9 months** of no OS patching, on Windows 10 (past end of mainstream support). `Get-HotFix` re-run confirms the same top-5 hotfix list as the original audit. Note for precision: the Windows Update Agent's own `LastSearchSuccessDate`/`LastInstallationSuccessDate` (via `Microsoft.Update.AutoUpdate`) show activity as recently as today — this reflects the update *agent* checking in (e.g. Defender definitions, which update daily and are tracked separately, see below), **not** a new OS security patch; it must not be read as "the OS is being patched." | **EXTERNAL USER ACTION, unchanged:** (a) bring the workstation fully up to date and move to a supported OS, or (b) formally exclude it from the Amazon Information boundary. Neither has been done. **Classification: `OPEN`** (§11) — re-verified from current evidence, not assumed from the prior audit. |
+| **F-02** | MEDIUM — **RE-MEASURED 2026-08-18, UNVERIFIABLE_WITH_CURRENT_PRIVILEGES, UNCHANGED** | `Get-BitLockerVolume` still returns `Access denied` from this (non-elevated) shell; the agent has no path to elevate itself. No inference of encryption state was made from Windows edition or any other proxy. | **EXTERNAL USER ACTION, unchanged:** run `Get-BitLockerVolume` in an elevated PowerShell session and record the result. |
 | **F-03** | LOW | The workstation firewall profiles show `DefaultInboundAction: NotConfigured`, i.e. the Windows default (block unsolicited inbound) rather than an explicit policy. The effective behavior is correct; the *explicitness* is not. | Optional: set the default inbound action explicitly so the posture is stated rather than inherited. |
 
 F-01 is the single most consequential item in this document. It is a real
-control gap on a real machine, not a documentation gap.
+control gap on a real machine, not a documentation gap. **It is now also the
+sole remaining blocker for RF-02** — every cloud-side gap that used to share
+this document's `PARTIAL` status has been closed with real evidence (§3).
 
 ---
 
-## 3. Cloud components — NOT DEPLOYED
+## 3. Cloud components — DEPLOYED 2026-08-18, RE-VERIFIED
 
-Nothing below is deployed. Every row is therefore `PROVIDER_CAPABILITY` at
-best; **none reaches `VERIFIED_CONFIGURATION`**, and none may be presented to
-Amazon as an implemented control.
+Both application services are now live in production. Evidence below is from
+real HTTP/database probes against the live deployment, not from provider
+marketing pages — `VERIFIED_CONFIGURATION`, not `PROVIDER_CAPABILITY`, except
+where explicitly marked otherwise.
 
 | Component | Deployed? | Firewall / ACL | IDS/IPS | Anti-malware | Segmentation | TLS |
 |---|---|---|---|---|---|---|
-| **Railway** (backend) | **NO** — `railway.toml` prepared, never deployed (ADR-018) | Provider-managed edge; JUVAl-level ingress rules unconfigured | Provider-level only; no JUVAl-visible IDS/IPS configured | Provider runtime responsibility | Would rely on provider network isolation, not a JUVAl-designed VPC | Provider terminates HTTPS |
-| **Vercel** (PWA) | **NO** | Provider edge/WAF capability | Provider-level | N/A (static assets) | Static hosting, no backend reachability | Provider terminates HTTPS |
-| **Supabase** (PostgreSQL) | Project exists; **not verified against a live JUVAl deployment** | Network restrictions available on paid tiers; current state unverified | Provider-level | Provider responsibility | RLS **enabled, zero policies = fail-closed** on both tables (see §3.1) | TLS via connection pooler |
+| **Railway** (backend) | **YES** — `https://juval-backend-production.up.railway.app`, `railway.toml` (Nixpacks builder, corrected 2026-08-18 after a real Railpack deploy failure) | Provider-managed edge; no JUVAl-level ingress rules configured (`PROVIDER_CAPABILITY`) | Provider-level only; no JUVAl-visible IDS/IPS configured (`PROVIDER_CAPABILITY`) | Provider runtime responsibility (`PROVIDER_CAPABILITY`) | Logical: browser never holds a Supabase credential, only the backend does (`SECRETS.md` §2/§6, enforced in code) | **`VERIFIED_CONFIGURATION`** — `GET /docs` and `GET /api/v1/runs` return over HTTPS, confirmed by direct request |
+| **Vercel** (PWA) | **YES** — `https://juval-frontend.vercel.app` | Provider edge/WAF capability (`PROVIDER_CAPABILITY`) | Provider-level (`PROVIDER_CAPABILITY`) | N/A (static assets) | Static hosting; frontend bundle confirmed to contain no DSN/service-role/database credential (0 matches on `postgres://`/`supabase`/`service_role` in the served bundle) | **`VERIFIED_CONFIGURATION`** — served over HTTPS |
+| **Supabase** (PostgreSQL) | **YES** — live project, in active production use since 2026-08-18 | Network restrictions available on paid tiers; **not configured** (`NETWORK_SECURITY.md` N-6, still open) | Provider-level (`PROVIDER_CAPABILITY`) | Provider responsibility | RLS **enabled, zero policies = fail-closed** on both tables — **re-confirmed live 2026-08-18** by direct query against the production database: `rowsecurity = true` on `execution_runs` and `execution_run_records`, `pg_policies` returns 0 rows (see §3.1) | **`VERIFIED_CONFIGURATION`** — live connection confirmed `ssl = on` server-side |
+
+**CORS — `VERIFIED_CONFIGURATION`:** `JUVAL_CORS_ORIGINS` on Railway is set to
+the exact Vercel origin (`https://juval-frontend.vercel.app`), no wildcard.
+Confirmed with real cross-origin requests: the Vercel origin receives
+`access-control-allow-origin` echoed back; an arbitrary third-party origin
+does not.
 
 ### 3.1 Supabase Row Level Security — enabled and fail-closed
 
@@ -134,11 +143,29 @@ fail-closed default rather than strengthen it. If JUVAl ever lets the browser
 query Supabase directly, that is a new architectural decision requiring an ADR,
 and per-row policies become mandatory at that point.
 
-Remaining verification: confirm on the live project that RLS is actually
-enabled (the migrations are written but **not yet applied** to any live
-Supabase project — see `SUPABASE.md`), and that no permissive policy was added
-manually through the dashboard.
-| **GitHub** (source) | Repository exists | N/A | N/A | N/A | Branch/access controls unverified | HTTPS |
+**Verification: DONE, 2026-08-18.** Confirmed on the live project by direct
+query: `select tablename, rowsecurity from pg_tables where schemaname='public'`
+returns `true` for both `execution_runs` and `execution_run_records`;
+`select * from pg_policies where schemaname='public'` returns 0 rows. No
+permissive policy has been added through the dashboard.
+
+### 3.2 GitHub (source control) — re-checked 2026-08-18
+
+| Control | Value | Source |
+|---|---|---|
+| Repository visibility | **PUBLIC** | `gh repo view` |
+| Secret scanning | **`enabled`** | `gh api repos/.../JUVAl` → `security_and_analysis.secret_scanning.status` |
+| Secret scanning push protection | **`enabled`** | Same — blocks a push that contains a recognized secret pattern before it reaches the remote |
+| Open secret-scanning alerts | **0** | `gh api repos/.../JUVAl/secret-scanning/alerts` → `[]` |
+| Dependabot security updates | **`disabled`** | Same `security_and_analysis` response — this is a real, currently-open gap, distinct from the local `pip-audit` check in CI (§RF-05), which only covers Python dependencies actually installed, not the full dependency graph including frontend `npm` packages |
+| Vulnerability alerts (Dependabot) | **disabled** | `gh api .../vulnerability-alerts` → 404 "Vulnerability alerts are disabled" |
+
+This closes `SECRETS.md` §8 item **S-2** (secret scanning) as already satisfied
+— it was listed as a pending external action and is, in fact, already on.
+Enabling Dependabot security updates is a one-click GitHub repository setting
+change; it is **not performed here** because it is a repository-visible
+configuration change outside this task's explicit scope, and is reported as a
+recommended action instead (§5).
 
 ### The honest RF-02 position
 
@@ -166,32 +193,38 @@ precisely the kind of unevidenced "YES" that caused the original rejection.
 
 ## 4. Control-by-control status
 
-| RF-02 control | Workstation | Cloud (post-deployment) | Overall |
+| RF-02 control | Workstation | Cloud (deployed, 2026-08-18) | Overall |
 |---|---|---|---|
-| Firewall / ACL | `VERIFIED` (all 3 profiles enabled) | `PROVIDER_CAPABILITY`, not deployed | **PARTIAL** |
-| IDS / IPS | `VERIFIED` (Defender NIS enabled) | `PROVIDER_CAPABILITY`, not deployed | **PARTIAL** |
-| Anti-virus / anti-malware | `VERIFIED` (Defender, signatures 0 days old) | Provider responsibility | **PARTIAL** |
-| Network segmentation | N/A (single host) | **Logical only**; RLS enabled fail-closed (§3.1), not yet verified on the live project | **PARTIAL** |
-| TLS in transit (AC-05) | HTTPS outbound | `PROVIDER_CAPABILITY`, not verified | **NEEDS_VERIFICATION** |
-| Endpoint patching | **FINDING F-01 — 9 months behind** | Provider-managed | **NOT_COMPLIANT** |
+| Firewall / ACL | `VERIFIED` (all 3 profiles enabled) | `PROVIDER_CAPABILITY` — deployed, but JUVAl configures no ingress rules of its own | **PARTIAL** (honest: provider-owned, not JUVAl-owned) |
+| IDS / IPS | `VERIFIED` (Defender NIS enabled) | `PROVIDER_CAPABILITY` — deployed, provider-level only | **PARTIAL** (same reason) |
+| Anti-virus / anti-malware | `VERIFIED` (Defender, signatures 0 days old) | Provider responsibility for managed runtimes | **PARTIAL** (same reason) |
+| Network segmentation | N/A (single host) | **`VERIFIED_CONFIGURATION`** — RLS confirmed live: `rowsecurity=true`, 0 policies, on the production database (§3.1) | **VERIFIED** (logical segmentation, correctly scoped claim) |
+| TLS in transit (AC-05) | HTTPS outbound | **`VERIFIED_CONFIGURATION`** — real HTTPS 200 responses from both Railway and Vercel; Supabase connection confirmed `ssl=on` server-side | **VERIFIED** |
+| CORS (exact-origin, AC-06 adjacent) | N/A | **`VERIFIED_CONFIGURATION`** — exact Vercel origin allowed, arbitrary origin rejected, no wildcard | **VERIFIED** |
+| Endpoint patching | **FINDING F-01 — re-measured 2026-08-18, still 9 months behind, `OPEN`** | Provider-managed | **NOT_COMPLIANT** |
 
-`RF-02 = PARTIAL` — and it cannot advance beyond PARTIAL until the backend is
-actually deployed, because there is no system to evidence.
+`RF-02 = PARTIAL` — the deployment blocker that previously kept every cloud
+row at `NOT_DEPLOYED` is closed; **F-01 (workstation patching) is now the
+only control keeping RF-02 out of `COMPLIANT`.** Firewall/IDS/IPS/anti-malware
+for the cloud stay `PARTIAL` on principle, not evidence gaps: they are
+genuinely provider-owned, and claiming JUVAl operates them would itself be the
+kind of unevidenced "YES" that caused the original rejection (§ "The honest
+RF-02 position" above) — that framing is unchanged by deployment.
 
 ---
 
 ## 5. Required actions
 
-| # | Action | Owner | Blocking RF-02? |
-|---|---|---|---|
-| N-1 | Resolve **F-01**: patch and move to a supported OS, or formally exclude the workstation from the boundary | User (**EXTERNAL**) | **YES** |
-| N-2 | Resolve **F-02**: verify disk encryption from an elevated shell | User (**EXTERNAL**) | Yes |
-| N-3 | Deploy the backend so cloud controls exist to evidence | User (**EXTERNAL** — `railway login` is interactive) | **YES** |
-| N-4 | Apply the migrations to the live Supabase project and confirm RLS is enabled with no permissive policy added via the dashboard (§3.1). **Do not author per-row policies** — there is no authenticated Supabase caller to discriminate between | User + agent, after N-3 | **YES** |
-| N-5 | Verify TLS termination and database transport after deployment (AC-05) | Agent, after N-3 | Yes |
-| N-6 | Restrict Supabase network access to the backend if the tier permits | User + agent, after N-3 | Improves posture |
-| N-7 | Record dated provider configuration evidence for each deployed component | Both, after N-3 | **YES** |
+| # | Action | Owner | Status | Blocking RF-02? |
+|---|---|---|---|---|
+| N-1 | Resolve **F-01**: patch and move to a supported OS, or formally exclude the workstation from the boundary | User (**EXTERNAL**) | **OPEN — re-confirmed 2026-08-18, unchanged** | **YES — the sole remaining blocker** |
+| N-2 | Resolve **F-02**: verify disk encryption from an elevated shell | User (**EXTERNAL**) | **OPEN — re-confirmed 2026-08-18, still `Access denied` from this shell** | Yes |
+| N-3 | Deploy the backend so cloud controls exist to evidence | User (**EXTERNAL**) | **DONE 2026-08-18** — `https://juval-backend-production.up.railway.app` | Closed |
+| N-4 | Apply the migrations to the live Supabase project and confirm RLS is enabled with no permissive policy added via the dashboard (§3.1) | Agent | **DONE 2026-08-18** — confirmed live: `rowsecurity=true`, 0 policies (§3.1) | Closed |
+| N-5 | Verify TLS termination and database transport after deployment (AC-05) | Agent | **DONE 2026-08-18** — HTTPS 200 on both services, `ssl=on` confirmed server-side on the database connection | Closed |
+| N-6 | Restrict Supabase network access to the backend if the tier permits | User + agent | **OPEN — not attempted this session** (requires checking the current Supabase plan tier for network-restriction support, and would be an infrastructure change beyond this pass's read-only scope) | Improves posture, not required for `PARTIAL`→ current state |
+| N-7 | Record dated provider configuration evidence for each deployed component | Both | **DONE 2026-08-18** — this document, §3 | Closed |
+| N-8 *(new)* | Enable GitHub Dependabot security updates (currently `disabled`, §3.2) | User (**EXTERNAL** — one-click repository setting) | **OPEN** | Improves RF-05 posture, not RF-02 |
 
-Note that N-3 gates N-4 through N-7: **RF-02 cannot be closed without a
-deployment**, and the deployment requires an interactive provider login the
-agent cannot perform.
+N-3 through N-5 and N-7 are now closed with real evidence. **F-01 (N-1) is the
+only item still blocking RF-02 from advancing past `PARTIAL`.**

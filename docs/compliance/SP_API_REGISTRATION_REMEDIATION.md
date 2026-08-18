@@ -644,10 +644,10 @@ Documentation alone is never `COMPLIANT`.
 | Finding | Was | Now | Implemented | Tested | Evidenced | Blocking gap |
 |---|---|---|---|---|---|---|
 | **RF-01** | `NOT_IMPLEMENTED` | **PARTIAL** | Yes — [`INCIDENT_RESPONSE_PLAN.md`](INCIDENT_RESPONSE_PLAN.md) §5 defines the 24-hour `security@amazon.com` procedure, the detection clock, the Amazon Information determination and evidence preservation | Structure verified mechanically by `tools/compliance_check.py` (15 tests) | **NO** | Roles unnamed; plan unapproved; no tabletop exercise run (§12 A-1…A-5) |
-| **RF-02** | `NOT_IMPLEMENTED` | **PARTIAL** | Workstation controls verified; cloud controls not deployed — [`NETWORK_SECURITY.md`](NETWORK_SECURITY.md) | Workstation measured 2026-08-18 | Partially — workstation only | **Backend is not deployed**, so there is no system to evidence. Plus finding F-01 (host ~9 months unpatched, OS past end-of-support) |
-| **RF-03** | `NOT_IMPLEMENTED` | **PARTIAL** | Backend half implemented (OIDC validation, `interfaces/api/auth.py`); IdP half designed and provider identified (ADR-022) | Yes — 33 negative security tests | Backend only | No IdP tenant. Okta requires a $1,500/year contract (**commercial approval**) |
-| **RF-04** | `NOT_IMPLEMENTED` | **PARTIAL** | Yes — least-privilege RBAC enforced server-side on every endpoint; [`ACCESS_CONTROL.md`](ACCESS_CONTROL.md) | Yes — positive, negative, and direct-API-bypass tests | Technical half only | No users exist to govern; quarterly review never run |
-| **RF-05** | `NOT_IMPLEMENTED` | **PARTIAL** | Yes — roles, six-month review cadence, tabletop process and templates | Review currency checked mechanically | **NO** | Same as RF-01: unapproved, unexercised |
+| **RF-02** | `NOT_IMPLEMENTED` | **PARTIAL** | Workstation controls verified; **both cloud services now deployed and verified** — [`NETWORK_SECURITY.md`](NETWORK_SECURITY.md) §3 | Workstation measured 2026-08-18; **cloud re-verified live 2026-08-18** (TLS, CORS, RLS all `VERIFIED_CONFIGURATION` via direct probes, not provider claims) | Workstation + cloud (real HTTP/DB evidence) | **Finding F-01 alone** (host still 9 months unpatched, re-measured unchanged) — this is now the *only* blocking gap for RF-02 |
+| **RF-03** | `NOT_IMPLEMENTED` | **PARTIAL** | Backend half implemented (OIDC validation, `interfaces/api/auth.py`) and **deployed**; IdP half designed and provider identified (ADR-022) | Yes — 33 negative security tests (unit-level; not re-run against production since no IdP exists to test against) | Backend code only — **not `OPERATIONALLY_VERIFIED_IDENTITY_CONTROL`**: `JUVAL_AUTH_MODE` is deliberately unset in production, so the control is dormant, not enforcing | No IdP tenant. Okta requires a $1,500/year contract (**commercial approval**), itself blocked on Amazon's pending response to the identity clarification |
+| **RF-04** | `NOT_IMPLEMENTED` | **PARTIAL** | Yes — least-privilege RBAC enforced server-side on every endpoint (code); [`ACCESS_CONTROL.md`](ACCESS_CONTROL.md) | Yes — positive, negative, and direct-API-bypass tests (unit-level) | Technical half only, and **dormant in production for the same reason as RF-03** — no requests are actually authenticated/authorized today (`JUVAL_AUTH_MODE` unset) | No users exist to govern; quarterly review never run |
+| **RF-05** | `NOT_IMPLEMENTED` | **PARTIAL** | Yes — roles, six-month review cadence, tabletop process and templates; **automation implemented**: `pip-audit` (clean) + GitHub secret scanning/push protection (confirmed `enabled`, not merely assumed) | Review currency checked mechanically; secret scanning confirmed via live GitHub API query, not documentation | **NO** — automation running is not the same as a control having been exercised: no incident has ever been handled, no tabletop has ever been run (§10 below); GitHub **Dependabot security updates are `disabled`** (new gap, `NETWORK_SECURITY.md` §3.2) | Same as RF-01: unapproved, unexercised. Plus: enable Dependabot |
 
 **No finding is `COMPLIANT`.** Every one advanced from `NOT_IMPLEMENTED` to
 `PARTIAL`; none can close on documentation and code alone.
@@ -719,13 +719,15 @@ The remaining path is gated on user actions, in dependency order:
 | **E-3** | Name the Incident Commander, Security Owner, IMPOC and Deputy; approve the incident response plan | RF-01, RF-05 | — |
 | **E-4** | Run the first tabletop exercise and file the record (**never send a test mail to `security@amazon.com`**) | RF-05 | — |
 | **E-5** | Resolve `NETWORK_SECURITY.md` F-01: patch the workstation and move to a supported OS, or formally exclude it from the boundary | RF-02 | — |
-| **E-6** | `railway login` and deploy the backend with `JUVAL_AUTH_MODE=oidc` and `JUVAL_EXECUTION_STORE=supabase` | RF-02, RF-03, RF-04 | Hosting |
-| **E-7** | After E-6: apply the migrations to the live Supabase project, confirm RLS is enabled with no permissive policy added via the dashboard (`NETWORK_SECURITY.md` §3.1), verify TLS, capture provider configuration evidence | RF-02, RF-04 | — |
+| **E-6** | ~~`railway login` and deploy the backend with `JUVAL_AUTH_MODE=oidc` and~~ `JUVAL_EXECUTION_STORE=supabase` | RF-02 | **PARTIALLY DONE 2026-08-18** — deployed with `JUVAL_EXECUTION_STORE=supabase`; `JUVAL_AUTH_MODE=oidc` deliberately **not** set (would break every request with no IdP to validate against — see `SECRETS.md` §8 S-4). RF-03/RF-04 remain blocked on the IdP, not on deployment. |
+| **E-7** | After E-6: apply the migrations to the live Supabase project, confirm RLS is enabled with no permissive policy added via the dashboard (`NETWORK_SECURITY.md` §3.1), verify TLS, capture provider configuration evidence | RF-02, RF-04 | **DONE 2026-08-18** — see `NETWORK_SECURITY.md` §3/§3.1 |
 | **E-8** | Run the first quarterly access review and one ≤24-hour removal drill | RF-04 | — |
 | **E-9** | Only then: update the Developer Profile truthfully and open a **new** case (never reopen the prior one) | Reapplication | — |
 
-E-1, E-3 and E-5 are independent and can proceed in parallel. E-6 gates E-7.
-E-9 gates on everything above reaching `COMPLIANT`.
+E-1, E-3 and E-5 are independent and can proceed in parallel. E-6 (partially
+done) gated E-7, which is now done. E-9 gates on everything above reaching
+`COMPLIANT` — **still not the case**: E-3, E-4, E-5, E-8 remain open, and E-6
+is only half-closed pending the IdP.
 
 ## 21. Amazon identity clarification — submitted
 
@@ -761,3 +763,75 @@ decision not made here.
 
 **Action for the user**: if the Case ID or the exact submitted text is
 available, record it here so this section stops being evidence-incomplete.
+
+## 22. Compliance reconciliation against production evidence (2026-08-18)
+
+Independent work performed while the Amazon identity response remains
+pending (§21). Scope: reconcile RF-01 through RF-05 against the new
+Railway/Vercel/Supabase production deployment, and re-measure F-01/F-02
+rather than assume prior findings still hold. No frontend feature, business
+logic, IdP selection, auth enablement, AI, or Decision Score work was
+touched — none of that was in scope for this pass.
+
+### 22.1 What changed and why
+
+| Finding | Changed by production evidence? | Reason |
+|---|---|---|
+| RF-01 | No | Incident response is organizational (named/approved roles, exercised tabletop) — deployment doesn't touch it. Still `PARTIAL` |
+| RF-02 | **Yes, narrowed** | Cloud half moved from "not deployed" to `VERIFIED_CONFIGURATION` (TLS, CORS, RLS — direct probes, not provider claims, `NETWORK_SECURITY.md` §3). F-01 (workstation) re-measured unchanged. **F-01 is now the sole blocking gap for RF-02** — still `PARTIAL` |
+| RF-03 | No | Deployment ships the OIDC code but `JUVAL_AUTH_MODE` is deliberately unset — dormant, not enforcing. `IMPLEMENTED_CONTROL`, not `OPERATIONALLY_VERIFIED_IDENTITY_CONTROL`. Still `PARTIAL`, blocked on the IdP as before |
+| RF-04 | No | Same dormancy reason as RF-03; RBAC code is real and tested but not exercising in production. Still `PARTIAL` |
+| RF-05 | **Yes, partially** | GitHub secret scanning + push protection confirmed already `enabled` (closes S-2/an evidence gap); GitHub Dependabot security updates confirmed `disabled` (new gap, N-8/S-5). Neither changes the core gap: no tabletop has ever been run, no incident has ever been handled. Still `PARTIAL` |
+
+No finding reached `COMPLIANT`. The §20.4 gates (`IDENTITY SECURITY GATE =
+BLOCKED`, `REAPPLICATION GATE = BLOCKED`, `AMAZON_COMPLIANCE_READINESS =
+NOT_READY`) were re-checked against this evidence and are **unchanged and
+re-confirmed**, not stale.
+
+### 22.2 Re-measured, not assumed
+
+- Workstation (F-01, F-02): re-measured via read-only PowerShell
+  (`Get-HotFix`, `Get-MpComputerStatus`, `Get-NetFirewallProfile`,
+  `Get-BitLockerVolume`, CBS reboot-pending key, Windows Update Agent COM
+  object). F-01 unchanged (`KB5072653`, 2025-11-19, still the newest
+  security hotfix). F-02 unchanged (`Get-BitLockerVolume` still `Access
+  denied` without elevation). Full detail: `NETWORK_SECURITY.md` findings
+  table.
+- Cloud (RF-02 cloud half): re-verified live, not re-stated from the prior
+  design — Supabase RLS confirmed via a direct read-only `pg_tables`/
+  `pg_policies` query against the production database, TLS confirmed via
+  `show ssl`, CORS confirmed via direct HTTP probe against the deployed
+  origin. Detail: `NETWORK_SECURITY.md` §3/§3.1.
+- Secrets: production secret store presence verified by key name only
+  (`railway variable list --json` piped through a key-only filter, never
+  printing values); confirmed absent from the Vercel project and from the
+  built frontend bundle. Detail: `SECRETS.md` §7.
+- GitHub security settings: queried live via `gh api`, not assumed from
+  documentation. Detail: `NETWORK_SECURITY.md` §3.2.
+
+### 22.3 Files touched this pass
+
+`docs/compliance/NETWORK_SECURITY.md`, `docs/compliance/SECRETS.md`,
+`docs/compliance/ACCESS_CONTROL.md`, this file (§20.1, §20.5, §22). No code
+was changed — every gap found had a narrow evidence explanation, not a
+defect requiring implementation.
+
+### 22.4 Final classification, this pass
+
+```
+RF-01 = PARTIAL
+RF-02 = PARTIAL
+RF-03 = PARTIAL
+RF-04 = PARTIAL
+RF-05 = PARTIAL
+F-01 = OPEN
+F-02 = UNVERIFIABLE_WITH_CURRENT_PRIVILEGES
+INCIDENT_RESPONSE_OWNERS = BLOCKED_BY_HUMAN_ASSIGNMENT
+INCIDENT_RESPONSE_APPROVAL = PENDING_HUMAN_APPROVAL
+TABLETOP = NOT_EXECUTED
+WORKSTATION_SECURITY = PARTIAL
+AMAZON_COMPLIANCE_READINESS = NOT_READY
+```
+
+`IDENTITY SECURITY GATE = BLOCKED` (unchanged)
+`REAPPLICATION GATE = BLOCKED` (unchanged)

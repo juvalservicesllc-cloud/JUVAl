@@ -57,10 +57,13 @@ Verify: `.venv/Scripts/python -m pytest tests/integration/test_api_auth.py -q`
 (33 tests) and `python tools/compliance_check.py` (asserts every route
 enforces a permission).
 
-> **Not yet active in production.** Enforcement runs only when
-> `JUVAL_AUTH_MODE=oidc`, which requires an IdP tenant (ADR-022, pending
-> commercial approval) and a deployment. Today the control is
-> `IMPLEMENTED + TESTED`, not `OPERATING`.
+> **Not yet active in production.** The backend is deployed
+> (`https://juval-backend-production.up.railway.app`, since 2026-08-18), so
+> deployment is no longer the blocker. Enforcement runs only when
+> `JUVAL_AUTH_MODE=oidc`, and that variable is deliberately unset in
+> production — it requires an approved IdP tenant first (ADR-022, pending
+> commercial approval); setting it without one would reject every request.
+> Today the control is `IMPLEMENTED + TESTED`, not `OPERATING`.
 
 ---
 
@@ -146,8 +149,9 @@ proving the gap was under 24 hours.
 | Unique IDs / no shared accounts | **DOCUMENTED** | §2 — no accounts exist |
 | Quarterly review | **DOCUMENTED, NEVER RUN** | §3 |
 | ≤24-hour removal | **DOCUMENTED, NEVER EXERCISED** | §4 |
-| Supabase RLS | **ENABLED, FAIL-CLOSED** (zero policies, by design) — not yet verified on the live project | `NETWORK_SECURITY.md` §3.1 |
-| Production operation | **BLOCKED** | Needs IdP tenant + deployment |
+| Supabase RLS | **ENABLED, FAIL-CLOSED, VERIFIED LIVE 2026-08-18** (zero policies, by design) | `NETWORK_SECURITY.md` §3.1 |
+| Backend deployed | **DONE 2026-08-18** — `https://juval-backend-production.up.railway.app` | `PROJECT_PLAN.md` |
+| Production operation (auth enforcement) | **BLOCKED** — backend is deployed, but `JUVAL_AUTH_MODE` is deliberately unset (auth stays disabled until an IdP is approved) | Needs IdP tenant, not deployment — deployment is done |
 
 `RF-04 = PARTIAL` — technical control implemented and tested; organizational
 control documented but not operating, because there are no users to govern.

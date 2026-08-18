@@ -150,15 +150,16 @@ never the value itself.
 | Fail-fast configuration | **IMPLEMENTED + TESTED** |
 | Redaction in logs | **IMPLEMENTED + TESTED** |
 | SP-API credential lifecycle | **NOT APPLICABLE YET** — no credential exists; becomes live on reapplication approval |
-| Backend-only production secret store | **NOT VERIFIED** — Railway is not deployed; provider secret handling unevidenced |
-| Rotation records | **NONE** — nothing to rotate yet |
-| Provider MFA on Railway/Vercel/Supabase/GitHub accounts | **NEEDS_VERIFICATION — EXTERNAL USER ACTION** (§8) |
+| Backend-only production secret store | **VERIFIED 2026-08-18** — Railway deployed; `JUVAL_SUPABASE_DB_URL` set via `railway variable set --stdin` (never appeared as a CLI argument or in command output); confirmed present on the service by key name only (`railway variable list --json` piped through a script that prints keys, never values); confirmed absent from the Vercel project (`vercel env ls` shows only `VITE_API_BASE_URL`) and absent from the built frontend bundle (0 matches for `postgres://`/`supabase`/`service_role`) |
+| Rotation records | **NONE** — nothing rotated yet; the production DSN has been live since 2026-08-18 and is due for rotation on the standard ≤12-month cadence (§5) |
+| Provider MFA on Railway/Vercel/Supabase/GitHub accounts | **NEEDS_VERIFICATION — EXTERNAL USER ACTION** (§8). Attempted via `gh api user --jq .two_factor_authentication` — GitHub no longer reliably exposes this field via the API; inconclusive, not fabricated. Railway/Vercel CLIs expose no account-level MFA introspection. |
 
 ## 8. EXTERNAL USER ACTION REQUIRED
 
-| # | Action |
-|---|---|
-| S-1 | Confirm MFA is enabled on the Railway, Vercel, Supabase and GitHub accounts, and record the date (no screenshots containing tokens) |
-| S-2 | Enable GitHub secret scanning and push protection on the repository |
-| S-3 | Confirm no historical commit contains a secret (the scanner covers the working tree, not full history) |
-| S-4 | On first deployment, set `JUVAL_AUTH_MODE=oidc` and `JUVAL_EXECUTION_STORE=supabase` explicitly |
+| # | Action | Status |
+|---|---|---|
+| S-1 | Confirm MFA is enabled on the Railway, Vercel, Supabase and GitHub accounts, and record the date (no screenshots containing tokens) | **OPEN** — not verifiable via CLI (see above) |
+| S-2 | Enable GitHub secret scanning and push protection on the repository | **DONE — verified 2026-08-18**: `gh api repos/.../JUVAl` → `security_and_analysis.secret_scanning.status = "enabled"`, `secret_scanning_push_protection.status = "enabled"`. Both were already on; this item is closed, not merely re-stated. |
+| S-3 | Confirm no historical commit contains a secret (the scanner covers the working tree, not full history) | **OPEN** — not attempted this session; GitHub secret scanning (S-2) covers the pushed history going forward but was not used here to retroactively audit the full commit history |
+| S-4 | On first deployment, set `JUVAL_EXECUTION_STORE=supabase` explicitly | **DONE 2026-08-18** — deployed with `JUVAL_EXECUTION_STORE=supabase`. **`JUVAL_AUTH_MODE=oidc` was deliberately NOT set** — the original wording of this item bundled it with the store selector, but enabling OIDC auth without an approved IdP tenant would break every endpoint and contradicts the standing identity block (ADR-021/ADR-022, `IDP_SELECTION = BLOCKED_PENDING_AMAZON_RESPONSE`); corrected here so this item is never read as authorizing that. |
+| S-5 *(new)* | Enable GitHub Dependabot security updates (currently `disabled` — `NETWORK_SECURITY.md` §3.2) | **OPEN** |
