@@ -157,15 +157,19 @@ permissive policy has been added through the dashboard.
 | Secret scanning | **`enabled`** | `gh api repos/.../JUVAl` → `security_and_analysis.secret_scanning.status` |
 | Secret scanning push protection | **`enabled`** | Same — blocks a push that contains a recognized secret pattern before it reaches the remote |
 | Open secret-scanning alerts | **0** | `gh api repos/.../JUVAl/secret-scanning/alerts` → `[]` |
-| Dependabot security updates | **`disabled`** | Same `security_and_analysis` response — this is a real, currently-open gap, distinct from the local `pip-audit` check in CI (§RF-05), which only covers Python dependencies actually installed, not the full dependency graph including frontend `npm` packages |
-| Vulnerability alerts (Dependabot) | **disabled** | `gh api .../vulnerability-alerts` → 404 "Vulnerability alerts are disabled" |
+| Dependency graph | **enabled** (implicit) | Always on for public repositories; not a togglable field on this API for a public repo |
+| Vulnerability alerts (Dependabot alerts) | **`enabled` — turned on 2026-08-18** | Before: `gh api .../vulnerability-alerts` → 404 "Vulnerability alerts are disabled". Action: `gh api -X PUT .../vulnerability-alerts` (user-authorized, this pass). After: same endpoint → 204 (enabled) |
+| Dependabot security updates | **`enabled` — turned on 2026-08-18** | Before: `security_and_analysis.dependabot_security_updates.status` = `disabled`. Action: `gh api -X PUT .../automated-security-fixes` (required alerts enabled first — GitHub returned `422` until that prerequisite was met). After, independently re-read: `security_and_analysis.dependabot_security_updates.status` = `enabled`, and `gh api .../automated-security-fixes` → `{"enabled":true,"paused":false}` |
 
-This closes `SECRETS.md` §8 item **S-2** (secret scanning) as already satisfied
-— it was listed as a pending external action and is, in fact, already on.
-Enabling Dependabot security updates is a one-click GitHub repository setting
-change; it is **not performed here** because it is a repository-visible
-configuration change outside this task's explicit scope, and is reported as a
-recommended action instead (§5).
+This closes `SECRETS.md` §8 item **S-2** (secret scanning) as already
+satisfied, and now also **S-5** (Dependabot) — see `SECRETS.md` for the
+updated evidence. Covers all three dependency ecosystems actually present
+in this repository (`pyproject.toml` for pip; `frontend/package.json` and
+`demo/package.json` for npm) via GitHub's dependency graph — no
+`.github/dependabot.yml` was created, because that file configures a
+*different*, unauthorized feature (scheduled version updates), not the
+security-update capability that was enabled; see
+`SP_API_REGISTRATION_REMEDIATION.md` §27 for why.
 
 ### The honest RF-02 position
 
@@ -224,7 +228,8 @@ RF-02 position" above) — that framing is unchanged by deployment.
 | N-5 | Verify TLS termination and database transport after deployment (AC-05) | Agent | **DONE 2026-08-18** — HTTPS 200 on both services, `ssl=on` confirmed server-side on the database connection | Closed |
 | N-6 | Restrict Supabase network access to the backend if the tier permits | User + agent | **OPEN — not attempted this session** (requires checking the current Supabase plan tier for network-restriction support, and would be an infrastructure change beyond this pass's read-only scope) | Improves posture, not required for `PARTIAL`→ current state |
 | N-7 | Record dated provider configuration evidence for each deployed component | Both | **DONE 2026-08-18** — this document, §3 | Closed |
-| N-8 *(new)* | Enable GitHub Dependabot security updates (currently `disabled`, §3.2) | User (**EXTERNAL** — one-click repository setting) | **OPEN** | Improves RF-05 posture, not RF-02 |
+| N-8 | Enable GitHub Dependabot security updates (was `disabled`, §3.2) | User-authorized, agent-executed | **DONE 2026-08-18** — `gh api -X PUT .../vulnerability-alerts` then `.../automated-security-fixes`; independently re-verified `enabled` (§3.2) | Closed — improves RF-05 posture, not RF-02 |
 
-N-3 through N-5 and N-7 are now closed with real evidence. **F-01 (N-1) is the
-only item still blocking RF-02 from advancing past `PARTIAL`.**
+N-3 through N-5, N-7 and N-8 are now closed with real evidence. **F-01
+(N-1) is the only item still blocking RF-02 from advancing past
+`PARTIAL`.**

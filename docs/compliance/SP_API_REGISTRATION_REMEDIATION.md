@@ -647,7 +647,7 @@ Documentation alone is never `COMPLIANT`.
 | **RF-02** | `NOT_IMPLEMENTED` | **PARTIAL** | Workstation controls verified; **both cloud services now deployed and verified** — [`NETWORK_SECURITY.md`](NETWORK_SECURITY.md) §3 | Workstation measured 2026-08-18; **cloud re-verified live 2026-08-18** (TLS, CORS, RLS all `VERIFIED_CONFIGURATION` via direct probes, not provider claims) | Workstation + cloud (real HTTP/DB evidence) | **Finding F-01 alone** (host still 9 months unpatched, re-measured unchanged) — this is now the *only* blocking gap for RF-02 |
 | **RF-03** | `NOT_IMPLEMENTED` | **PARTIAL** | Backend half implemented (OIDC validation, `interfaces/api/auth.py`) and **deployed**; IdP half designed and provider identified (ADR-022) | Yes — 33 negative security tests (unit-level; not re-run against production since no IdP exists to test against) | Backend code only — **not `OPERATIONALLY_VERIFIED_IDENTITY_CONTROL`**: `JUVAL_AUTH_MODE` is deliberately unset in production, so the control is dormant, not enforcing | No IdP tenant. Okta requires a $1,500/year contract (**commercial approval**), itself blocked on Amazon's pending response to the identity clarification |
 | **RF-04** | `NOT_IMPLEMENTED` | **PARTIAL** | Yes — least-privilege RBAC enforced server-side on every endpoint (code); [`ACCESS_CONTROL.md`](ACCESS_CONTROL.md) | Yes — positive, negative, and direct-API-bypass tests (unit-level) | Technical half only, and **dormant in production for the same reason as RF-03** — no requests are actually authenticated/authorized today (`JUVAL_AUTH_MODE` unset) | No users exist to govern; quarterly review never run |
-| **RF-05** | `NOT_IMPLEMENTED` | **PARTIAL** | Yes — roles, six-month review cadence, tabletop process and templates; **automation implemented and now confirmed recurring**: `pip-audit` + `compliance_check.py` run in CI on every push and weekly by schedule (`.github/workflows/ci.yml`), not just by hand; GitHub secret scanning/push protection confirmed `enabled` | Review currency checked mechanically; secret scanning confirmed via live GitHub API query; CI schedule confirmed by reading the workflow file, not assumed; **plan itself now exercised** — `JUVAL-TT-20260818` | **PARTIAL** — scanning is `RECURRING_OPERATIONAL_EVIDENCE`; the incident-response half is `CONTROL_EXERCISED` once, not recurring | **Checklist closed 2026-08-18** (§12 A-1…A-5 all `DONE`). **Not `COMPLIANT`**: one tabletop isn't a proven six-month cadence yet (next required by 2027-02-18); two corrective actions from the exercise remain open (CA-01, CA-02); GitHub Dependabot security updates remain `disabled`; no CVE has ever actually needed remediation, so that process is untested. See §26 |
+| **RF-05** | `NOT_IMPLEMENTED` | **PARTIAL** | Yes — roles, six-month review cadence, tabletop process and templates; **automation implemented and confirmed recurring**: `pip-audit` + `compliance_check.py` run in CI on every push and weekly by schedule (`.github/workflows/ci.yml`); GitHub secret scanning/push protection **and now Dependabot security updates** confirmed `enabled` | Review currency checked mechanically; secret scanning and Dependabot confirmed via live GitHub API query, before and after; CI schedule confirmed by reading the workflow file; **plan itself now exercised** — `JUVAL-TT-20260818` | **PARTIAL** — scanning is `RECURRING_OPERATIONAL_EVIDENCE`; the incident-response half is `CONTROL_EXERCISED` once, not recurring; Dependabot is `CONTROL_ENABLED`, not yet `CONTROL_EXERCISED` (no PR has ever been generated, because no vulnerability has ever existed to fix) | **Checklist closed 2026-08-18** (§12 A-1…A-5 all `DONE`); **Dependabot enabled and verified 2026-08-18** (§27). **Not `COMPLIANT`**: one tabletop isn't a proven six-month cadence yet (next required by 2027-02-18); two corrective actions from the exercise remain open (CA-01, CA-02); Dependabot has never actually fired a remediation PR, so that specific workflow is untested. See §26, §27 |
 
 **No finding is `COMPLIANT`.** Every one advanced from `NOT_IMPLEMENTED` to
 `PARTIAL`; none can close on documentation and code alone.
@@ -1084,6 +1084,96 @@ scenario (§10 explicitly says don't repeat the same one) while
 deliberately exercising CA-01 (contain-before-confirm) and CA-02 (evidence
 preservation) — the two behaviors this first exercise showed were
 untested or divergent from the written procedure.
+
+```
+IDENTITY SECURITY GATE = BLOCKED (unchanged)
+REAPPLICATION GATE = BLOCKED (unchanged — RF-01–RF-05 still not COMPLIANT)
+AMAZON_COMPLIANCE_READINESS = NOT_READY (unchanged)
+```
+
+## 27. GitHub Dependabot security updates enabled (2026-08-18)
+
+User-authorized, scoped explicitly to "the Dependabot/security-update
+configuration required for the current compliance remediation" — no other
+repository setting was touched.
+
+### 27.1 Baseline (before)
+
+Verified live, not assumed from a prior document:
+
+| Control | State | Source |
+|---|---|---|
+| Dependabot alerts (vulnerability-alerts) | `disabled` | `gh api repos/.../JUVAl/vulnerability-alerts` → `404` |
+| Dependabot security updates | `disabled` | `gh api repos/.../JUVAl` → `security_and_analysis.dependabot_security_updates.status` |
+| Secret scanning | `enabled` | Same response — unchanged, confirmed not to be touched |
+| Secret scanning push protection | `enabled` | Same — unchanged |
+
+### 27.2 Action
+
+Dependabot security updates has a hard technical prerequisite — GitHub
+rejected the direct enable with `422 Vulnerability alerts must be enabled
+to configure automated security fixes`. Enabling that prerequisite is part
+of "enabling Dependabot itself," not a separate unrelated setting:
+
+```
+gh api -X PUT repos/juvalservicesllc-cloud/JUVAl/vulnerability-alerts
+gh api -X PUT repos/juvalservicesllc-cloud/JUVAl/automated-security-fixes
+```
+
+No branch protection, Actions permissions, visibility, collaborators,
+webhooks, or deployment settings were touched.
+
+### 27.3 After — independently re-verified
+
+Three separate live reads, not a reuse of the write response:
+
+| Check | Result |
+|---|---|
+| `gh api .../vulnerability-alerts` | `204` (enabled — GitHub returns no body on success) |
+| `gh api .../automated-security-fixes` | `{"enabled":true,"paused":false}` |
+| `gh api .../JUVAl` → `security_and_analysis.dependabot_security_updates.status` | `"enabled"` |
+| Secret scanning / push protection (control check — unchanged?) | Still `enabled` / `enabled` — confirmed untouched |
+
+```
+DEPENDABOT_SECURITY_UPDATES = ENABLED_VERIFIED
+```
+
+### 27.4 Configuration file
+
+`.github/dependabot.yml` does **not** exist and was **not created**.
+Dependabot security updates (automated PRs fixing known-vulnerable
+dependencies, using the dependency graph) work without one — a
+`dependabot.yml` file configures a materially different, opt-in feature
+(scheduled *version* updates, e.g. "check for new npm releases every
+Monday"), which this task did not authorize. Creating the file to satisfy
+this task would have silently turned on a feature nobody approved.
+
+Ecosystems actually present, confirmed by inspecting real manifests, not
+assumed: `pyproject.toml` (pip), `frontend/package.json` +
+`frontend/package-lock.json` (npm), `demo/package.json` +
+`demo/package-lock.json` (npm). GitHub's dependency graph — always on for
+a public repository — covers all three automatically; no ecosystem was
+invented or left uncovered by choice.
+
+### 27.5 RF-05 reassessment
+
+```
+RF-05 = PARTIAL
+```
+
+Evidence, by exact type:
+- `DOCUMENTED_CONTROL`: roles, six-month cadence, tabletop procedure.
+- `AUTOMATED_CONTROL`: `pip-audit`, `compliance_check.py`, secret scanning, push protection, and now Dependabot alerts + security updates.
+- `CONTROL_ENABLED` (new, this pass): Dependabot security updates — turned on and independently verified, but has never fired, because no vulnerability has ever existed in this repository's dependencies to trigger it.
+- `CONTROL_EXERCISED` (once): the incident-response tabletop, `JUVAL-TT-20260818`.
+- `RECURRING_OPERATIONAL_EVIDENCE`: CI's scanning cadence (every push + weekly). Dependabot's own remediation-PR behavior is not yet in this category — enabling it is not the same as watching it successfully fix something.
+
+Enabling Dependabot does **not** move RF-05 to `COMPLIANT`. What remains:
+CA-01 and CA-02 (§26.5) still `OPEN`; a second tabletop to demonstrate
+cadence; and, ideally, an actual (even minor) dependency advisory someday
+resolved by a real Dependabot PR, which would be the first genuine
+evidence that the remediation half of this control — not just the
+scanning half — works.
 
 ```
 IDENTITY SECURITY GATE = BLOCKED (unchanged)
