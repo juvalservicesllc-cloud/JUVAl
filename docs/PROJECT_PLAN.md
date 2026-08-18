@@ -461,6 +461,21 @@ sección, actualizadas:
   entorno): subida real con `persist=true`, lectura confirmada en
   `/runs`, `/runs/{id}`, `/runs/{id}/analytics`, `/runs/{id}/records`, y
   limpieza posterior verificada con `SELECT COUNT(*) = 0`.
+- `PRODUCTION_UI_E2E = VERIFIED` (2026-08-18): el flujo completo de
+  usuario se ejercitó con navegador real (Playwright) contra
+  `https://juval-frontend.vercel.app` — Upload (fixture determinista) →
+  persistencia real → Dashboard (`GET /analytics`, confirmado que
+  `GET /records` **no** se llama para construir las gráficas) →
+  Catalog (búsqueda/filtro/orden server-side confirmados por request de
+  red real) → Run Detail (navegación dura a la ruta anidada,
+  reconfirma el rewrite SPA de Vercel en carga de página fresca;
+  provenance VERIFIED/INFERRED/NOT_FOUND/INVALID distinguibles) →
+  Export (descarga de archivo real confirmada). Responsive verificado en
+  desktop/tablet/mobile. Service worker confirmado `registered: activated`
+  en producción. Cero errores de CORS, cero 401/403/500 inesperados, cero
+  llamadas a `localhost`. Dato sintético limpiado tras la verificación
+  (mismo mecanismo de `DELETE` acotado por `execution_id`, verificado con
+  `SELECT COUNT(*) = 0` y confirmado además vía `GET /runs` real).
 - Supabase: **aprobado como persistencia de producción** (ADR-017), y
   **verificado contra un proyecto real 2026-08-17/18** — proyecto
   `twrgzsbpazcjhhfolaju` (`ACTIVE_HEALTHY`), migración aplicada,
