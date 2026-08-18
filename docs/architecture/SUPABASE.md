@@ -44,6 +44,39 @@ describe el estado real — si hay discrepancia, el código gana.
   residuales. Los 2 tests de `tests/unit/test_supabase_execution_run_store.py`
   siguen pasando (siguen siendo solo estructurales, complementan pero no
   sustituyen a la prueba de integración).
+- **Verificado de extremo a extremo desde la API (Fase D₀) — `[VERIFICADO
+  2026-08-18]`**: `tests/integration/test_api_supabase.py` (nuevo, gated por
+  `JUVAL_SUPABASE_DB_URL` igual que el test del Store) ejercita el camino
+  completo **FastAPI → composition root → `SupabaseExecutionRunStore` →
+  PostgreSQL**, sin mocks y sin SQLite: `POST /api/v1/runs` con
+  `persist=true` sobre el fixture real, y luego
+  `GET /api/v1/runs/{id}`, `GET /api/v1/runs/{id}/records` y
+  `GET /api/v1/runs`, comprobando coherencia de `status`, `records_total`,
+  `input_hash` y número de records. La presencia de las filas se confirma
+  además con un `select count(*)` directo (confirmación independiente, no
+  sustituto de la operación de aplicación). Para que la prueba no pueda
+  aprobar por el motivo equivocado, el fixture **borra**
+  `JUVAL_EXECUTION_DB_PATH` y afirma
+  `isinstance(_execution_run_store(), SupabaseExecutionRunStore)` — si el
+  selector se ignorara, SQLite no tendría dónde escribir y el test fallaría
+  en vez de pasar contra el store equivocado. Limpieza en `finally`, acotada
+  al propio `execution_id`, borrando primero `execution_run_records` (la FK
+  no tiene `on delete cascade`) y después `execution_runs`; verificado
+  posteriormente con `select count(*)` sobre ambas tablas: **0 filas**.
+  Resultado: `4 passed`. Suite completa con DSN: **310 passed, 0 skipped**;
+  sin DSN: **303 passed, 7 skipped** (`SKIPPED_EXPECTED`).
+- **Selección del store — `[VERIFICADO 2026-08-18]`, sin cambio de código**:
+  el composition root (`interfaces/api/main.py::_execution_run_store`) ya
+  soportaba la selección explícita exigida por ADR-017; D₀ no necesitó
+  modificarlo. `JUVAL_EXECUTION_STORE ∈ {"sqlite","supabase"}` es la única
+  fuente de verdad cuando está definida, una variable de conexión ausente
+  para el modo elegido es `RuntimeError`, y un valor desconocido también —
+  nunca hay fallback silencioso. Cubierto por los 9 tests de
+  `tests/unit/test_execution_store_selection.py`. **Lo que faltaba no era
+  código sino configuración**: `JUVAL_EXECUTION_STORE` no está definida en
+  el `.env` local, por lo que hoy la API no resuelve ningún store y los
+  endpoints que lo requieren devuelven HTTP 500. Fijarla es una decisión de
+  entorno del operador, no un cambio de repositorio.
 - **Detalle de conectividad — `[VERIFICADO 2026-08-17]`, no documentado
   antes**: el host de conexión directa que Supabase muestra por defecto
   (`db.<ref>.supabase.co:5432`) resuelve **solo a una dirección IPv6**
