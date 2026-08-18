@@ -114,8 +114,10 @@ def check_incident_response_plan(today: dt.date | None = None) -> list[Finding]:
             Finding(
                 "irp.placeholders",
                 WARN,
-                f"{placeholders} unfilled ROLE PLACEHOLDER item(s): the plan is NOT approved and "
-                "must not be cited to Amazon as a working control (EXTERNAL USER ACTION REQUIRED)",
+                f"{placeholders} unfilled ROLE PLACEHOLDER item(s) remain in the document "
+                "(check whether they are live role assignments or a preserved historical "
+                "record) -- do not cite the plan as fully evidenced until §12 confirms "
+                "every required action is DONE (EXTERNAL USER ACTION REQUIRED)",
             )
         )
     else:

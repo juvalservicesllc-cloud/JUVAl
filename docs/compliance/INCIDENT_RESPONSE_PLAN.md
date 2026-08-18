@@ -4,11 +4,11 @@
 |---|---|
 | Document ID | `JUVAL-IRP` |
 | Version | `0.1.0-DRAFT` |
-| Status | **DRAFT — NOT APPROVED.** Requires the approvals in §12 before it may be cited as Amazon evidence. |
-| Effective date | `PENDING_APPROVAL` |
+| Status | **APPROVED** (2026-08-18, §12 A-3). Not yet fully evidenced as an Amazon control — the first tabletop exercise (§12 A-4) has not been run. |
+| Effective date | `2026-08-18` |
 | Last reviewed | `2026-08-18` |
 | Next review due | `2027-02-18` (six months — DPP §1.6, RF-05) |
-| Owner | `ROLE PLACEHOLDER — Security Owner` (see §2; **EXTERNAL USER ACTION REQUIRED**) |
+| Owner | Daniel E. Liendo (Security Owner) |
 | Applies to | Every system that processes, stores, transmits or grants access to Amazon Information (see `AMAZON_SP_API_COMPLIANCE.md` §5) |
 
 This plan exists to satisfy Amazon findings **RF-01** (notify
@@ -17,10 +17,13 @@ Amazon Information) and **RF-05** (an incident-response plan with defined
 roles, periodic review and a 24-hour notification procedure), traceable to
 Data Protection Policy §1.6 (control `AC-12`).
 
-> **This document is not evidence of a working control.** It becomes evidence
-> only when: the roles in §2 name real people, §12 is approved and dated, and
-> at least one tabletop exercise (§10) has been recorded. Until then the state
-> is `IMPLEMENTED (documented) / NOT YET EVIDENCED`.
+> **This document is not yet complete evidence of a working control.** Two of
+> the three prerequisites are met: the roles in §2 name real people
+> (2026-08-18) and §12 is approved and dated (2026-08-18). The third — at
+> least one tabletop exercise (§10) — has not been recorded; see
+> `TABLETOP_001_PREPARED_SCENARIO.md` (prepared, not executed). Until it is,
+> the state is `IMPLEMENTED (documented) + ROLES NAMED + APPROVED / NOT YET
+> FULLY EVIDENCED`.
 
 ---
 
@@ -67,11 +70,18 @@ Security Owner and IMPOC must be reachable outside business hours.
 
 | Role | Responsibility | Assigned to |
 |---|---|---|
-| **Incident Commander (IC)** | Owns the incident end to end: declares it, sets severity, drives containment, decides recovery, closes it. Has authority to revoke credentials and take systems offline without further approval. | `ROLE PLACEHOLDER — EXTERNAL USER ACTION REQUIRED` |
-| **Security Owner** | Accountable for this plan, its six-month review, the tabletop exercise, and the accuracy of security evidence given to Amazon. May be the same person as the IC. | `ROLE PLACEHOLDER — EXTERNAL USER ACTION REQUIRED` |
-| **IMPOC** (Incident Management Point of Contact, per DPP §1.6) | The single contact Amazon can reach about a JUVAl incident, and the person who sends the §5 notification. Must be a monitored address. | `ROLE PLACEHOLDER — EXTERNAL USER ACTION REQUIRED` |
-| **Technical Responder** | Executes containment, revocation and recovery steps; preserves evidence. | `ROLE PLACEHOLDER` |
-| **Deputy** | Acts when the IC is unreachable within 1 hour. A plan with a single unreachable owner is not a plan. | `ROLE PLACEHOLDER — EXTERNAL USER ACTION REQUIRED` |
+| **Incident Commander (IC)** | Owns the incident end to end: declares it, sets severity, drives containment, decides recovery, closes it. Has authority to revoke credentials and take systems offline without further approval. | Daniel E. Liendo |
+| **Security Owner** | Accountable for this plan, its six-month review, the tabletop exercise, and the accuracy of security evidence given to Amazon. May be the same person as the IC. | Daniel E. Liendo |
+| **IMPOC** (Incident Management Point of Contact, per DPP §1.6) | The single contact Amazon can reach about a JUVAl incident, and the person who sends the §5 notification. Must be a monitored address. | Daniel E. Liendo |
+| **Technical Responder** | Executes containment, revocation and recovery steps; preserves evidence. | Daniel E. Liendo |
+| **Deputy** | Acts when the IC is unreachable within 1 hour. A plan with a single unreachable owner is not a plan. | Jocsimar C. Gonzalez |
+
+Roles assigned 2026-08-18, by explicit user decision: one principal
+responsible person (IC, Security Owner, IMPOC, Technical Responder) plus a
+separate Deputy — combining roles is permitted by this section, and this is
+the user's chosen combination, not a default. Out-of-hours availability for
+the IC/Security Owner/IMPOC was confirmed by the user the same date; per the
+rule below, the actual contact mechanism is not recorded here (§12 A-2, A-5).
 
 > **Never enter a personal email, phone number or home address into this
 > repository.** Record the role assignment in the approved copy of this plan
@@ -272,6 +282,7 @@ it produces the illusion of a control while suppressing detection.
 | Date | Reviewer | Version | Outcome |
 |---|---|---|---|
 | 2026-08-18 | `ROLE PLACEHOLDER — Security Owner` | 0.1.0-DRAFT | Initial draft created in response to Amazon findings RF-01/RF-05. **Not yet approved.** |
+| 2026-08-18 | Daniel E. Liendo (Security Owner) | 0.1.0-DRAFT | Roles assigned (§2) and plan approved (§12 A-1, A-3, A-5). No content change to this plan; version unchanged. Not a six-month periodic review — logged here for traceability alongside it. |
 
 ---
 
@@ -320,8 +331,8 @@ assert about itself:
 - every required section of this plan is present;
 - `security@amazon.com` and the 24-hour obligation are stated;
 - the six-month review is not overdue as of the run date;
-- all `ROLE PLACEHOLDER` items are listed, so an unapproved plan can never be
-  quietly presented as complete;
+- any remaining unfilled role markers are counted, so an unapproved plan can
+  never be quietly presented as complete;
 - no secret-shaped string has entered this document or the templates.
 
 Run it: `python tools/compliance_check.py`. It exits non-zero when the plan is
@@ -333,18 +344,20 @@ by the normal test run.
 
 ## 12. Approval (EXTERNAL USER ACTION REQUIRED)
 
-This plan is **not in force** until all of the following are true. Each is a
-user action the agent cannot perform:
+This plan is now approved (A-3), but is **not yet fully evidenced** until
+every row below is `DONE`. Each row is a user action the agent cannot
+perform on the user's behalf — the `DONE` rows below record that the user
+performed it, not that the agent inferred or assumed it:
 
 | # | Action | Status |
 |---|---|---|
-| A-1 | Name a real Incident Commander, Security Owner, IMPOC and Deputy (§2) | `PENDING` |
-| A-2 | Record their contact details in an approved copy held **outside** this repository | `PENDING` |
-| A-3 | Management approval and signature, with a date; set `Effective date` and change `Status` to APPROVED | `PENDING` |
-| A-4 | Run the first tabletop exercise (§10) and file its record | `PENDING` |
-| A-5 | Confirm the IMPOC address is monitored outside business hours | `PENDING` |
+| A-1 | Name a real Incident Commander, Security Owner, IMPOC and Deputy (§2) | `DONE 2026-08-18` — explicit user decision (this session): IC/Security Owner/IMPOC/Technical Responder = Daniel E. Liendo; Deputy = Jocsimar C. Gonzalez. Recorded in §2 |
+| A-2 | Record their contact details in an approved copy held **outside** this repository | `PENDING` — no email or phone was provided to, or recorded by, the agent (by design — see the rule above §2); the user still needs to independently confirm this custody exists |
+| A-3 | Management approval and signature, with a date; set `Effective date` and change `Status` to APPROVED | `DONE 2026-08-18` — user explicitly approved: *"Yo, [nombre y cargo], apruebo INCIDENT_RESPONSE_PLAN.md versión 0.1.0-DRAFT (document ID JUVAL-IRP, última revisión 2026-08-18) como el procedimiento vigente de respuesta a incidentes de JUVAl, con fecha efectiva 2026-08-18."* Approver: Daniel E. Liendo. `Status`/`Effective date` above updated accordingly |
+| A-4 | Run the first tabletop exercise (§10) and file its record | `PENDING` — `TABLETOP_001_PREPARED_SCENARIO.md` is prepared; execution has not occurred |
+| A-5 | Confirm the IMPOC address is monitored outside business hours | `DONE 2026-08-18` — user confirmed an out-of-hours availability mechanism exists for the IC/Security Owner/IMPOC (one person); the mechanism itself is deliberately not recorded here, per the rule above §2 |
 
-Until A-1…A-5 are complete:
+Until A-2 and A-4 are also complete:
 
-`RF-01 = PARTIAL (procedure documented, not approved, not exercised)`
-`RF-05 = PARTIAL (plan and cadence documented, roles unnamed, no exercise record)`
+`RF-01 = PARTIAL (roles named and plan approved 2026-08-18; contact-detail custody outside this repository unconfirmed, and no tabletop exercise run)`
+`RF-05 = PARTIAL (plan approved, roles named, review cadence documented; still no exercise record — an approved plan is not yet an exercised control)`

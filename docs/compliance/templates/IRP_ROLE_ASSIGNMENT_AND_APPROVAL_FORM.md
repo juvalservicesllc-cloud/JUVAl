@@ -1,8 +1,12 @@
 # Incident Response — Role Assignment and Approval Form
 
 > Prepared 2026-08-18 to unblock `INCIDENT_RESPONSE_PLAN.md` §12 (A-1…A-5).
-> This is a **blank form**, not a record. It closes E-3 in
-> `SP_API_REGISTRATION_REMEDIATION.md` §20.5 once the user completes it.
+> **Updated 2026-08-18: role names (A-1) and approval (A-3, A-5) were
+> provided by the user and are recorded below and in
+> `INCIDENT_RESPONSE_PLAN.md` §2/§12.** This closes the naming/approval part
+> of E-3 (`SP_API_REGISTRATION_REMEDIATION.md` §20.5). A-2 (contact-detail
+> custody outside this repository) and A-4 (the tabletop) remain open — see
+> Part C.
 
 **Do not commit a filled copy of this file with real names, emails or phone
 numbers.** `INCIDENT_RESPONSE_PLAN.md` §2 is explicit: personal contact
@@ -32,9 +36,9 @@ reachable — a Deputy exists for when they are not (within 1 hour).*
 
 | Field | Value |
 |---|---|
-| Name | `[USER MUST ASSIGN]` |
-| Email | `[USER MUST ASSIGN]` |
-| Phone (for off-hours reachability) | `[USER MUST ASSIGN]` |
+| Name | Daniel E. Liendo |
+| Email | Not recorded in this repository (§2 rule) — held by the user outside Git |
+| Phone (for off-hours reachability) | Not recorded in this repository (§2 rule) — user confirmed 2026-08-18 that an out-of-hours mechanism exists (A-5); the mechanism itself is not recorded here |
 
 ### Security Owner
 *Accountable for the plan itself, its six-month review, the tabletop, and
@@ -43,9 +47,9 @@ as the IC. Must be reachable outside business hours (§2).*
 
 | Field | Value |
 |---|---|
-| Name | `[USER MUST ASSIGN]` (may be the same person as IC — user's choice) |
-| Email | `[USER MUST ASSIGN]` |
-| Phone (for off-hours reachability) | `[USER MUST ASSIGN]` |
+| Name | Daniel E. Liendo (same person as IC — user's chosen combination) |
+| Email | Not recorded in this repository (§2 rule) |
+| Phone (for off-hours reachability) | Not recorded in this repository (§2 rule) — see A-5 note above |
 
 ### IMPOC (Incident Management Point of Contact)
 *The single contact Amazon can reach about a JUVAl incident; sends the §5
@@ -54,9 +58,9 @@ hours (§2).*
 
 | Field | Value |
 |---|---|
-| Name | `[USER MUST ASSIGN]` (may be the same person as IC/Security Owner — user's choice) |
-| Email (must be actively monitored) | `[USER MUST ASSIGN]` |
-| Phone (for off-hours reachability) | `[USER MUST ASSIGN]` |
+| Name | Daniel E. Liendo (same person as IC/Security Owner — user's chosen combination) |
+| Email (must be actively monitored) | Not recorded in this repository (§2 rule) |
+| Phone (for off-hours reachability) | Not recorded in this repository (§2 rule) — see A-5 note above |
 
 ### Technical Responder
 *Executes containment, revocation and recovery steps; preserves evidence
@@ -64,8 +68,8 @@ hours (§2).*
 
 | Field | Value |
 |---|---|
-| Name | `[USER MUST ASSIGN]` |
-| Email | `[USER MUST ASSIGN]` |
+| Name | Daniel E. Liendo |
+| Email | Not recorded in this repository (§2 rule) |
 
 ### Deputy
 *Acts when the IC is unreachable within 1 hour. Must be a different person
@@ -73,48 +77,46 @@ from the IC — a deputy who is the IC is not a deputy.*
 
 | Field | Value |
 |---|---|
-| Name | `[USER MUST ASSIGN]` (must differ from IC) |
-| Email | `[USER MUST ASSIGN]` |
-| Phone (for off-hours reachability) | `[USER MUST ASSIGN]` |
+| Name | Jocsimar C. Gonzalez |
+| Email | Not recorded in this repository (§2 rule) |
+| Phone (for off-hours reachability) | Not recorded in this repository (§2 rule) |
 
 No sixth role is requested. `INCIDENT_RESPONSE_PLAN.md` §2 defines exactly
 these five; nothing here adds a role the plan doesn't already call for.
+
+**A-2 is still open**: no email or phone address was provided by the user
+in any message, so none could be recorded anywhere, in or out of this
+repository. This form only tracks *that* names were assigned — it is not
+itself the "approved copy held outside Git" that A-2 requires; the user
+still needs to establish and confirm that custody independently.
 
 ---
 
 ## Part B — Plan approval statement
 
-Derived from `INCIDENT_RESPONSE_PLAN.md` §12 (A-3). To approve, the user
-states the following, filled in and signed/dated outside this repository
-(or pasted back to the agent as an explicit instruction to record it):
+Derived from `INCIDENT_RESPONSE_PLAN.md` §12 (A-3). **Made 2026-08-18**, by
+explicit user instruction (this session), verbatim:
 
-> "I, **`[USER MUST FILL — name/title]`**, approve
-> `INCIDENT_RESPONSE_PLAN.md` version **`0.1.0-DRAFT`** (document ID
-> `JUVAL-IRP`, last reviewed 2026-08-18) as JUVAl's current incident-response
-> procedure, effective **`[USER MUST FILL — YYYY-MM-DD]`**."
+> "Yo, Daniel E. Liendo, apruebo `INCIDENT_RESPONSE_PLAN.md` versión
+> `0.1.0-DRAFT` (document ID `JUVAL-IRP`, última revisión 2026-08-18) como el
+> procedimiento vigente de respuesta a incidentes de JUVAl, con fecha
+> efectiva `2026-08-18`."
 
-This statement is **not yet made**. No agent may make it on the user's
-behalf (`CLAUDE.md` §3 — decisions with this impact require explicit
-APPROVED status, never inferred for convenience).
-
-Once made, the plan's own header fields change: `Status: DRAFT — NOT
-APPROVED` → `APPROVED`, `Effective date: PENDING_APPROVAL` → the date given
-above. That edit is a one-line follow-up the agent can make **after**, and
-only after, the user supplies this statement.
+Recorded in `INCIDENT_RESPONSE_PLAN.md`'s header (`Status: APPROVED`,
+`Effective date: 2026-08-18`) and §12 (A-3: `DONE`).
 
 ---
 
-## Part C — Remaining A-1…A-5 checklist
+## Part C — A-1…A-5 checklist
 
-| # | Action | Satisfied when |
+| # | Action | Status |
 |---|---|---|
-| A-1 | Name IC, Security Owner, IMPOC, Deputy | Part A filled (Technical Responder is not in A-1 but the plan lists it — filling it too is recommended, not required by A-1 itself) |
-| A-2 | Contact details recorded outside this repository | Part A's filled copy is stored outside Git — confirm here: `[ ] done, stored at: ______` (location only, not the details) |
-| A-3 | Management approval, signed and dated | Part B statement made — confirm here: `[ ] done` |
-| A-4 | First tabletop exercise run and filed | See `TABLETOP_001_PREPARED_SCENARIO.md` — prepared, not yet run |
-| A-5 | IMPOC address confirmed monitored outside business hours | `[ ] confirmed` |
+| A-1 | Name IC, Security Owner, IMPOC, Deputy | `DONE 2026-08-18` — Part A, and `INCIDENT_RESPONSE_PLAN.md` §2 |
+| A-2 | Contact details recorded outside this repository | `PENDING` — no email or phone was ever provided to the agent; nothing to store, and the user still needs to independently confirm this custody exists |
+| A-3 | Management approval, signed and dated | `DONE 2026-08-18` — Part B above |
+| A-4 | First tabletop exercise run and filed | `PENDING` — `TABLETOP_001_PREPARED_SCENARIO.md` is prepared, not yet run |
+| A-5 | IMPOC address confirmed monitored outside business hours | `DONE 2026-08-18` — user confirmed the mechanism exists; the mechanism itself is not recorded here (§2 rule) |
 
-`RF-01` and `RF-05` stay `PARTIAL` until this checklist is complete
-**and** A-4 has an actual filed record — see
-`SP_API_REGISTRATION_REMEDIATION.md` §22 for how each step changes (or
-doesn't change) the classification.
+`RF-01` and `RF-05` stay `PARTIAL` until A-2 and A-4 also close — see
+`SP_API_REGISTRATION_REMEDIATION.md` §24 for how this changed (and did not
+change) the classification.
