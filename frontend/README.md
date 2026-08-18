@@ -6,11 +6,21 @@ React + TypeScript + Vite PWA. The current MVP frontend is ready for backend API
 
 | Route | State |
 | --- | --- |
-| `/` | DEMO dashboard fixtures |
+| `/` | REAL persisted-run analytics; empty/error states when the API has no history or is unavailable |
 | `/upload` | REAL XLSX processing through FastAPI; CSV remains unsupported |
-| `/products` | DEMO / API-ready; awaits run-scoped records reconciliation |
-| `/runs` | DEMO / API-ready; awaits `RunSummaryOut` DTO reconciliation |
+| `/products` | REAL run-scoped record catalog with search, decision filter, sorting, and explicit provenance |
+| `/runs` | REAL persisted `RunSummaryOut` history and run detail/download |
 | `/appearance` | LOCAL REAL theme and branding settings |
+
+The API deliberately has no global products endpoint. Product data is a
+snapshot identified by `(execution_id, record_ref)`, so the Catalog is always
+run-scoped. The UI never recalculates profitability, decision, or risk values;
+it renders the backend result and keeps `VERIFIED`, `INFERRED`, `NOT_FOUND`,
+and `INVALID` visible beside provenance-aware values.
+
+Decision Score and AI Analyst have no API fields/endpoints yet, so neither is
+presented as a production capability. Authentication remains provider-neutral
+at the frontend boundary; no IdP integration or browser secret is included.
 
 ## Local development
 

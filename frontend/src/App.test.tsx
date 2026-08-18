@@ -25,7 +25,7 @@ describe("App", () => {
     vi.unstubAllGlobals()
   })
 
-  it("navigates the shell and keeps Products' provenance states distinct (Products remains demo)", async () => {
+  it("navigates the shell and keeps Products run-scoped when no persisted catalog exists", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ items: [] }) }))
     const user = userEvent.setup()
     window.history.pushState({}, "", "/")
@@ -34,10 +34,7 @@ describe("App", () => {
     expect(await screen.findByText(/no persisted runs yet/i)).toBeInTheDocument()
     await user.click(screen.getByRole("link", { name: /products/i }))
 
-    expect(screen.getByText("Marine Sealant 3 oz")).toBeInTheDocument()
-    expect(screen.getAllByText("VERIFIED").length).toBeGreaterThan(0)
-    expect(screen.getAllByText("INFERRED").length).toBeGreaterThan(0)
-    expect(screen.getByText("NOT FOUND")).toBeInTheDocument()
+    expect(await screen.findByText(/no persisted runs yet/i)).toBeInTheDocument()
   })
 
   it("dashboard renders real run analytics from the API, not demo KPIs", async () => {

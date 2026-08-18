@@ -32,7 +32,13 @@ export interface RecordOut {
   supplier_sku: string | null
   asin: FieldValueOut
   upc: FieldValueOut
+  title?: FieldValueOut
+  brand?: FieldValueOut
+  category?: FieldValueOut
   weight: FieldValueOut
+  height?: FieldValueOut
+  width?: FieldValueOut
+  length?: FieldValueOut
   selling_price: FieldValueOut
   cog: string | null
   shipping_per_unit: string | null
@@ -84,18 +90,6 @@ export type RunState =
 export type ProvenanceStatus = "VERIFIED" | "INFERRED" | "NOT_FOUND"
 export type Decision = "BUY" | "REVIEW" | "PASS"
 
-export interface ProductRow {
-  sku: string
-  product: string
-  brand: string
-  cost: string
-  asin: string | null
-  asinStatus: ProvenanceStatus
-  hazmat: boolean
-  bulky: boolean
-  decision: Decision
-}
-
 // GET /api/v1/runs -- real ExecutionRun fields (API_CONTRACT.md §2b).
 // Deliberately not "created_at"/"valid"/"excluded": those have no
 // domain equivalent (see docs/FRONTEND_BACKEND_HANDOFF.md §6).
@@ -123,20 +117,4 @@ export interface RunsListResponse {
 export interface RunRecordsResponse {
   execution_id: string
   records: RecordOut[]
-}
-
-export interface ProductListItem {
-  record_ref: string
-  supplier_sku: string | null
-  title: FieldValueOut
-  brand: FieldValueOut
-  cog: string | null
-  asin: FieldValueOut
-  hazmat_status: string | null
-  bulky_status: string | null
-  decision: string | null
-}
-
-export interface ProductsResponse {
-  items: ProductListItem[]
 }

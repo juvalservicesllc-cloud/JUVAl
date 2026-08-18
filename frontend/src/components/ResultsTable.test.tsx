@@ -42,7 +42,7 @@ describe("ResultsTable", () => {
       />,
     )
     expect(screen.getByText(/B0TESTAAA1/)).toBeInTheDocument()
-    expect(screen.getByText(/\[VERIFIED\]/)).toBeInTheDocument()
+    expect(screen.getByLabelText("Status: VERIFIED")).toBeInTheDocument()
   })
 
   it("shows NOT_FOUND explicitly instead of hiding a missing value", () => {
@@ -51,7 +51,7 @@ describe("ResultsTable", () => {
         records={[record({ asin: { value: null, status: "NOT_FOUND" } })]}
       />,
     )
-    expect(screen.getByText(/\[NOT_FOUND\]/)).toBeInTheDocument()
+    expect(screen.getByLabelText("Status: NOT FOUND")).toBeInTheDocument()
   })
 
   it("shows decision reasons and issues when present", () => {

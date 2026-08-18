@@ -80,7 +80,7 @@ describe("RunDetailPage", () => {
     expect(await screen.findByText("PARTIAL SUCCESS")).toBeInTheDocument()
     expect(screen.getByText("catalog.xlsx")).toBeInTheDocument()
     expect(screen.getByText(/B0TESTAAA1/)).toBeInTheDocument()
-    expect(screen.getAllByText(/\[VERIFIED\]/).length).toBeGreaterThan(0)
+    expect(screen.getAllByLabelText("Status: VERIFIED").length).toBeGreaterThan(0)
   })
 
   it("shows the decision and provenance without collapsing HAZMAT severity into a verified fact", async () => {
@@ -97,7 +97,7 @@ describe("RunDetailPage", () => {
     stubFetch({ ok: true, status: 200, body: RUN }, { ok: true, status: 200, body: { execution_id: "run-1", records: [] } })
     renderAt("/runs/run-1")
 
-    expect(await screen.findByText(/sin registros procesados/i)).toBeInTheDocument()
+    expect(await screen.findByText(/no processed records/i)).toBeInTheDocument()
   })
 
   it("shows a not-found state for an unknown execution id", async () => {
