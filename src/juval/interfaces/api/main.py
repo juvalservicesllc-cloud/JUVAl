@@ -26,7 +26,7 @@ import json
 import logging
 import os
 import zipfile
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -39,6 +39,7 @@ from juval.application.record_snapshot import record_to_snapshot
 from juval.application.run_pipeline import run_pipeline
 from juval.domain.execution_run import ExecutionStatus
 from juval.application.execution_run_store import ExecutionRunStore
+from juval.application.record_snapshot_store import RecordSnapshotQuery
 from juval.infrastructure.excel.exporter import export_excel
 from juval.infrastructure.logging.sqlite_execution_run_store import SqliteExecutionRunStore
 from juval.infrastructure.persistence.supabase_execution_run_store import SupabaseExecutionRunStore
@@ -49,6 +50,8 @@ from .models import (
     FeesIn,
     RecordOut,
     RunFailedResponse,
+    RecordPaginationOut,
+    RunAnalyticsOut,
     RunRecordsResponse,
     RunResponse,
     RunsListResponse,
@@ -58,6 +61,8 @@ from .models import (
 
 _RUNS_LIST_DEFAULT_LIMIT = 20
 _RUNS_LIST_MAX_LIMIT = 100
+_RECORDS_LIST_DEFAULT_LIMIT = 50
+_RECORDS_LIST_MAX_LIMIT = 100
 
 logger = logging.getLogger("juval.interfaces.api")
 
@@ -256,14 +261,39 @@ async def get_run(execution_id: str, _principal=Depends(require(RUNS_READ))) -> 
 
 
 @app.get("/api/v1/runs/{execution_id}/records", response_model=RunRecordsResponse)
-async def get_run_records(execution_id: str, _principal=Depends(require(RUNS_READ))) -> JSONResponse:
+async def get_run_records(
+    execution_id: str,
+    limit: int = Query(_RECORDS_LIST_DEFAULT_LIMIT, ge=1, le=_RECORDS_LIST_MAX_LIMIT),
+    offset: int = Query(0, ge=0),
+    search: Optional[str] = Query(None, max_length=200),
+    decision: Optional[Literal["BUY", "REVIEW", "PASS"]] = None,
+    sort: Literal["record_ref", "sku", "decision", "profit", "roi", "margin"] = "record_ref",
+    direction: Literal["asc", "desc"] = "asc",
+    _principal=Depends(require(RUNS_READ)),
+) -> JSONResponse:
     store = _require_execution_run_store()
     run = store.load_execution_run(execution_id)
     if run is None:
         raise HTTPException(status_code=404, detail="unknown execution_id")
 
-    snapshots = store.load_records(execution_id)
-    response = RunRecordsResponse(execution_id=execution_id, records=[RecordOut(**s) for s in snapshots])
+    page = store.list_records(
+        execution_id,
+        RecordSnapshotQuery(limit=limit, offset=offset, search=search, decision=decision, sort=sort, direction=direction),
+    )
+    response = RunRecordsResponse(
+        execution_id=execution_id,
+        records=[RecordOut(**snapshot) for snapshot in page.items],
+        pagination=RecordPaginationOut(limit=limit, offset=offset, total=page.total, has_more=offset + len(page.items) < page.total),
+    )
+    return JSONResponse(status_code=200, content=response.model_dump(mode="json"))
+
+
+@app.get("/api/v1/runs/{execution_id}/analytics", response_model=RunAnalyticsOut)
+async def get_run_analytics(execution_id: str, _principal=Depends(require(RUNS_READ))) -> JSONResponse:
+    store = _require_execution_run_store()
+    if store.load_execution_run(execution_id) is None:
+        raise HTTPException(status_code=404, detail="unknown execution_id")
+    response = RunAnalyticsOut(execution_id=execution_id, **store.get_run_analytics(execution_id))
     return JSONResponse(status_code=200, content=response.model_dump(mode="json"))
 
 

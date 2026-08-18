@@ -17,7 +17,7 @@ this layer either).
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel
 
@@ -57,7 +57,18 @@ class RecordOut(BaseModel):
     supplier_sku: Optional[str] = None
     asin: FieldValueOut
     upc: FieldValueOut
+    # title/brand/category: whatever the supplier declared in the import
+    # file (domain.product.ProductInfo) -- never Amazon-confirmed data;
+    # no separate AmazonProductInfo concept exists yet (PRODUCT_CAPABILITY_MATRIX.md §5).
+    title: FieldValueOut = FieldValueOut()
+    brand: FieldValueOut = FieldValueOut()
+    category: FieldValueOut = FieldValueOut()
     weight: FieldValueOut
+    # height/width/length: canonical units (domain.units), inches -- same
+    # convention as weight (pounds), not re-stated per field.
+    height: FieldValueOut = FieldValueOut()
+    width: FieldValueOut = FieldValueOut()
+    length: FieldValueOut = FieldValueOut()
     selling_price: FieldValueOut
     cog: Optional[Decimal] = None
     shipping_per_unit: Optional[Decimal] = None
@@ -125,3 +136,21 @@ class RunsListResponse(BaseModel):
 class RunRecordsResponse(BaseModel):
     execution_id: str
     records: list[RecordOut]
+    pagination: "RecordPaginationOut"
+
+
+class RecordPaginationOut(BaseModel):
+    limit: int
+    offset: int
+    total: int
+    has_more: bool
+
+
+class RunAnalyticsOut(BaseModel):
+    execution_id: str
+    records: dict[str, int]
+    decisions: dict[str, int]
+    risks: dict[str, dict[str, dict[str, int]]]
+    provenance: dict[str, dict[str, int]]
+    data_quality: dict[str, int]
+    profitability: dict[str, dict[str, int | str | None]]

@@ -303,3 +303,39 @@ tomadas y no repetidas aquí en detalle (ver ADR-019 completo):
   transacción).
 - Lectura de records vive en un port separado y pequeño
   (`application/record_snapshot_store.py::RecordSnapshotStore`).
+
+## 10. Record pagination (2026-08-18)
+
+`GET /api/v1/runs/{execution_id}/records` is paginated in the persistence
+adapter, not in memory after loading a whole execution. The response keeps
+`records` for compatibility and adds `pagination`:
+
+```json
+{"execution_id":"...","records":[{"record_ref":"row_2:SUP-001"}],"pagination":{"limit":50,"offset":0,"total":124,"has_more":true}}
+```
+
+| Parameter | Default | Accepted values |
+|---|---:|---|
+| `limit` | 50 | integer 1-100 |
+| `offset` | 0 | integer >= 0 |
+| `search` | — | maximum 200 characters; record_ref, SKU, title, brand, ASIN |
+| `decision` | — | `BUY`, `REVIEW`, `PASS` |
+| `sort` | `record_ref` | `record_ref`, `sku`, `decision`, `profit`, `roi`, `margin` |
+| `direction` | `asc` | `asc`, `desc` |
+
+Offset is used instead of a cursor because persisted run snapshots are
+immutable, making every page deterministic and reproducible. Each adapter
+uses a static SQL allow-list for sorting; no client input is interpolated as
+a SQL identifier. Invalid query values receive 422 before the store is read.
+
+## 11. Run analytics
+
+`GET /api/v1/runs/{execution_id}/analytics` returns one database-aggregated,
+run-scoped summary: record total; decision/risk/provenance counts; existing
+issue counts; and verified-only profit/ROI/margin summaries. `NOT_FOUND`,
+`INVALID`, and null values never participate in numeric summaries; zero does.
+`INFERRED` remains visible in provenance counts but is excluded from financial
+averages rather than presented as equivalent to verified data. Unknown runs
+return the existing 404 `unknown execution_id`; empty runs return zero counts
+and null numeric summaries. No Decision Score, quality score, or AI output is
+included.

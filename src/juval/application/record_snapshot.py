@@ -53,6 +53,7 @@ def record_to_snapshot(record: SourcingRecord) -> dict[str, Any]:
     """Same shape as interfaces/api/models.py::RecordOut, as a plain dict."""
 
     ident = record.product.identification
+    info = record.product.info
     dims = record.product.dimensions
     price = record.product.price
 
@@ -86,7 +87,13 @@ def record_to_snapshot(record: SourcingRecord) -> dict[str, Any]:
         "supplier_sku": ident.supplier_sku,
         "asin": _fv(ident.asin),
         "upc": _fv(ident.upc),
+        "title": _fv(info.title),
+        "brand": _fv(info.brand),
+        "category": _fv(info.category),
         "weight": _fv(dims.weight),
+        "height": _fv(dims.height),
+        "width": _fv(dims.width),
+        "length": _fv(dims.length),
         "selling_price": _fv(price.selling_price_used),
         "cog": str(cog) if cog is not None else None,
         "shipping_per_unit": str(shipping_per_unit) if shipping_per_unit is not None else None,

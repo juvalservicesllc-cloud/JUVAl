@@ -47,8 +47,10 @@ from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Mapping, Optional, Sequence
+from decimal import Decimal, InvalidOperation
 
 from juval.domain.execution_run import ExecutionRun, ExecutionStatus
+from juval.application.record_snapshot_store import RecordSnapshotPage, RecordSnapshotQuery
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS execution_runs (
@@ -116,6 +118,15 @@ _SELECT_RECORDS = """
 SELECT snapshot FROM execution_run_records
 WHERE execution_id = ? ORDER BY ordinal ASC
 """
+
+_SORT_EXPRESSIONS = {
+    "record_ref": "record_ref",
+    "sku": "json_extract(snapshot, '$.supplier_sku')",
+    "decision": "json_extract(snapshot, '$.decision')",
+    "profit": "CAST(json_extract(snapshot, '$.profit.value') AS REAL)",
+    "roi": "CAST(json_extract(snapshot, '$.roi.value') AS REAL)",
+    "margin": "CAST(json_extract(snapshot, '$.margin.value') AS REAL)",
+}
 
 
 def _row_to_run(row: tuple) -> ExecutionRun:
@@ -208,3 +219,44 @@ class SqliteExecutionRunStore:
         with closing(sqlite3.connect(self._db_path)) as conn:
             rows = conn.execute(_SELECT_RECORDS, (execution_id,)).fetchall()
         return [json.loads(snapshot) for (snapshot,) in rows]
+
+    def list_records(self, execution_id: str, query: RecordSnapshotQuery) -> RecordSnapshotPage:
+        """Query JSON snapshots in SQLite; never load a whole run for a page."""
+        clauses = ["execution_id = ?"]
+        params: list[Any] = [execution_id]
+        if query.decision is not None:
+            clauses.append("json_extract(snapshot, '$.decision') = ?")
+            params.append(query.decision)
+        if query.search:
+            clauses.append("(record_ref LIKE ? OR json_extract(snapshot, '$.supplier_sku') LIKE ? OR json_extract(snapshot, '$.title.value') LIKE ? OR json_extract(snapshot, '$.brand.value') LIKE ? OR json_extract(snapshot, '$.asin.value') LIKE ?)")
+            params.extend([f"%{query.search}%"] * 5)
+        where = " AND ".join(clauses)
+        expression = _SORT_EXPRESSIONS[query.sort]
+        order = query.direction.upper()
+        sql = f"SELECT snapshot FROM execution_run_records WHERE {where} ORDER BY {expression} {order}, ordinal ASC LIMIT ? OFFSET ?"
+        count_sql = f"SELECT COUNT(*) FROM execution_run_records WHERE {where}"
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            total = conn.execute(count_sql, params).fetchone()[0]
+            rows = conn.execute(sql, [*params, query.limit, query.offset]).fetchall()
+        return RecordSnapshotPage(items=[json.loads(snapshot) for (snapshot,) in rows], total=total)
+
+    def get_run_analytics(self, execution_id: str) -> dict[str, Any]:
+        """Use SQL grouping; only numeric value/status pairs leave SQLite."""
+        fields = ("asin", "weight", "selling_price", "profit", "roi", "margin")
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            total = conn.execute("SELECT COUNT(*) FROM execution_run_records WHERE execution_id=?", (execution_id,)).fetchone()[0]
+            def grouped(expression):
+                return {str(k) if k is not None else "UNKNOWN": n for k, n in conn.execute(f"SELECT {expression}, COUNT(*) FROM execution_run_records WHERE execution_id=? GROUP BY {expression}", (execution_id,))}
+            decisions = grouped("json_extract(snapshot, '$.decision')")
+            risks = {name: {"status": grouped(f"json_extract(snapshot, '$.{name}_status')"), "severity": grouped(f"json_extract(snapshot, '$.{name}_severity')")} for name in ("hazmat", "bulky")}
+            provenance = {field: grouped(f"json_extract(snapshot, '$.{field}.status')") for field in fields}
+            quality = conn.execute("SELECT COALESCE(SUM(CASE WHEN CAST(json_extract(snapshot, '$.issue_count') AS INTEGER)>0 THEN 1 ELSE 0 END),0), COALESCE(SUM(CAST(json_extract(snapshot, '$.issue_count') AS INTEGER)),0) FROM execution_run_records WHERE execution_id=?", (execution_id,)).fetchone()
+            profitability = {}
+            for field in ("profit", "roi", "margin"):
+                rows = conn.execute(f"SELECT json_extract(snapshot, '$.{field}.value') FROM execution_run_records WHERE execution_id=? AND json_extract(snapshot, '$.{field}.status')='VERIFIED'", (execution_id,)).fetchall()
+                values = []
+                for (raw,) in rows:
+                    try: values.append(Decimal(str(raw)))
+                    except (InvalidOperation, TypeError): pass
+                profitability[field] = {"count": len(values), "sum": str(sum(values)) if values else None, "average": str(sum(values) / len(values)) if values else None, "minimum": str(min(values)) if values else None, "maximum": str(max(values)) if values else None}
+        return {"records": {"total_records": total}, "decisions": decisions, "risks": risks, "provenance": provenance, "data_quality": {"records_with_issues": quality[0], "total_issue_count": quality[1]}, "profitability": profitability}

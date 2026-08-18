@@ -37,11 +37,13 @@ JSONB automatically via `psycopg.types.json.Json`.
 from __future__ import annotations
 
 from typing import Any, Mapping, Optional, Sequence
+from decimal import Decimal, InvalidOperation
 
 import psycopg
 from psycopg.types.json import Json
 
 from juval.domain.execution_run import ExecutionRun, ExecutionStatus
+from juval.application.record_snapshot_store import RecordSnapshotPage, RecordSnapshotQuery
 
 _INSERT = """
 INSERT INTO execution_runs (
@@ -77,6 +79,15 @@ _SELECT_RECORDS = """
 SELECT snapshot FROM execution_run_records
 WHERE execution_id = %s ORDER BY ordinal ASC
 """
+
+_SORT_EXPRESSIONS = {
+    "record_ref": "record_ref",
+    "sku": "snapshot->>'supplier_sku'",
+    "decision": "snapshot->>'decision'",
+    "profit": "NULLIF(snapshot->'profit'->>'value', '')::numeric",
+    "roi": "NULLIF(snapshot->'roi'->>'value', '')::numeric",
+    "margin": "NULLIF(snapshot->'margin'->>'value', '')::numeric",
+}
 
 
 def _row_to_run(row: tuple) -> ExecutionRun:
@@ -165,3 +176,42 @@ class SupabaseExecutionRunStore:
         with psycopg.connect(self._connection_string) as conn:
             rows = conn.execute(_SELECT_RECORDS, (execution_id,)).fetchall()
         return [snapshot for (snapshot,) in rows]
+
+    def list_records(self, execution_id: str, query: RecordSnapshotQuery) -> RecordSnapshotPage:
+        clauses = ["execution_id = %s"]
+        params: list[Any] = [execution_id]
+        if query.decision is not None:
+            clauses.append("snapshot->>'decision' = %s")
+            params.append(query.decision)
+        if query.search:
+            clauses.append("(record_ref ILIKE %s OR snapshot->>'supplier_sku' ILIKE %s OR snapshot->'title'->>'value' ILIKE %s OR snapshot->'brand'->>'value' ILIKE %s OR snapshot->'asin'->>'value' ILIKE %s)")
+            params.extend([f"%{query.search}%"] * 5)
+        where = " AND ".join(clauses)
+        expression = _SORT_EXPRESSIONS[query.sort]
+        order = query.direction.upper()
+        sql = f"SELECT snapshot FROM execution_run_records WHERE {where} ORDER BY {expression} {order} NULLS LAST, ordinal ASC LIMIT %s OFFSET %s"
+        count_sql = f"SELECT COUNT(*) FROM execution_run_records WHERE {where}"
+        with psycopg.connect(self._connection_string) as conn:
+            total = conn.execute(count_sql, params).fetchone()[0]
+            rows = conn.execute(sql, [*params, query.limit, query.offset]).fetchall()
+        return RecordSnapshotPage(items=[snapshot for (snapshot,) in rows], total=total)
+
+    def get_run_analytics(self, execution_id: str) -> dict[str, Any]:
+        fields = ("asin", "weight", "selling_price", "profit", "roi", "margin")
+        with psycopg.connect(self._connection_string) as conn:
+            total = conn.execute("SELECT COUNT(*) FROM execution_run_records WHERE execution_id=%s", (execution_id,)).fetchone()[0]
+            def grouped(expression):
+                return {str(k) if k is not None else "UNKNOWN": n for k, n in conn.execute(f"SELECT {expression}, COUNT(*) FROM execution_run_records WHERE execution_id=%s GROUP BY {expression}", (execution_id,))}
+            decisions = grouped("snapshot->>'decision'")
+            risks = {name: {"status": grouped(f"snapshot->>'{name}_status'"), "severity": grouped(f"snapshot->>'{name}_severity'")} for name in ("hazmat", "bulky")}
+            provenance = {field: grouped(f"snapshot->'{field}'->>'status'") for field in fields}
+            quality = conn.execute("SELECT COALESCE(SUM(CASE WHEN (snapshot->>'issue_count')::int>0 THEN 1 ELSE 0 END),0), COALESCE(SUM((snapshot->>'issue_count')::int),0) FROM execution_run_records WHERE execution_id=%s", (execution_id,)).fetchone()
+            profitability = {}
+            for field in ("profit", "roi", "margin"):
+                rows = conn.execute(f"SELECT snapshot->'{field}'->>'value' FROM execution_run_records WHERE execution_id=%s AND snapshot->'{field}'->>'status'='VERIFIED'", (execution_id,)).fetchall()
+                values = []
+                for (raw,) in rows:
+                    try: values.append(Decimal(raw))
+                    except (InvalidOperation, TypeError): pass
+                profitability[field] = {"count": len(values), "sum": str(sum(values)) if values else None, "average": str(sum(values) / len(values)) if values else None, "minimum": str(min(values)) if values else None, "maximum": str(max(values)) if values else None}
+        return {"records": {"total_records": total}, "decisions": decisions, "risks": risks, "provenance": provenance, "data_quality": {"records_with_issues": quality[0], "total_issue_count": quality[1]}, "profitability": profitability}

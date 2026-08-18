@@ -278,6 +278,79 @@ def test_get_run_records_unknown_execution_id_returns_404(client):
     assert resp.status_code == 404
 
 
+def test_records_include_title_brand_category_dimensions(client):
+    """P0 Record Intelligence (PRODUCT_CAPABILITY_MATRIX.md §3): these were
+    silently dropped between the domain and the API/persisted snapshot --
+    confirm they now survive both the live-upload path and the
+    persist-then-reload path, with real values from the fixture."""
+
+    resp = _upload(client, persist="true")
+    body = resp.json()
+    live_record = next(r for r in body["records"] if r["record_ref"].endswith("SUP-001"))
+
+    for field_name, expected in (
+        ("title", "JUVAL TEST WIDGET ALPHA"),
+        ("brand", "JuvalTestBrand"),
+        ("category", "Home"),
+        ("height", "4"),
+        ("width", "3"),
+        ("length", "2"),
+    ):
+        assert live_record[field_name] == {"value": expected, "status": "VERIFIED"}, field_name
+
+    records_resp = client.get(f"/api/v1/runs/{body['execution_id']}/records")
+    reloaded_record = next(
+        r for r in records_resp.json()["records"] if r["record_ref"].endswith("SUP-001")
+    )
+    assert reloaded_record["title"] == live_record["title"]
+    assert reloaded_record["height"] == live_record["height"]
+
+
+def test_old_snapshot_missing_new_fields_still_loads(client, tmp_path):
+    """Backward compatibility: a snapshot persisted before title/brand/
+    category/height/width/length existed in the contract has none of those
+    keys in its stored JSON. Loading it must not fail -- the new fields
+    must come back as {value: None, status: None}, never a 500."""
+
+    old_shape_snapshot = {
+        "record_ref": "row_OLD-001",
+        "marketplace": "US",
+        "supplier_sku": "OLD-001",
+        "asin": {"value": "B0OLDSHAPE1", "status": "VERIFIED"},
+        "upc": {"value": None, "status": "NOT_FOUND"},
+        "weight": {"value": "1.5", "status": "VERIFIED"},
+        "selling_price": {"value": "19.99", "status": "VERIFIED"},
+        "cog": "5",
+        "shipping_per_unit": "1",
+        "profit": {"value": "8.99", "status": "VERIFIED"},
+        "roi": {"value": "1.5", "status": "VERIFIED"},
+        "margin": {"value": "0.45", "status": "VERIFIED"},
+        "break_even_price": {"value": "10", "status": "VERIFIED"},
+        "max_cog_target_profit": {"value": "20", "status": "VERIFIED"},
+        "max_cog_target_roi": {"value": "20", "status": "VERIFIED"},
+        "hazmat_status": "ABSENT",
+        "hazmat_severity": None,
+        "bulky_status": "ABSENT",
+        "bulky_severity": None,
+        "decision": "BUY",
+        "decision_reasons": [],
+        "issue_count": 0,
+        "issues": [],
+        # no title/brand/category/height/width/length -- pre-P0 shape.
+    }
+    store = SqliteExecutionRunStore(tmp_path / "execution_runs.db")
+    run = _run_without_records()
+    store.save_execution_run(run, records=[old_shape_snapshot])
+
+    resp = client.get(f"/api/v1/runs/{run.execution_id}/records")
+
+    assert resp.status_code == 200
+    record = resp.json()["records"][0]
+    assert record["asin"] == {"value": "B0OLDSHAPE1", "status": "VERIFIED"}
+    for field_name in ("title", "brand", "category", "height", "width", "length"):
+        assert record[field_name] == {"value": None, "status": None}, field_name
+
+
 def test_get_run_records_for_run_with_no_persisted_records_returns_empty_list(client, tmp_path):
     store = SqliteExecutionRunStore(tmp_path / "execution_runs.db")
     store.save_execution_run(_run_without_records())

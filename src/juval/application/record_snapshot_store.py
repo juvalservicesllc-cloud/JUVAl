@@ -13,7 +13,35 @@ One method only, justified by the one real caller
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from dataclasses import dataclass
+from typing import Any, Literal, Protocol
+
+
+RecordSort = Literal["record_ref", "sku", "decision", "profit", "roi", "margin"]
+SortDirection = Literal["asc", "desc"]
+
+
+@dataclass(frozen=True)
+class RecordSnapshotQuery:
+    """Persistence-level query for immutable snapshots of one run.
+
+    Offset pagination is intentional: a persisted execution run is immutable,
+    so ordinal order cannot drift while an operator pages through it.  It also
+    matches the existing `(execution_id, ordinal)` index in both stores.
+    """
+
+    limit: int
+    offset: int = 0
+    search: str | None = None
+    decision: str | None = None
+    sort: RecordSort = "record_ref"
+    direction: SortDirection = "asc"
+
+
+@dataclass(frozen=True)
+class RecordSnapshotPage:
+    items: list[dict[str, Any]]
+    total: int
 
 
 class RecordSnapshotStore(Protocol):
@@ -26,4 +54,16 @@ class RecordSnapshotStore(Protocol):
         not this port's (same "absence is not an exception" convention
         as ExecutionRunStore.load_execution_run).
         """
+        ...
+
+    def list_records(self, execution_id: str, query: RecordSnapshotQuery) -> RecordSnapshotPage:
+        """Return one backend-paginated snapshot page and its exact total.
+
+        The query is deliberately run-scoped and bounded by the API before it
+        reaches an adapter; it is not a generic product repository.
+        """
+        ...
+
+    def get_run_analytics(self, execution_id: str) -> dict[str, Any]:
+        """Aggregate canonical snapshot fields for one immutable execution."""
         ...
