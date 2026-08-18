@@ -716,8 +716,8 @@ The remaining path is gated on user actions, in dependency order:
 |---|---|---|---|
 | **E-1** | Approve ADR-022 and purchase Okta Workforce Identity | RF-03, RF-04 | $1,500/yr minimum |
 | **E-2** | Configure the tenant to Amazon's values (12 chars, all four character classes, name exclusion, history 10, min age 1 day, max age 365 days, MFA all accounts, lockout ≤10) and export the policy as evidence | RF-03 | — |
-| **E-3** | Name the Incident Commander, Security Owner, IMPOC and Deputy; approve the incident response plan | RF-01, RF-05 | — |
-| **E-4** | Run the first tabletop exercise and file the record (**never send a test mail to `security@amazon.com`**) | RF-05 | — |
+| **E-3** | Name the Incident Commander, Security Owner, IMPOC and Deputy; approve the incident response plan | RF-01, RF-05 | **PREP READY 2026-08-18** — fill-in form and approval statement prepared: `templates/IRP_ROLE_ASSIGNMENT_AND_APPROVAL_FORM.md`. Still `PENDING` — no names/approval exist yet; the agent cannot supply them (§22.5) |
+| **E-4** | Run the first tabletop exercise and file the record (**never send a test mail to `security@amazon.com`**) | RF-05 | **PREP READY 2026-08-18** — scenario, injects and reference answers prepared: `TABLETOP_001_PREPARED_SCENARIO.md`. Still `OPEN` — cannot run before E-3 names an IC/IMPOC/Deputy to play |
 | **E-5** | Resolve `NETWORK_SECURITY.md` F-01: patch the workstation and move to a supported OS, or formally exclude it from the boundary | RF-02 | — |
 | **E-6** | ~~`railway login` and deploy the backend with `JUVAL_AUTH_MODE=oidc` and~~ `JUVAL_EXECUTION_STORE=supabase` | RF-02 | **PARTIALLY DONE 2026-08-18** — deployed with `JUVAL_EXECUTION_STORE=supabase`; `JUVAL_AUTH_MODE=oidc` deliberately **not** set (would break every request with no IdP to validate against — see `SECRETS.md` §8 S-4). RF-03/RF-04 remain blocked on the IdP, not on deployment. |
 | **E-7** | After E-6: apply the migrations to the live Supabase project, confirm RLS is enabled with no permissive policy added via the dashboard (`NETWORK_SECURITY.md` §3.1), verify TLS, capture provider configuration evidence | RF-02, RF-04 | **DONE 2026-08-18** — see `NETWORK_SECURITY.md` §3/§3.1 |
@@ -835,3 +835,23 @@ AMAZON_COMPLIANCE_READINESS = NOT_READY
 
 `IDENTITY SECURITY GATE = BLOCKED` (unchanged)
 `REAPPLICATION GATE = BLOCKED` (unchanged)
+
+## 23. E-3/E-4 preparation package (2026-08-18)
+
+Prepared so the user can complete E-3 and E-4 (§20.5) without the agent
+inventing any person, approval, or result:
+
+- `templates/IRP_ROLE_ASSIGNMENT_AND_APPROVAL_FORM.md` — blank fill-in
+  form for the five roles in `INCIDENT_RESPONSE_PLAN.md` §2, plus the
+  exact plan-approval statement derived from §12 A-3.
+- `TABLETOP_001_PREPARED_SCENARIO.md` — a specific scenario (credential
+  string committed to JUVAl's genuinely-public repository), built from
+  facts already true of JUVAl today, with three injects and facilitator
+  reference answers. Contains no actual results — those fields are blank
+  pending an actual run.
+
+Neither artifact changes `INCIDENT_RESPONSE_OWNERS`,
+`INCIDENT_RESPONSE_APPROVAL`, or `TABLETOP` — all three require a human
+action this pass did not and could not perform. See the compliance
+report accompanying this commit for the exact next action requested of
+the user.
