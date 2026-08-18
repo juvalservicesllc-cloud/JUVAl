@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Registro de Tabletop — JUVAl</title>
+<style>
+  body { font-family: system-ui, Arial, sans-serif; max-width: 780px; margin: 30px auto; padding: 0 16px; color: #222; }
+  h1 { font-size: 22px; }
+  p.hint { color: #555; font-size: 14px; }
+  fieldset { border: 1px solid #ccc; border-radius: 8px; margin: 18px 0; padding: 14px 16px; }
+  legend { font-weight: bold; padding: 0 6px; }
+  label { display: block; margin-top: 10px; font-weight: 600; font-size: 14px; }
+  input[type=text], input[type=date], textarea {
+    width: 100%; box-sizing: border-box; padding: 8px; margin-top: 4px;
+    border: 1px solid #bbb; border-radius: 5px; font-size: 14px; font-family: inherit;
+  }
+  textarea { min-height: 60px; resize: vertical; }
+  .row3 { display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 8px; }
+  .row5 { display: grid; grid-template-columns: 0.5fr 1.5fr 1fr 1.5fr 1fr 1fr; gap: 8px; }
+  .row5 span { font-size: 11px; color: #777; }
+  .step { border-top: 1px dashed #ddd; padding-top: 8px; margin-top: 8px; }
+  .step:first-child { border-top: none; margin-top: 0; }
+  .checks label { font-weight: normal; display: flex; align-items: center; gap: 6px; }
+  .checks input { width: auto; }
+  button { margin-top: 20px; padding: 12px 20px; font-size: 15px; background: #2563eb; color: white;
+    border: none; border-radius: 6px; cursor: pointer; }
+  button:hover { background: #1d4ed8; }
+  .note { background: #fff8e1; border: 1px solid #f0c93a; border-radius: 6px; padding: 10px 14px; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<h1>Registro de ejercicio Tabletop — JUVAl</h1>
+<p class="hint">
+  Completa los campos (los textos grises son ejemplos, no los dejes tal cual).
+  Al final presiona <b>"Generar y descargar archivo"</b>: se descargará un
+  archivo <code>.md</code> con el nombre correcto. Ese archivo hay que
+  moverlo/guardarlo dentro de <code>docs/compliance/</code> en el proyecto
+  (la página no puede elegir la carpeta por ti — eso lo bloquea el navegador).
+</p>
+
+<div class="note">
+  Escenario preparado como referencia: <code>TABLETOP_001_PREPARED_SCENARIO.md</code>.
+  Marca solo lo que realmente ocurrió durante el ejercicio.
+</div>
+
+<form id="f">
+
+<fieldset>
+  <legend>Datos del ejercicio</legend>
+  <label>Fecha (UTC)</label>
+  <input type="date" id="date" required>
+
+  <label>Facilitador</label>
+  <input type="text" id="facilitator" placeholder="Ej.: Daniel E. Liendo">
+
+  <label>Participantes (roles)</label>
+  <input type="text" id="participants" placeholder="Ej.: IC/Security Owner/IMPOC/Technical Responder — Daniel E. Liendo; Deputy — Jocsimar C. Gonzalez">
+
+  <label>Versión del plan ejercitado</label>
+  <input type="text" id="version" value="0.1.0-DRAFT">
+
+  <label>Duración</label>
+  <input type="text" id="duration" placeholder="Ej.: 40 minutos">
+</fieldset>
+
+<fieldset>
+  <legend>Escenario usado</legend>
+  <textarea id="scenario" placeholder="Ej.: Alerta de GitHub secret scanning por un posible token SP-API en un commit del repositorio público, subido 40 minutos antes."></textarea>
+</fieldset>
+
+<fieldset>
+  <legend>Recorrido (walkthrough)</legend>
+  <p class="hint">Para cada paso: ¿se realizó?, tiempo desde la detección, notas.</p>
+  <div id="steps"></div>
+
+  <label>Tiempo desde la detección simulada hasta redactar (no enviar) la notificación a Amazon</label>
+  <input type="text" id="notifTime" placeholder="Ej.: N/A — no se requirió notificación porque la determinación fue RULED_OUT">
+</fieldset>
+
+<fieldset>
+  <legend>Confirmación</legend>
+  <div class="checks">
+    <label><input type="checkbox" id="c1"> No se envió ningún mensaje real a security@amazon.com</label>
+    <label><input type="checkbox" id="c2"> Ninguna credencial real fue rotada o expuesta durante el ejercicio</label>
+    <label><input type="checkbox" id="c3"> Ningún valor secreto real quedó escrito en el ejercicio</label>
+  </div>
+</fieldset>
+
+<fieldset>
+  <legend>Gaps encontrados</legend>
+  <p class="hint">Si no hay filas usadas, explica igual qué se probó y por qué no salió nada (un ejercicio "sin gaps" sin detalle no es creíble).</p>
+  <div id="gaps"></div>
+</fieldset>
+
+<fieldset>
+  <legend>Cambios resultantes al plan</legend>
+  <div class="row3">
+    <input type="text" id="chg1" placeholder="Ej.: ninguno">
+    <input type="text" id="chg2" placeholder="Sección (Ej.: —)">
+    <input type="text" id="chg3" placeholder="Nueva versión del plan (Ej.: 0.1.0-DRAFT sin cambios)">
+  </div>
+</fieldset>
+
+<button type="button" onclick="generar()">Generar y descargar archivo</button>
+</form>
+
+<script>
+const stepDefs = [
+  ["Detección registrada, IC asignado", "§4.1"],
+  ["Acciones de contención identificadas", "§4.2"],
+  ["Matriz de revocación de credenciales recorrida", "§4.3"],
+  ["Determinación de Información de Amazon", "§4.4"],
+  ["Preservación de evidencia", "§4.5"],
+  ["Notificación a Amazon REDACTADA (nunca enviada)", "§5"],
+  ["Plan de recuperación indicado", "§4.6"],
+];
+const stepsDiv = document.getElementById("steps");
+stepDefs.forEach((s, i) => {
+  const d = document.createElement("div");
+  d.className = "step";
+  d.innerHTML = `
+    <strong>${s[0]}</strong> <span style="color:#888">(${s[1]})</span>
+    <div class="row3">
+      <select id="step${i}_done"><option value="">¿Se realizó?</option><option>Sí</option><option>No</option><option>N/A</option></select>
+      <input type="text" id="step${i}_time" placeholder="Ej.: 8 min">
+      <input type="text" id="step${i}_notes" placeholder="Ej.: notas de lo realmente ocurrido">
+    </div>`;
+  stepsDiv.appendChild(d);
+});
+
+const gapsDiv = document.getElementById("gaps");
+for (let i = 0; i < 3; i++) {
+  const d = document.createElement("div");
+  d.className = "step";
+  d.innerHTML = `
+    <div class="row5">
+      <input type="text" placeholder="#" value="${i+1}" id="gap${i}_n">
+      <input type="text" placeholder="Gap" id="gap${i}_desc">
+      <input type="text" placeholder="Severidad" id="gap${i}_sev">
+      <input type="text" placeholder="Acción correctiva" id="gap${i}_action">
+      <input type="text" placeholder="Owner" id="gap${i}_owner">
+      <input type="text" placeholder="Fecha límite" id="gap${i}_due">
+    </div>`;
+  gapsDiv.appendChild(d);
+}
+
+function v(id) { return document.getElementById(id).value.trim(); }
+function chk(id) { return document.getElementById(id).checked ? "x" : " "; }
+
+function generar() {
+  const date = v("date");
+  if (!date) { alert("Falta la fecha del ejercicio."); return; }
+  const compact = date.replaceAll("-", "");
+  const exerciseId = "JUVAL-TT-" + compact;
+
+  let walkRows = "";
+  stepDefs.forEach((s, i) => {
+    walkRows += `| ${s[0]} | ${s[1]} | ${v("step"+i+"_done")} | ${v("step"+i+"_time")} | ${v("step"+i+"_notes")} |\n`;
+  });
+
+  let gapRows = "";
+  let anyGap = false;
+  for (let i = 0; i < 3; i++) {
+    const desc = v("gap"+i+"_desc");
+    if (desc) {
+      anyGap = true;
+      gapRows += `| ${v("gap"+i+"_n")} | ${desc} | ${v("gap"+i+"_sev")} | ${v("gap"+i+"_action")} | ${v("gap"+i+"_owner")} | ${v("gap"+i+"_due")} |\n`;
+    }
+  }
+  if (!anyGap) gapRows = "| 1 | (ninguno reportado) | | | | |\n";
+
+  const md = `# Tabletop Exercise Record — \`${exerciseId}\`
+
+> Evidence for Amazon finding RF-05 (plan is exercised and reviewed).
+> Generado con TABLETOP_RECORD_FORM.html a partir de TABLETOP_001_PREPARED_SCENARIO.md.
+
+## Exercise metadata
+
+| Field | Value |
+|---|---|
+| Exercise ID | \`${exerciseId}\` |
+| Date (UTC) | ${date} |
+| Facilitator | ${v("facilitator")} |
+| Participants (roles) | ${v("participants")} |
+| Plan version exercised | ${v("version")} |
+| Duration | ${v("duration")} |
+
+## Scenario
+
+${v("scenario")}
+
+## Walkthrough
+
+| Step | Plan section | Performed? | Elapsed from "detection" | Notes |
+|---|---|---|---|---|
+${walkRows}
+**Time from simulated detection to a drafted Amazon notification:** ${v("notifTime")}
+
+## Confirmation
+
+- [${chk("c1")}] No message was actually sent to \`security@amazon.com\`.
+- [${chk("c2")}] No real credential was rotated or exposed during the exercise.
+- [${chk("c3")}] No secret value was written into any exercise artifact.
+
+## Gaps found
+
+| # | Gap | Severity | Corrective action | Owner | Due |
+|---|---|---|---|---|---|
+${gapRows}
+## Plan changes resulting
+
+| Change | Section | New plan version |
+|---|---|---|
+| ${v("chg1")} | ${v("chg2")} | ${v("chg3")} |
+`;
+
+  const blob = new Blob([md], { type: "text/markdown" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = exerciseId + ".md";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+</script>
+
+</body>
+</html>

@@ -4,7 +4,7 @@
 |---|---|
 | Document ID | `JUVAL-IRP` |
 | Version | `0.1.0-DRAFT` |
-| Status | **APPROVED** (2026-08-18, §12 A-3). Not yet fully evidenced as an Amazon control — the first tabletop exercise (§12 A-4) has not been run. |
+| Status | **APPROVED** (2026-08-18, §12 A-3). First tabletop exercise run 2026-08-18 (`JUVAL-TT-20260818`, §12 A-4). Not yet fully evidenced as an Amazon control — contact-detail custody outside this repository (§12 A-2) remains unconfirmed. |
 | Effective date | `2026-08-18` |
 | Last reviewed | `2026-08-18` |
 | Next review due | `2027-02-18` (six months — DPP §1.6, RF-05) |
@@ -17,13 +17,14 @@ Amazon Information) and **RF-05** (an incident-response plan with defined
 roles, periodic review and a 24-hour notification procedure), traceable to
 Data Protection Policy §1.6 (control `AC-12`).
 
-> **This document is not yet complete evidence of a working control.** Two of
-> the three prerequisites are met: the roles in §2 name real people
-> (2026-08-18) and §12 is approved and dated (2026-08-18). The third — at
-> least one tabletop exercise (§10) — has not been recorded; see
-> `TABLETOP_001_PREPARED_SCENARIO.md` (prepared, not executed). Until it is,
-> the state is `IMPLEMENTED (documented) + ROLES NAMED + APPROVED / NOT YET
-> FULLY EVIDENCED`.
+> **This document is not yet complete evidence of a working control.** All
+> three original prerequisites are now met: the roles in §2 name real people
+> (2026-08-18), §12 is approved and dated (2026-08-18), and the first
+> tabletop exercise (§10) has been run and filed — see
+> `TABLETOP_RECORD_JUVAL-TT-20260818.md`. One separate gap remains: §12 A-2
+> (contact-detail custody outside this repository) is unconfirmed. The state
+> is `IMPLEMENTED (documented) + ROLES NAMED + APPROVED + FIRST EXERCISE
+> FILED / NOT YET FULLY EVIDENCED (A-2 open)`.
 
 ---
 
@@ -354,10 +355,10 @@ performed it, not that the agent inferred or assumed it:
 | A-1 | Name a real Incident Commander, Security Owner, IMPOC and Deputy (§2) | `DONE 2026-08-18` — explicit user decision (this session): IC/Security Owner/IMPOC/Technical Responder = Daniel E. Liendo; Deputy = Jocsimar C. Gonzalez. Recorded in §2 |
 | A-2 | Record their contact details in an approved copy held **outside** this repository | `PENDING` — no email or phone was provided to, or recorded by, the agent (by design — see the rule above §2); the user still needs to independently confirm this custody exists |
 | A-3 | Management approval and signature, with a date; set `Effective date` and change `Status` to APPROVED | `DONE 2026-08-18` — user explicitly approved: *"Yo, [nombre y cargo], apruebo INCIDENT_RESPONSE_PLAN.md versión 0.1.0-DRAFT (document ID JUVAL-IRP, última revisión 2026-08-18) como el procedimiento vigente de respuesta a incidentes de JUVAl, con fecha efectiva 2026-08-18."* Approver: Daniel E. Liendo. `Status`/`Effective date` above updated accordingly |
-| A-4 | Run the first tabletop exercise (§10) and file its record | `PENDING` — `TABLETOP_001_PREPARED_SCENARIO.md` is prepared; execution has not occurred |
+| A-4 | Run the first tabletop exercise (§10) and file its record | `DONE 2026-08-18` — `JUVAL-TT-20260818` run as a facilitated conversation (Daniel E. Liendo participated as IC/Security Owner/IMPOC/Technical Responder; Jocsimar C. Gonzalez, Deputy, did not participate in this exercise), filed at `TABLETOP_RECORD_JUVAL-TT-20260818.md`. Found 2 real gaps (see that record) — finding gaps is the exercise working, not failing |
 | A-5 | Confirm the IMPOC address is monitored outside business hours | `DONE 2026-08-18` — user confirmed an out-of-hours availability mechanism exists for the IC/Security Owner/IMPOC (one person); the mechanism itself is deliberately not recorded here, per the rule above §2 |
 
-Until A-2 and A-4 are also complete:
+Until A-2 is also complete:
 
-`RF-01 = PARTIAL (roles named and plan approved 2026-08-18; contact-detail custody outside this repository unconfirmed, and no tabletop exercise run)`
-`RF-05 = PARTIAL (plan approved, roles named, review cadence documented; still no exercise record — an approved plan is not yet an exercised control)`
+`RF-01 = PARTIAL (roles named, plan approved, and the first tabletop exercise run and filed, all 2026-08-18 — the sole remaining gap is A-2, contact-detail custody outside this repository)`
+`RF-05 = PARTIAL (plan approved, roles named, first exercise run and filed — real operational evidence now exists; the exercise itself surfaced a procedural gap between the IC's instinct and §4.2's "revoke first" rule, tracked as an open corrective action in the tabletop record)`

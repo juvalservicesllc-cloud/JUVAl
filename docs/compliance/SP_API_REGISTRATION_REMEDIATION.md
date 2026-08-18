@@ -643,11 +643,11 @@ Documentation alone is never `COMPLIANT`.
 
 | Finding | Was | Now | Implemented | Tested | Evidenced | Blocking gap |
 |---|---|---|---|---|---|---|
-| **RF-01** | `NOT_IMPLEMENTED` | **PARTIAL** | Yes — [`INCIDENT_RESPONSE_PLAN.md`](INCIDENT_RESPONSE_PLAN.md) §5 defines the 24-hour `security@amazon.com` procedure, the detection clock, the Amazon Information determination and evidence preservation | Structure verified mechanically by `tools/compliance_check.py` (15 tests) | **NO** | **Narrowed 2026-08-18**: roles now named and plan approved (§12 A-1, A-3, A-5 — user decision) — contact-detail custody outside this repository (A-2) and the first tabletop exercise (A-4) remain open. See §24 |
+| **RF-01** | `NOT_IMPLEMENTED` | **PARTIAL** | Yes — [`INCIDENT_RESPONSE_PLAN.md`](INCIDENT_RESPONSE_PLAN.md) §5 defines the 24-hour `security@amazon.com` procedure, the detection clock, the Amazon Information determination and evidence preservation | Structure verified mechanically by `tools/compliance_check.py` (15 tests); **now also exercised** — `JUVAL-TT-20260818` | **PARTIAL** — first tabletop record exists (`TABLETOP_RECORD_JUVAL-TT-20260818.md`) | **Narrowed further 2026-08-18**: roles named, plan approved, first tabletop run and filed (§12 A-1, A-3, A-4, A-5 — all user actions). Sole remaining gap: contact-detail custody outside this repository (A-2). See §25 |
 | **RF-02** | `NOT_IMPLEMENTED` | **PARTIAL** | Workstation controls verified; **both cloud services now deployed and verified** — [`NETWORK_SECURITY.md`](NETWORK_SECURITY.md) §3 | Workstation measured 2026-08-18; **cloud re-verified live 2026-08-18** (TLS, CORS, RLS all `VERIFIED_CONFIGURATION` via direct probes, not provider claims) | Workstation + cloud (real HTTP/DB evidence) | **Finding F-01 alone** (host still 9 months unpatched, re-measured unchanged) — this is now the *only* blocking gap for RF-02 |
 | **RF-03** | `NOT_IMPLEMENTED` | **PARTIAL** | Backend half implemented (OIDC validation, `interfaces/api/auth.py`) and **deployed**; IdP half designed and provider identified (ADR-022) | Yes — 33 negative security tests (unit-level; not re-run against production since no IdP exists to test against) | Backend code only — **not `OPERATIONALLY_VERIFIED_IDENTITY_CONTROL`**: `JUVAL_AUTH_MODE` is deliberately unset in production, so the control is dormant, not enforcing | No IdP tenant. Okta requires a $1,500/year contract (**commercial approval**), itself blocked on Amazon's pending response to the identity clarification |
 | **RF-04** | `NOT_IMPLEMENTED` | **PARTIAL** | Yes — least-privilege RBAC enforced server-side on every endpoint (code); [`ACCESS_CONTROL.md`](ACCESS_CONTROL.md) | Yes — positive, negative, and direct-API-bypass tests (unit-level) | Technical half only, and **dormant in production for the same reason as RF-03** — no requests are actually authenticated/authorized today (`JUVAL_AUTH_MODE` unset) | No users exist to govern; quarterly review never run |
-| **RF-05** | `NOT_IMPLEMENTED` | **PARTIAL** | Yes — roles, six-month review cadence, tabletop process and templates; **automation implemented**: `pip-audit` (clean) + GitHub secret scanning/push protection (confirmed `enabled`, not merely assumed) | Review currency checked mechanically; secret scanning confirmed via live GitHub API query, not documentation | **NO** — automation running is not the same as a control having been exercised: no incident has ever been handled, no tabletop has ever been run (§10 below); GitHub **Dependabot security updates are `disabled`** (new gap, `NETWORK_SECURITY.md` §3.2) | **Narrowed 2026-08-18**: plan now approved and roles named (was: "unapproved, unexercised") — remaining gap is exercise only: no tabletop has ever been run. Plus: enable Dependabot. See §24 |
+| **RF-05** | `NOT_IMPLEMENTED` | **PARTIAL** | Yes — roles, six-month review cadence, tabletop process and templates; **automation implemented**: `pip-audit` (clean) + GitHub secret scanning/push protection (confirmed `enabled`, not merely assumed) | Review currency checked mechanically; secret scanning confirmed via live GitHub API query; **plan itself now exercised** — `JUVAL-TT-20260818` | **PARTIAL** — one exercise on record is real operational evidence, not yet a demonstrated *ongoing* cadence (next due 2027-02-18) | **Narrowed further 2026-08-18**: plan approved, roles named, first tabletop run and filed. Remaining gaps: a single exercise isn't a proven cadence yet; the exercise itself found the IC's actual instinct diverges from §4.2 (open corrective action); enable Dependabot. See §25 |
 
 **No finding is `COMPLIANT`.** Every one advanced from `NOT_IMPLEMENTED` to
 `PARTIAL`; none can close on documentation and code alone.
@@ -717,17 +717,17 @@ The remaining path is gated on user actions, in dependency order:
 | **E-1** | Approve ADR-022 and purchase Okta Workforce Identity | RF-03, RF-04 | $1,500/yr minimum |
 | **E-2** | Configure the tenant to Amazon's values (12 chars, all four character classes, name exclusion, history 10, min age 1 day, max age 365 days, MFA all accounts, lockout ≤10) and export the policy as evidence | RF-03 | — |
 | **E-3** | Name the Incident Commander, Security Owner, IMPOC and Deputy; approve the incident response plan | RF-01, RF-05 | **DONE 2026-08-18** — user named IC/Security Owner/IMPOC/Technical Responder = Daniel E. Liendo, Deputy = Jocsimar C. Gonzalez, and approved the plan (`INCIDENT_RESPONSE_PLAN.md` §2/§12 A-1/A-3/A-5). §12 A-2 (contact-detail custody outside this repository) is a separate, still-open action — see §24 |
-| **E-4** | Run the first tabletop exercise and file the record (**never send a test mail to `security@amazon.com`**) | RF-05 | **READY TO RUN 2026-08-18** — scenario, injects and reference answers prepared: `TABLETOP_001_PREPARED_SCENARIO.md`; E-3 no longer blocks it (participants are named). Still `OPEN` — not executed |
+| **E-4** | Run the first tabletop exercise and file the record (**never send a test mail to `security@amazon.com`**) | RF-05 | **DONE 2026-08-18** — `JUVAL-TT-20260818`, run as a facilitated conversation with Daniel E. Liendo; filed at `TABLETOP_RECORD_JUVAL-TT-20260818.md`. Found 2 real gaps, no message sent to Amazon. See §25 |
 | **E-5** | Resolve `NETWORK_SECURITY.md` F-01: patch the workstation and move to a supported OS, or formally exclude it from the boundary | RF-02 | — |
 | **E-6** | ~~`railway login` and deploy the backend with `JUVAL_AUTH_MODE=oidc` and~~ `JUVAL_EXECUTION_STORE=supabase` | RF-02 | **PARTIALLY DONE 2026-08-18** — deployed with `JUVAL_EXECUTION_STORE=supabase`; `JUVAL_AUTH_MODE=oidc` deliberately **not** set (would break every request with no IdP to validate against — see `SECRETS.md` §8 S-4). RF-03/RF-04 remain blocked on the IdP, not on deployment. |
 | **E-7** | After E-6: apply the migrations to the live Supabase project, confirm RLS is enabled with no permissive policy added via the dashboard (`NETWORK_SECURITY.md` §3.1), verify TLS, capture provider configuration evidence | RF-02, RF-04 | **DONE 2026-08-18** — see `NETWORK_SECURITY.md` §3/§3.1 |
 | **E-8** | Run the first quarterly access review and one ≤24-hour removal drill | RF-04 | — |
 | **E-9** | Only then: update the Developer Profile truthfully and open a **new** case (never reopen the prior one) | Reapplication | — |
 
-E-1, E-3 and E-5 were independent and could proceed in parallel; E-3 is now
-done. E-6 (partially done) gated E-7, which is now done. E-9 gates on
-everything above reaching `COMPLIANT` — **still not the case**: E-4, E-5,
-E-8 remain open, and E-6 is only half-closed pending the IdP.
+E-1, E-3 and E-5 were independent and could proceed in parallel; E-3 and
+E-4 are now done. E-6 (partially done) gated E-7, which is now done. E-9
+gates on everything above reaching `COMPLIANT` — **still not the case**:
+E-5, E-8 remain open, and E-6 is only half-closed pending the IdP.
 
 ## 21. Amazon identity clarification — submitted
 
@@ -920,6 +920,63 @@ satisfied.
 (named IC/IMPOC/Deputy to play the roles) is now satisfied. `TABLETOP =
 NOT_EXECUTED` — unchanged, and stays that way until participants actually
 run it and file `templates/TABLETOP_RECORD_TEMPLATE.md`.
+
+```
+IDENTITY SECURITY GATE = BLOCKED (unchanged)
+REAPPLICATION GATE = BLOCKED (unchanged — RF-01–RF-05 still not COMPLIANT)
+AMAZON_COMPLIANCE_READINESS = NOT_READY (unchanged)
+```
+
+## 25. E-4 closed — first tabletop exercise run and filed (2026-08-18)
+
+The prepared package (§23, `TABLETOP_001_PREPARED_SCENARIO.md`) was
+executed the same day. Run as a facilitated conversation — the agent read
+the scenario and decision points from `TABLETOP_001_PREPARED_SCENARIO.md`,
+and Daniel E. Liendo (IC/Security Owner/IMPOC/Technical Responder)
+answered each as a real decision, confirmed before being recorded. This is
+**OPERATIONAL EVIDENCE**, not a documented control and not an agent
+inference — every decision in the filed record was explicitly confirmed by
+the user before being written down.
+
+Full record: `TABLETOP_RECORD_JUVAL-TT-20260818.md`.
+
+| Field | Value |
+|---|---|
+| Exercise ID | `JUVAL-TT-20260818` |
+| Participants | Daniel E. Liendo (participated). Jocsimar C. Gonzalez, Deputy, **did not participate** — recorded honestly, not omitted |
+| Amazon Information determination reached | `RULED_OUT`, with cited evidence (no SP-API credential has ever been issued to JUVAl) — not "we think not" |
+| Amazon notification | Not drafted (not required — determination was `RULED_OUT`); nothing sent to `security@amazon.com` |
+| Gaps found | 2 — (1) the IC's instinct to confirm before containing, diverging from §4.2's "revoke first" rule; (2) §4.5 evidence preservation was not exercised in this run |
+
+Finding real gaps is the exercise succeeding at its purpose, not the
+control failing — `INCIDENT_RESPONSE_PLAN.md` §10 says exactly this: "An
+exercise that finds no gaps was not a real exercise."
+
+### RF-01 / RF-05 reassessment
+
+Both remain `PARTIAL`. `INCIDENT_RESPONSE_PLAN.md` §12 A-1, A-3, A-4, A-5
+are now all `DONE`; only A-2 (contact-detail custody outside this
+repository) is still open, and neither RF-01 nor RF-05 can be `COMPLIANT`
+while any A-item is open.
+
+```
+RF-01 = PARTIAL
+  New evidence: roles named, plan approved, first tabletop run and filed
+  Remaining gap: §12 A-2 only (contact-detail custody unconfirmed)
+
+RF-05 = PARTIAL
+  New evidence: first genuine operational evidence — an actual exercised
+  response, not just documentation or automation
+  Remaining gap: one exercise is one data point, not a demonstrated
+  six-month cadence; the exercise's own corrective action (§4.2 divergence)
+  is not yet closed
+```
+
+### E-4 state
+
+`E-4 = DONE 2026-08-18`. Unlike E-3, E-4 had no organizational sub-gate
+left open by its own wording — running the exercise and filing the record
+was the entire action, and both happened.
 
 ```
 IDENTITY SECURITY GATE = BLOCKED (unchanged)

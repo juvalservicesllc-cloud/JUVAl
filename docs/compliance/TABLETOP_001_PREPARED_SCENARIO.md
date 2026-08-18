@@ -1,13 +1,14 @@
-# TABLETOP-001 — Prepared Scenario (NOT YET EXECUTED)
+# TABLETOP-001 — Prepared Scenario (EXECUTED 2026-08-18)
 
 | Field | Value |
 |---|---|
-| Status | **PREPARED — not run.** No exercise has occurred. This document contains facilitator material and expected/reference answers only; it contains **no actual results**. |
+| Status | **EXECUTED 2026-08-18.** Run as a facilitated conversation, not a live-clock drill. Actual results, in full, are in `TABLETOP_RECORD_JUVAL-TT-20260818.md` — this document remains the facilitator script and reference answers; it was not edited with results, to keep the "prepared plan" and "actual record" cleanly separate. |
 | Prepared | 2026-08-18 |
+| Executed | 2026-08-18 — see `TABLETOP_RECORD_JUVAL-TT-20260818.md` |
 | Scenario source | `INCIDENT_RESPONSE_PLAN.md` §10, candidate (a) — "SP-API refresh token committed to a public repository" |
-| Plan version to exercise | `0.1.0-DRAFT` |
-| To be recorded in | `templates/TABLETOP_RECORD_TEMPLATE.md`, as `JUVAL-TT-YYYYMMDD` on the day it is actually run |
-| Unblocks | `INCIDENT_RESPONSE_PLAN.md` §12 A-4, once actually run and filed |
+| Plan version exercised | `0.1.0-DRAFT` |
+| Recorded in | `TABLETOP_RECORD_JUVAL-TT-20260818.md` (`JUVAL-TT-20260818`) |
+| Unblocked | `INCIDENT_RESPONSE_PLAN.md` §12 A-4 — `DONE` |
 
 This exercises `INCIDENT_RESPONSE_PLAN.md` §4.1–§4.6 and §5 end to end,
 using facts already true of JUVAl today — not invented ones: the GitHub
@@ -191,12 +192,15 @@ live credential:
 
 ---
 
-## What this exercise does and does not prove
+## What this exercise did and did not prove
 
-Running this closes `INCIDENT_RESPONSE_PLAN.md` §12 A-4 and provides the
+Running this closed `INCIDENT_RESPONSE_PLAN.md` §12 A-4 and provided the
 first genuine operational evidence for RF-05 (`SP_API_REGISTRATION_
-REMEDIATION.md` §22.1). It does **not**, by itself, make RF-01 or RF-05
+REMEDIATION.md` §25). It did **not**, by itself, make RF-01 or RF-05
 `COMPLIANT` — a single exercise is one data point, not a demonstrated
-ongoing control, and A-1/A-2/A-3/A-5 are independent gates that must also
-close. See `SP_API_REGISTRATION_REMEDIATION.md` §20.5 E-4 and §22 for the
+ongoing control, and A-2 (contact-detail custody outside this repository)
+is a still-open, independent gate. It also surfaced a real gap — the IC's
+instinct to confirm before containing, versus §4.2's "revoke first" rule —
+which is itself the exercise working as intended, not a disqualifying
+result. See `SP_API_REGISTRATION_REMEDIATION.md` §20.5 E-4 and §25 for the
 exact classification impact.
