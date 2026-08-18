@@ -309,3 +309,323 @@ sent until reviewed by the user.
 `AMAZON_RF03_SCOPE_CLARIFICATION = PENDING_EXTERNAL_ACTION`
 `IDENTITY SECURITY GATE = BLOCKED`
 `REAPPLICATION GATE = BLOCKED`
+
+## 14. SP-API Guard decision (official documentation, 2026-08-17)
+
+`SP_API_GUARD = DEFERRED`
+
+Rationale: Guard is an optional self-assessment oriented primarily to AWS;
+JUVAl's current target production boundary is Railway/Vercel/Supabase; it does
+not resolve RF-03/RF-04/RF-05; introducing AWS solely for Guard would add
+infrastructure and security surface. It may be reconsidered if JUVAl later
+operates material AWS infrastructure or Amazon specifically requests the
+additional evidence. No Guard deployment or further Guard research is
+authorized without new evidence.
+
+### Purpose and status
+
+Amazon describes SP-API Guard as an optional, serverless AWS application for
+automated self-service Data Security Assessments against AWS data in the
+context of the Data Protection Policy. It produces findings, policy
+references and remediation recommendations; it does not implement JUVAl
+controls and is not itself a compliance approval. The official guide states
+that the assessment is independent, may be shared with Amazon by user choice,
+and that Amazon makes no contractual assurance through the documentation.
+
+Sources: [Implementation Guide](https://developer-docs.amazon.com/sp-api/docs/sp-api-guard-implementation-guide),
+[Guide History](https://developer-docs.amazon.com/sp-api/docs/sp-api-guard-document-history),
+verified 2026-08-17.
+
+### Applicability and boundary
+
+| Question | Official finding |
+|---|---|
+| Mandatory? | No evidence that Guard is mandatory; documentation presents it as self-service assessment. |
+| Private developers? | Access requires the Solution Provider Portal/Developer credentials and a Seller Central merchant token; specific private-developer eligibility is not stated. `NEEDS_VERIFICATION`. |
+| AWS hosting required? | Yes for Guard itself: CloudFormation deploys AWS resources and scans AWS infrastructure. JUVAl does not need to migrate its application to AWS, but Guard cannot directly assess Railway/Vercel/Supabase/Windows controls from the documented scan model. |
+| External/non-AWS systems? | Not demonstrated. Treat Railway, Vercel, Supabase and workstation findings as outside Guard scope. |
+| Share with Amazon? | Yes, an explicit `report_to_amazon` path exists; sharing is voluntary and is not evidence that Amazon will approve a reapplication. |
+
+### Components, permissions and lifecycle
+
+The reference CloudFormation architecture creates S3, SNS, Lambda,
+EventBridge, IAM roles, VPC, subnets, security groups and an Amazon Linux 2
+EC2 CLI instance. It enables Macie, GuardDuty, Inspector, IAM Access
+Analyzer, Security Hub and AWS Config for the scan. Guard uses IAM roles and
+temporary AWS resources; it does not require or request JUVAl SP-API secrets
+according to the security guide. It collects account/IAM/operational scan
+information, not proprietary data or the specific tools themselves.
+
+Services activated for scans are automatically disabled after 24 hours. The
+EC2 instance and VPC are automatically deleted after 30 days, with immediate
+cleanup available via `cleanup_guard_interface` or the documented uninstall
+procedure. The S3 report bucket and stack artifacts still require explicit
+cleanup verification.
+
+Sources: [Architecture Overview](https://developer-docs.amazon.com/sp-api/docs/sp-api-guard-architecture-overview),
+[Components](https://developer-docs.amazon.com/sp-api/docs/sp-api-guard-components),
+[Guard and Security](https://developer-docs.amazon.com/sp-api/docs/sp-api-guard-security),
+[Automated Deployment](https://developer-docs.amazon.com/sp-api/docs/sp-api-guard-automated-deployment),
+verified 2026-08-17.
+
+### Controls assessed versus controls not demonstrated
+
+| JUVAl control area | Guard relevance | Limitation |
+|---|---|---|
+| AWS network exposure / some IDS/GuardDuty signals | Assessment of AWS VPC/flow/log domains | Does not prove Railway/Vercel/Supabase/Wi-Fi/workstation controls or complete segmentation design |
+| AWS malware signals | GuardDuty/endpoint domains for AWS workloads | Not a universal antivirus/anti-malware implementation or proof for non-AWS endpoints |
+| AWS IAM external sharing | IAM Access Analyzer | Does not establish JUVAl job-function RBAC in FastAPI or human access reviews |
+| AWS vulnerabilities | Inspector for EC2/ECR | Does not replace application SAST/DAST, annual pen test or provider scans |
+| S3 PII/encryption/public exposure | Macie | Only AWS S3 sample/data domain; not Supabase or all Amazon Information |
+| AWS configuration/log aggregation | Config/Security Hub/GuardDuty domains | Does not create JUVAl incident-response plan, 24-hour procedure or six-month review |
+| Password policy, MFA, 365-day expiry, annual human rotation | No documented Guard scan rule | RF-03 remains unresolved; Guard is not an IdP evidence substitute |
+| Secrets/API tokens | Guard protects its own AWS roles but is not a JUVAl secret inventory | It does not validate absence of JUVAl secrets in frontend/provider systems |
+| Incident response, ownership and notification | Findings can inform remediation | No evidence that Guard tests JUVAl roles, IMPOC, tabletop or Amazon notification workflow |
+
+Guard evidence is therefore **assessment evidence for selected AWS domains**,
+not implementation evidence or a replacement for policy, access reviews,
+provider configuration, incident exercises or IdP evidence.
+
+### Cost and support
+
+Amazon's published example estimates a total below **$500 per scan** in
+US East (N. Virginia), with first-use trials potentially making the first
+scan close to $0; actual cost varies by account, region and service usage.
+Regional availability matters: Guard is supported across AWS Regions, but
+Macie and Inspector are not available in every Region. Amazon documents
+Solution Architect support for remediation and Developer Support for
+troubleshooting.
+
+Source: [Guard Cost](https://developer-docs.amazon.com/sp-api/docs/sp-api-guard-cost)
+and [Regional Deployments](https://developer-docs.amazon.com/sp-api/docs/sp-api-guard-regional-deployments),
+verified 2026-08-17.
+
+### RF-03 update
+
+The official Guard guidance reinforces the previously recorded RF-03 facts:
+12-character minimum, mixed case/numbers/special characters, no name/user
+identifier, password history of 10, minimum age one day, maximum expiration
+365 days, MFA for all accounts, and annual API-key/associated-credential
+rotation. It does not resolve which JUVAl identity categories the reviewer
+intended. `RF-03 IDENTITY SCOPE = NEEDS AMAZON CLARIFICATION` remains active.
+
+### Support channel and sandbox
+
+Amazon's Guard documentation directs technical Guard questions and feature
+requests to a **Developer Support case**. RF-03 identity-scope clarification
+should remain a concise Developer Support/security-compliance question, not a
+Guard deployment request. SP-API sandbox testing is documented as a separate
+development tool, but JUVAl has no client, authorization or credentials; no
+sandbox access is evidenced here. Production rejection therefore remains a
+blocker for live calls, while sandbox eligibility is `NEEDS_VERIFICATION` and
+must not be attempted in this plan.
+
+### Recommendation
+
+**DEFERRED.** Guard must not be treated as a prerequisite, approval, or
+substitute for RF-03–RF-05 remediation.
+
+## 15. RF-03 human/programmatic boundary reconciliation
+
+### Historical state
+
+`PREVIOUS STATE: RF-03 IDENTITY SCOPE = NEEDS AMAZON CLARIFICATION`
+
+### Subsequent official-documentation finding
+
+Amazon's [Safeguarding Sensitive Credentials](https://developer-docs.amazon.com/sp-api/docs/safeguarding-sensitive-credentials)
+and [Key Security Control Guidance](https://developer-docs.amazon.com/sp-api/docs/guidance-to-address-key-security-controls-in-sp-api-integration)
+separate human/user password controls from API/programmatic credential
+controls. The former covers password composition/lifecycle and MFA for user
+accounts; the latter covers encryption, restricted access and annual rotation
+of API keys and associated credentials. This resolves the architectural
+boundary, not implementation or evidence.
+
+`RF-03 HUMAN VS PROGRAMMATIC CONTROL BOUNDARY = DOCUMENTATION RESOLVED / IMPLEMENTATION PENDING`
+`AMAZON_RF03_SCOPE_CLARIFICATION = NOT REQUIRED FOR ARCHITECTURAL PROGRESS`
+
+This does not mean COMPLIANT, IMPLEMENTED, EVIDENCED or REAPPLICATION READY.
+`IDENTITY SECURITY GATE = BLOCKED` and `REAPPLICATION GATE = BLOCKED` remain.
+
+## 16. Managed IdP reevaluation against the Amazon human-account baseline
+
+Statuses: `NATIVE_VERIFIED`, `CONFIGURABLE_VERIFIED`,
+`EXTERNAL_CONTROL_REQUIRED`, `NOT_SUPPORTED`, `NEEDS_VERIFICATION`.
+
+| Control | Clerk | Amazon Cognito | Microsoft Entra External ID |
+|---|---|---|---|
+| Unique user IDs / no shared accounts | CONFIGURABLE_VERIFIED | CONFIGURABLE_VERIFIED | CONFIGURABLE_VERIFIED |
+| ≥12 characters | NEEDS_VERIFICATION | CONFIGURABLE_VERIFIED | NOT_SUPPORTED |
+| Upper/lower/numbers/special | NEEDS_VERIFICATION | CONFIGURABLE_VERIFIED | CONFIGURABLE_VERIFIED (3 of 4) |
+| Exclude username/name | NEEDS_VERIFICATION | NEEDS_VERIFICATION | NEEDS_VERIFICATION |
+| Password history 10 | NEEDS_VERIFICATION | CONFIGURABLE_VERIFIED (tier dependent) | NOT_SUPPORTED (only last-password controls documented) |
+| Minimum password age 1 day | NEEDS_VERIFICATION | NEEDS_VERIFICATION | NEEDS_VERIFICATION |
+| Maximum password age 365 days | NEEDS_VERIFICATION | NOT_SUPPORTED for local passwords | CONFIGURABLE_VERIFIED, tenant policy required |
+| Mandatory MFA | CONFIGURABLE_VERIFIED | CONFIGURABLE_VERIFIED | CONFIGURABLE_VERIFIED |
+| Lockout ≤10 failed attempts | CONFIGURABLE_VERIFIED (default 10 on new instances) | NATIVE_VERIFIED (lockout begins after 5) | NATIVE_VERIFIED (default 10) |
+| Session/token revocation | CONFIGURABLE_VERIFIED | NATIVE_VERIFIED on disable/revoke | EXTERNAL_CONTROL_REQUIRED (token revocation limitations) |
+| User disablement/deletion | CONFIGURABLE_VERIFIED | NATIVE_VERIFIED | CONFIGURABLE_VERIFIED |
+| Quarterly access-review evidence | EXTERNAL_CONTROL_REQUIRED | EXTERNAL_CONTROL_REQUIRED | EXTERNAL_CONTROL_REQUIRED |
+| Backend roles/permissions/claims | CONFIGURABLE_VERIFIED | CONFIGURABLE_VERIFIED | CONFIGURABLE_VERIFIED |
+
+Sources verified 2026-08-17: [Clerk lockout](https://clerk.com/docs/guides/secure/user-lockout),
+[Cognito password policy](https://docs.aws.amazon.com/cognito/latest/developerguide/managing-users-passwords.html),
+[Cognito account disablement/revocation](https://docs.aws.amazon.com/cognito/latest/developerguide/how-to-manage-user-accounts.html),
+[Entra password policy](https://learn.microsoft.com/en-us/entra/identity/authentication/concept-sspr-policy),
+and [Entra MFA](https://learn.microsoft.com/en-us/entra/identity/authentication/concept-mfa-howitworks).
+
+No candidate satisfies the complete human-account baseline without unresolved
+gaps or external controls. No IdP is selected and no password store or custom
+authentication is proposed.
+
+## 17. Control-ownership reevaluation and candidate recommendation (2026-08-17)
+
+Section 16 above used a "does the IdP have a native feature for every item"
+methodology, which the user directed not to repeat: Amazon requires controls
+over the security system, not necessarily IdP-native features for each one.
+The full ownership-based reevaluation — a 25-control ownership matrix
+(`IDP_NATIVE_REQUIRED` / `IDP_OR_MANAGED_AUTH_REQUIRED` / `BACKEND_ENFORCED` /
+`ORGANIZATIONAL_PROCEDURAL` / `INFRASTRUCTURE_CONTROL` /
+`SERVICE_CREDENTIAL_CONTROL` / `MULTI_LAYER`), the derived 11-item HARD IdP
+requirement set, the passwordless/federated-identity finding, and the final
+per-provider re-evaluation — is maintained in
+[`ADR-021`](../adr/ADR-021-identity-provider-authentication-boundary.md)
+§"Control ownership reevaluation (2026-08-17)" so the analysis is not
+duplicated across two documents.
+
+Outcome summary (full detail in ADR-021):
+
+- Only 11 of 25 controls are `IDP_NATIVE_REQUIRED`/HARD (the complete
+  password-composition set, MFA, and lockout). The other 14 are legitimately
+  owned by FastAPI, organizational procedure, infrastructure, or
+  service-credential lifecycle — none of them require an IdP feature.
+- Microsoft Entra External ID is **eliminated**: two HARD requirements
+  (12-character minimum, password history 10) have a confirmed native
+  ceiling, and its passkey flow does not remove the underlying weak-password
+  floor (it still requires a password account to bootstrap).
+- Clerk remains **unresolved**: no confirmed ceiling, but six of eleven HARD
+  requirements lack a published, tenant-specific setting; closing this
+  requires a real test-tenant configuration export, not performed here.
+- Amazon Cognito is the **best-positioned candidate**: ten of eleven HARD
+  requirements are `CONFIGURABLE_VERIFIED`/`NATIVE_VERIFIED` against official
+  AWS documentation; the remaining gap (no native automatic expiration for a
+  user's own permanent password) has an officially-documented, provider-native
+  closing mechanism (a scheduled call to Cognito's `AdminResetUserPassword`
+  admin API) rather than a custom-built password engine, though whether that
+  repurposed use satisfies Amazon's 365-day intent is itself
+  `NEEDS_VERIFICATION`.
+- Passwordless/federated identity does **not** eliminate Amazon's password
+  controls on current evidence — Amazon's official guidance states them as
+  flat requirements for "all accounts" with no passwordless exemption found
+  in either official page checked. `NEEDS_VERIFICATION`, not assumed.
+
+`RECOMMENDED IdP (candidate, not selected): Amazon Cognito.`
+
+This is a recommendation, not a decision: ADR-021 stays `Estado: Propuesta`
+and its `Decision` line reads "candidate, not accepted." No account, tenant,
+credential, or code was created by this reevaluation.
+
+`IDENTITY SECURITY GATE = BLOCKED` (implementation and evidence — including
+closing the remaining `NEEDS_VERIFICATION` items and confirming the scheduled
+Cognito reset satisfies Amazon's intent — are still required).
+`REAPPLICATION GATE = BLOCKED` (unchanged; RF-01–RF-05 remain
+`NOT_IMPLEMENTED` per §§1–2 above regardless of the identity-provider
+recommendation).
+
+## 18. Cognito maximum-password-age gap — focused verification (2026-08-17)
+
+Scope: only the single previously-flagged Cognito gap (maximum password age
+/ expiration ≤365 days). Full detail, including the `PASSWORD_MAX_AGE_CONTROL`
+design and the verbatim `AdminResetUserPassword` behavior analysis, is
+maintained in [`ADR-021`](../adr/ADR-021-identity-provider-authentication-boundary.md)
+§"PASSWORD_MAX_AGE_CONTROL design" so it is not duplicated here.
+
+**Outcome**: Cognito does **not** natively expire a local user's own
+permanent password ("Passwords for local users in Amazon Cognito user pools
+don't automatically expire" — official AWS documentation, verified
+2026-08-17). AWS's own documentation names the closing pattern: log password
+age externally, then use a scheduled trigger calling `AdminResetUserPassword`
+(paired with `AdminUserGlobalSignOut`, since the reset alone does not revoke
+already-issued sessions — confirmed via official `AdminUserGlobalSignOut`
+documentation) to force a reset before the 365-day boundary. This is an
+AWS-documented pattern, not a JUVAl-invented workaround, does not store or
+know any password, and keeps Cognito as the sole authentication source of
+truth. Classified **B — MANAGED_CONTROL_VERIFIED**.
+
+**This does not close ADR-021.** The same focused reread of Cognito's
+complete official password-policy page (necessary to confirm the max-age
+finding) showed the page is exhaustive about every configurable
+password-policy control — which means two other HARD requirements previously
+marked `NEEDS_VERIFICATION` for Cognito (minimum password age of 1 day;
+username/name exclusion from the password) have no documented setting
+anywhere on that page. They are reclassified `NOT_SUPPORTED` in ADR-021 as of
+this session. Neither was in scope for this task and neither has a proposed
+resolution yet.
+
+`RECOMMENDED IdP (candidate, still best-positioned, not selected): Amazon Cognito.`
+`ADR-021 = NOT YET READY FOR USER APPROVAL` — two newly-identified native
+gaps (minimum password age, name/username exclusion) require the same kind
+of focused investigation just completed for maximum age.
+`IDENTITY SECURITY GATE = BLOCKED.`
+`REAPPLICATION GATE = BLOCKED.`
+No Amazon clarification question was identified or sent — the maximum-age
+wording states an outcome, not a mandated mechanism, and no normative
+ambiguity blocks determining whether Cognito's mechanism satisfies it.
+
+## 19. Cognito minimum-age and name-exclusion gaps — resolved, Cognito rejected (2026-08-17)
+
+Scope, as directed: only the two gaps named §18 left open (minimum password
+age 1 day; password must not contain username/name). Full detail — the exact
+Amazon wording per gap, the AWS Lambda-trigger flow-coverage table, the
+bypass analysis across every password-setting API, and the classification
+rationale — is maintained in
+[`ADR-021`](../adr/ADR-021-identity-provider-authentication-boundary.md)
+§"Final two-gap investigation and Cognito rejection (2026-08-17)".
+
+**Outcome, decisive for both gaps**: AWS's own exhaustive official
+documentation — the complete API-operation-to-Lambda-trigger mapping table —
+proves that Cognito's `ChangePassword` operation (the standard,
+always-available, self-service "I know my current password, here is my new
+one" call) has **no Lambda trigger of any kind**, and that the one trigger
+positioned early enough to inspect a new password before it is stored
+(`PreSignUp`) is proven, by AWS's own worked before/after example, to
+**never receive the plaintext password** in its event payload. Neither gap
+has a native, managed, or safely-designed procedural control that covers
+every applicable flow without either exposing a password outside Cognito's
+boundary (explicitly ruled out) or being trivially bypassable by a direct
+API call to `ChangePassword` (explicitly ruled out).
+
+- **GAP A (minimum age 1 day)**: `E — NOT_SUPPORTED`. Only a post-hoc,
+  detect-and-remediate design is technically possible, and it does not
+  prevent the violation — it can only react after the too-early change has
+  already succeeded, which does not meet the "must not be evadable by
+  calling the API directly" bar.
+- **GAP B (name/username exclusion)**: `E — NOT_SUPPORTED`. No mechanism, of
+  any kind, ever sees the plaintext password — this is the clearer of the
+  two gaps and admits no compensating design at all without building
+  forbidden custom authentication or exposing passwords outside the IdP
+  boundary.
+
+Per the decision rule set for this investigation, either gap landing on `E`
+disqualifies Cognito. Both did.
+
+`COGNITO HARD REQUIREMENTS = NOT SATISFIED`
+`AMAZON COGNITO = REJECTED FOR CURRENT AMAZON BASELINE`
+`ADR-021 = PENDING NEW ARCHITECTURAL DECISION`
+
+Combined with the already-standing conclusions on the other two candidates
+(Entra External ID eliminated on two confirmed native ceilings; Clerk
+unresolved with zero confirmed passes on any HARD requirement in a real
+tenant), **no candidate currently has a verified, evidence-backed path to
+satisfying the full HARD IdP requirement set.** This is a decision point for
+the user, not a further research task to run unprompted: possible paths
+include a scoped Amazon clarification on whether GAP A's outcome-based
+wording tolerates a detect-and-remedy model (identified in ADR-021, not
+sent), accepting documented residual risk with compensating organizational
+controls for GAP A while treating GAP B as an unmitigated blocker, or
+directing research into providers not yet evaluated. None is chosen here.
+
+`RECOMMENDED IdP: NONE — no candidate currently satisfies the full HARD IdP
+requirement set under verified evidence.`
+`IDENTITY SECURITY GATE = BLOCKED.`
+`REAPPLICATION GATE = BLOCKED.`
