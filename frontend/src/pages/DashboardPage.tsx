@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
+import { getRunAnalytics } from "../api/analytics"
 import { ApiError, apiErrorMessage } from "../api/client"
-import { getRunRecords } from "../api/records"
 import { getRuns } from "../api/runs"
-import { AnalyticsChart } from "../components/AnalyticsChart"
+import { AnalyticsChart, ChartTextSummary, type AnalyticsDatum, type ChartType } from "../components/AnalyticsChart"
+import { ProvenanceBreakdown } from "../components/ProvenanceBreakdown"
 import { StatusBadge } from "../components/StatusBadge"
-import { deriveRunAnalytics, type AverageMetric } from "../runAnalytics"
-import type { RecordOut, RunSummaryOut } from "../types"
+import type { NumericSummary, RunAnalyticsOut, RunSummaryOut } from "../types"
 
 type RunsState =
   | { status: "loading" }
@@ -14,31 +14,104 @@ type RunsState =
   | { status: "empty" }
   | { status: "ready"; items: RunSummaryOut[] }
 
-type RecordsState =
+type AnalyticsState =
   | { status: "loading" }
   | { status: "error"; message: string }
-  | { status: "ready"; records: RecordOut[] }
+  | { status: "ready"; analytics: RunAnalyticsOut }
+
+const DECISION_ORDER = ["BUY", "REVIEW", "PASS", "UNKNOWN"]
+const DECISION_COLOR: Record<string, string> = {
+  BUY: "var(--success)",
+  REVIEW: "var(--warning)",
+  PASS: "var(--danger)",
+  UNKNOWN: "var(--chart-grid)",
+}
+const RISK_STATUS_COLOR: Record<string, string> = { PRESENT: "var(--danger)", ABSENT: "var(--chart-grid)", UNKNOWN: "var(--warning)" }
+const SEVERITY_ORDER = ["NONE", "LOW", "MEDIUM", "HIGH", "CRITICAL"]
+const SEVERITY_COLOR: Record<string, string> = {
+  NONE: "var(--chart-grid)",
+  LOW: "var(--success)",
+  MEDIUM: "var(--warning)",
+  HIGH: "var(--danger)",
+  CRITICAL: "var(--danger)",
+}
+
+function toChartData(counts: Record<string, number>, order: string[] = [], colors: Record<string, string> = {}): AnalyticsDatum[] {
+  const keys = [...order.filter((key) => key in counts), ...Object.keys(counts).filter((key) => !order.includes(key))]
+  return keys.map((key) => ({ label: key, value: counts[key] ?? 0, color: colors[key] }))
+}
+
+function formatCurrency(value: string | null): string {
+  if (value === null) return "—"
+  const n = Number(value)
+  return Number.isFinite(n) ? n.toLocaleString(undefined, { style: "currency", currency: "USD" }) : "—"
+}
+
+function formatPercent(value: string | null): string {
+  if (value === null) return "—"
+  const n = Number(value)
+  return Number.isFinite(n) ? `${(n * 100).toFixed(1)}%` : "—"
+}
 
 function formatTimestamp(value: string): string {
   return new Date(value).toLocaleString()
 }
 
-function formatPercent(metric: AverageMetric | null): string {
-  if (metric === null) return "No usable data"
-  return `${(metric.value * 100).toFixed(1)}%`
+function SummaryCards({ title, summary, format }: { title: string; summary: NumericSummary; format: (v: string | null) => string }) {
+  return (
+    <div className="numeric-summary">
+      <p className="eyebrow">{title.toUpperCase()}</p>
+      {summary.count === 0 ? (
+        <p className="status" style={{ marginTop: 0, paddingTop: 0, borderTop: "none" }}>No usable data (VERIFIED only).</p>
+      ) : (
+        <dl className="run-summary">
+          <dt>Average</dt>
+          <dd>{format(summary.average)}</dd>
+          <dt>Minimum</dt>
+          <dd>{format(summary.minimum)}</dd>
+          <dt>Maximum</dt>
+          <dd>{format(summary.maximum)}</dd>
+          <dt>Count</dt>
+          <dd>{summary.count.toLocaleString()} records</dd>
+        </dl>
+      )}
+    </div>
+  )
 }
 
-function formatCurrency(metric: AverageMetric | null): string {
-  if (metric === null) return "No usable data"
-  return metric.value.toLocaleString(undefined, { style: "currency", currency: "USD" })
+function RiskPanel({ title, risk }: { title: string; risk: RunAnalyticsOut["risks"][string] | undefined }) {
+  const statusData = toChartData(risk?.status ?? {}, ["PRESENT", "ABSENT", "UNKNOWN"], RISK_STATUS_COLOR)
+  const severityData = toChartData(risk?.severity ?? {}, SEVERITY_ORDER, SEVERITY_COLOR)
+  return (
+    <div className="risk-panel">
+      <p className="eyebrow">{title.toUpperCase()}</p>
+      {statusData.length === 0 ? (
+        <p className="status" style={{ marginTop: 0, paddingTop: 0, borderTop: "none" }}>No {title.toLowerCase()} data.</p>
+      ) : (
+        <>
+          <div className="analytics-chart risk-chart">
+            <AnalyticsChart chartType="bar" data={statusData} />
+          </div>
+          <ChartTextSummary title={`${title} status`} data={statusData} />
+          {severityData.length > 0 && (
+            <>
+              <p className="eyebrow" style={{ marginTop: 10 }}>SEVERITY</p>
+              <ChartTextSummary title={`${title} severity`} data={severityData} />
+            </>
+          )}
+        </>
+      )}
+    </div>
+  )
 }
 
 export function DashboardPage() {
   const [runsState, setRunsState] = useState<RunsState>({ status: "loading" })
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
-  const [recordsState, setRecordsState] = useState<RecordsState>({ status: "loading" })
+  const [analyticsState, setAnalyticsState] = useState<AnalyticsState>({ status: "loading" })
   const [runsReloadToken, setRunsReloadToken] = useState(0)
-  const [recordsReloadToken, setRecordsReloadToken] = useState(0)
+  const [analyticsReloadToken, setAnalyticsReloadToken] = useState(0)
+  const [decisionChartType, setDecisionChartType] = useState<ChartType>("donut")
 
   useEffect(() => {
     const controller = new AbortController()
@@ -63,19 +136,21 @@ export function DashboardPage() {
   useEffect(() => {
     if (!selectedRunId) return
     const controller = new AbortController()
-    setRecordsState({ status: "loading" })
-    getRunRecords(selectedRunId, controller.signal)
-      .then((response) => setRecordsState({ status: "ready", records: response.records }))
+    setAnalyticsState({ status: "loading" })
+    getRunAnalytics(selectedRunId, controller.signal)
+      .then((analytics) => setAnalyticsState({ status: "ready", analytics }))
       .catch((error: unknown) => {
         if (controller.signal.aborted) return
         const message = error instanceof ApiError ? apiErrorMessage(error) : error instanceof Error ? error.message : String(error)
-        setRecordsState({ status: "error", message })
+        setAnalyticsState({ status: "error", message })
       })
     return () => controller.abort()
-  }, [selectedRunId, recordsReloadToken])
+  }, [selectedRunId, analyticsReloadToken])
 
   const selectedRun = runsState.status === "ready" ? runsState.items.find((r) => r.execution_id === selectedRunId) ?? null : null
-  const analytics = recordsState.status === "ready" ? deriveRunAnalytics(recordsState.records) : null
+  const analytics = analyticsState.status === "ready" ? analyticsState.analytics : null
+  const decisionData = analytics ? toChartData(analytics.decisions, DECISION_ORDER, DECISION_COLOR) : []
+  const recordsWithoutIssues = analytics ? Math.max(0, analytics.records.total_records - analytics.data_quality.records_with_issues) : 0
 
   return (
     <>
@@ -124,11 +199,7 @@ export function DashboardPage() {
               </div>
               <label>
                 <span className="eyebrow">Run</span>
-                <select
-                  aria-label="Select run"
-                  value={selectedRunId ?? ""}
-                  onChange={(e) => setSelectedRunId(e.target.value)}
-                >
+                <select aria-label="Select run" value={selectedRunId ?? ""} onChange={(e) => setSelectedRunId(e.target.value)}>
                   {runsState.items.map((run) => (
                     <option key={run.execution_id} value={run.execution_id}>
                       {run.input_filename} — {formatTimestamp(run.started_at)}
@@ -156,111 +227,138 @@ export function DashboardPage() {
             )}
           </section>
 
-          {recordsState.status === "loading" && (
+          {analyticsState.status === "loading" && (
             <div className="status" aria-live="polite">
               <p>Loading analytics…</p>
             </div>
           )}
 
-          {recordsState.status === "error" && (
+          {analyticsState.status === "error" && (
             <div className="status" aria-live="polite">
               <p role="alert" className="error">
-                {recordsState.message}
+                {analyticsState.message}
               </p>
-              <button type="button" className="secondary-button" onClick={() => setRecordsReloadToken((n) => n + 1)}>
+              <button type="button" className="secondary-button" onClick={() => setAnalyticsReloadToken((n) => n + 1)}>
                 Retry
               </button>
             </div>
           )}
 
-          {recordsState.status === "ready" && analytics && (
+          {analytics && (
             <>
-              <section className="metric-grid">
-                <article className="metric-card">
-                  <span>Total records</span>
-                  <strong>{selectedRun?.records_total.toLocaleString() ?? recordsState.records.length}</strong>
-                  <small>From the run summary</small>
-                </article>
-                <article className="metric-card">
-                  <span>Successful</span>
-                  <strong>{selectedRun?.records_successful.toLocaleString() ?? "—"}</strong>
-                  <small>Processed without a data error</small>
-                </article>
-                <article className="metric-card">
-                  <span>With errors</span>
-                  <strong>{selectedRun?.records_with_errors.toLocaleString() ?? "—"}</strong>
-                  <small>Processed with a data error</small>
-                </article>
-                <article className="metric-card">
-                  <span>With issues</span>
-                  <strong>{analytics.recordsWithIssuesCount.toLocaleString()}</strong>
-                  <small>issue_count &gt; 0, any severity</small>
-                </article>
-              </section>
-
-              <section className="panel analytics-panel">
-                <div className="panel-heading">
-                  <div>
-                    <p className="eyebrow">DECISION DISTRIBUTION</p>
-                    <h2>How records were decided</h2>
-                    <p>From the Decision Engine's own output -- never recalculated here.</p>
-                  </div>
+              {analytics.records.total_records === 0 ? (
+                <div className="status" aria-live="polite">
+                  <p>This run has no records to analyze.</p>
                 </div>
-                <AnalyticsChart
-                  chartType="bar"
-                  data={[
-                    { label: "BUY", value: analytics.decisionCounts.BUY, color: "var(--success)" },
-                    { label: "REVIEW", value: analytics.decisionCounts.REVIEW, color: "var(--warning)" },
-                    { label: "PASS", value: analytics.decisionCounts.PASS, color: "var(--danger)" },
-                    { label: "UNKNOWN", value: analytics.decisionCounts.UNKNOWN, color: "var(--chart-grid)" },
-                  ]}
-                />
-              </section>
+              ) : (
+                <>
+                  <section className="metric-grid">
+                    <article className="metric-card">
+                      <span>Total records</span>
+                      <strong>{analytics.records.total_records.toLocaleString()}</strong>
+                      <small>From the analytics endpoint</small>
+                    </article>
+                    {DECISION_ORDER.filter((key) => key in analytics.decisions).map((key) => (
+                      <article className="metric-card" key={key}>
+                        <span>{key}</span>
+                        <strong>{analytics.decisions[key].toLocaleString()}</strong>
+                        <small>Decision Engine output</small>
+                      </article>
+                    ))}
+                    <article className="metric-card">
+                      <span>With issues</span>
+                      <strong>{analytics.data_quality.records_with_issues.toLocaleString()}</strong>
+                      <small>{analytics.data_quality.total_issue_count.toLocaleString()} total issues</small>
+                    </article>
+                    <article className="metric-card">
+                      <span>Without issues</span>
+                      <strong>{recordsWithoutIssues.toLocaleString()}</strong>
+                      <small>total − with issues</small>
+                    </article>
+                    <article className="metric-card">
+                      <span>Average profit</span>
+                      <strong>{formatCurrency(analytics.profitability.profit.average)}</strong>
+                      <small>{analytics.profitability.profit.count.toLocaleString()} VERIFIED records</small>
+                    </article>
+                    <article className="metric-card">
+                      <span>Average ROI</span>
+                      <strong>{formatPercent(analytics.profitability.roi.average)}</strong>
+                      <small>{analytics.profitability.roi.count.toLocaleString()} VERIFIED records</small>
+                    </article>
+                    <article className="metric-card">
+                      <span>Average margin</span>
+                      <strong>{formatPercent(analytics.profitability.margin.average)}</strong>
+                      <small>{analytics.profitability.margin.count.toLocaleString()} VERIFIED records</small>
+                    </article>
+                  </section>
 
-              <section className="panel analytics-panel">
-                <div className="panel-heading">
-                  <div>
-                    <p className="eyebrow">RISK OVERVIEW</p>
-                    <h2>HazMat / Bulky presence</h2>
-                    <p>Presence only (ADR-020) -- severity is policy-derived, never shown as externally verified.</p>
-                  </div>
-                </div>
-                <AnalyticsChart
-                  chartType="bar"
-                  data={[
-                    { label: "HAZMAT present", value: analytics.hazmatPresentCount, color: "var(--danger)" },
-                    { label: "BULKY present", value: analytics.bulkyPresentCount, color: "var(--warning)" },
-                    { label: "Neither flag", value: analytics.neitherRiskFlagCount, color: "var(--chart-grid)" },
-                  ]}
-                />
-              </section>
+                  <section className="panel analytics-panel">
+                    <div className="panel-heading">
+                      <div>
+                        <p className="eyebrow">DECISION DISTRIBUTION</p>
+                        <h2>How records were decided</h2>
+                        <p>From the Decision Engine's own output — never recalculated here.</p>
+                      </div>
+                      <div className="segmented-control" role="group" aria-label="Decision chart type">
+                        <button type="button" className={decisionChartType === "donut" ? "selected" : ""} onClick={() => setDecisionChartType("donut")} aria-pressed={decisionChartType === "donut"}>
+                          Donut
+                        </button>
+                        <button type="button" className={decisionChartType === "bar" ? "selected" : ""} onClick={() => setDecisionChartType("bar")} aria-pressed={decisionChartType === "bar"}>
+                          Bars
+                        </button>
+                      </div>
+                    </div>
+                    {decisionData.length === 0 ? (
+                      <p className="status">No decisions yet.</p>
+                    ) : (
+                      <>
+                        <AnalyticsChart chartType={decisionChartType} data={decisionData} />
+                        <ChartTextSummary title="Decision distribution" data={decisionData} />
+                      </>
+                    )}
+                  </section>
 
-              <section className="panel">
-                <div className="panel-heading">
-                  <div>
-                    <p className="eyebrow">PROFITABILITY</p>
-                    <h2>Averages over usable values</h2>
-                    <p>NOT_FOUND/INVALID records are excluded, never treated as zero.</p>
-                  </div>
-                </div>
-                <dl className="run-summary">
-                  <dt>Average ROI</dt>
-                  <dd>
-                    {formatPercent(analytics.averageRoi)}
-                    {analytics.averageRoi && ` · ${analytics.averageRoi.sampleSize} records`}
-                  </dd>
-                  <dt>Average profit</dt>
-                  <dd>
-                    {formatCurrency(analytics.averageProfit)}
-                    {analytics.averageProfit && ` · ${analytics.averageProfit.sampleSize} records`}
-                  </dd>
-                  <dt>Average margin</dt>
-                  <dd>
-                    {formatPercent(analytics.averageMargin)}
-                    {analytics.averageMargin && ` · ${analytics.averageMargin.sampleSize} records`}
-                  </dd>
-                </dl>
-              </section>
+                  <section className="panel">
+                    <div className="panel-heading">
+                      <div>
+                        <p className="eyebrow">RISK OVERVIEW</p>
+                        <h2>HazMat / Bulky</h2>
+                        <p>Presence and policy-derived severity (ADR-020) — never shown as externally verified.</p>
+                      </div>
+                    </div>
+                    <div className="risk-grid">
+                      <RiskPanel title="HazMat" risk={analytics.risks.hazmat} />
+                      <RiskPanel title="Bulky" risk={analytics.risks.bulky} />
+                    </div>
+                  </section>
+
+                  <section className="panel">
+                    <div className="panel-heading">
+                      <div>
+                        <p className="eyebrow">DATA CONFIDENCE</p>
+                        <h2>Provenance by field</h2>
+                        <p>VERIFIED / INFERRED / NOT_FOUND / INVALID — never collapsed into a single confidence rating (ADR-003/ADR-004).</p>
+                      </div>
+                    </div>
+                    <ProvenanceBreakdown provenance={analytics.provenance} />
+                  </section>
+
+                  <section className="panel">
+                    <div className="panel-heading">
+                      <div>
+                        <p className="eyebrow">PROFITABILITY</p>
+                        <h2>Backend-computed summaries</h2>
+                        <p>Only VERIFIED values participate; INFERRED/NOT_FOUND/INVALID are excluded, never treated as zero.</p>
+                      </div>
+                    </div>
+                    <div className="profitability-grid">
+                      <SummaryCards title="Profit" summary={analytics.profitability.profit} format={formatCurrency} />
+                      <SummaryCards title="ROI" summary={analytics.profitability.roi} format={formatPercent} />
+                      <SummaryCards title="Margin" summary={analytics.profitability.margin} format={formatPercent} />
+                    </div>
+                  </section>
+                </>
+              )}
             </>
           )}
         </>

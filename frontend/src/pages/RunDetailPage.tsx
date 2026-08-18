@@ -28,7 +28,7 @@ export function RunDetailPage() {
     if (!executionId) return
     const controller = new AbortController()
     setState({ status: "loading" })
-    Promise.all([getRun(executionId, controller.signal), getRunRecords(executionId, controller.signal)])
+    Promise.all([getRun(executionId, controller.signal), getRunRecords(executionId, { limit: 100 }, controller.signal)])
       .then(([run, recordsResponse]) => setState({ status: "ready", run, records: recordsResponse.records }))
       .catch((error: unknown) => {
         if (controller.signal.aborted) return

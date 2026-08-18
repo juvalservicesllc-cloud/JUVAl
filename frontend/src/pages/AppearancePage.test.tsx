@@ -13,7 +13,7 @@ describe("AppearancePage", () => {
     window.history.pushState({}, "", "/appearance")
     render(<App />)
 
-    const switchControl = screen.getByRole("switch", { name: /appearance mode/i })
+    const switchControl = await screen.findByRole("switch", { name: /appearance mode/i })
     expect(switchControl).toHaveAttribute("aria-checked", "true")
     await user.click(switchControl)
     await waitFor(() => expect(document.documentElement.style.getPropertyValue("--bg")).toBe("#f5f7fb"))
@@ -28,7 +28,7 @@ describe("AppearancePage", () => {
     window.history.pushState({}, "", "/appearance")
     render(<App />)
 
-    await user.click(screen.getByRole("switch", { name: /appearance mode/i }))
+    await user.click(await screen.findByRole("switch", { name: /appearance mode/i }))
     await waitFor(() => expect(document.documentElement.style.getPropertyValue("--bg")).toBe("#181a1f"))
     expect(document.documentElement.style.getPropertyValue("--accent")).toBe("#112233")
     expect(document.documentElement.style.getPropertyValue("--app-background-image")).toContain("data:image/png")
@@ -39,7 +39,7 @@ describe("AppearancePage", () => {
     const user = userEvent.setup()
     window.history.pushState({}, "", "/appearance")
     render(<App />)
-    await user.click(screen.getByRole("button", { name: "Sidebar" }))
+    await user.click(await screen.findByRole("button", { name: "Sidebar" }))
     const input = screen.getByLabelText("Sidebar HEX")
     fireEvent.change(input, { target: { value: "#123456" } })
     await waitFor(() => expect(document.documentElement.style.getPropertyValue("--sidebar")).toBe("#123456"))

@@ -26,21 +26,28 @@ test("dashboard shows real analytics for the latest persisted run, then opens Ru
   await expect(page.getByRole("heading", { name: "Dashboard", level: 1 })).toBeVisible()
   await expect(page.getByText("DEMO MODE")).not.toBeVisible()
 
-  // Real KPI totals from the fixture (same numbers test_pipeline_end_to_end.py
-  // and smoke.spec.ts already assert): 5 total, 3 successful, 1 with errors.
-  const summary = page.locator(".metric-grid")
-  await expect(summary.getByText("5")).toBeVisible({ timeout: 10_000 })
-  await expect(summary.getByText("3", { exact: true })).toBeVisible()
-  await expect(summary.getByText("1", { exact: true })).toBeVisible()
+  // Real KPI totals from GET /analytics (never fetched/derived from
+  // RecordOut[] in the browser -- API_CONTRACT.md). analytics.records.total_records
+  // counts persisted snapshots, i.e. records_processed (4 for this fixture,
+  // same number smoke.spec.ts asserts) -- not run.records_total (5), which
+  // also counts a row that never became a SourcingRecord at all.
+  const totalRecordsCard = page.locator("article.metric-card", { hasText: "Total records" })
+  await expect(totalRecordsCard).toBeVisible({ timeout: 10_000 })
+  await expect(totalRecordsCard.getByText("4", { exact: true })).toBeVisible()
 
   // Decision distribution and risk overview charts render with real data.
   await expect(page.getByText("How records were decided")).toBeVisible()
-  await expect(page.getByText("HazMat / Bulky presence")).toBeVisible()
+  await expect(page.getByRole("heading", { name: "HazMat / Bulky" })).toBeVisible()
   await expect(page.getByTestId("analytics-chart").first()).toBeVisible()
 
-  // Averages are computed over usable values only -- never fabricated.
+  // Data confidence (provenance) and profitability sections use the
+  // backend's own aggregation -- never recalculated in the browser.
+  await expect(page.getByText("Provenance by field")).toBeVisible()
   await expect(page.getByText(/average roi/i)).toBeVisible()
-  await expect(page.getByText(/records$/).first()).toBeVisible()
+
+  // The decision chart's bar/donut toggle is interactive.
+  await page.getByRole("button", { name: "Bars" }).click()
+  await expect(page.getByRole("button", { name: "Bars" })).toHaveAttribute("aria-pressed", "true")
 
   await page.getByRole("link", { name: /open run detail/i }).click()
   await expect(page).toHaveURL(/\/runs\/.+/)

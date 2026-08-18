@@ -113,8 +113,54 @@ export interface RunsListResponse {
 
 // GET /api/v1/runs/{execution_id}/records (ADR-019) -- run-scoped only,
 // never a global product identity (record_ref is unique per execution,
-// ADR-012). RecordOut is the same shape as RunResponse.records.
+// ADR-012). RecordOut is the same shape as RunResponse.records. Query and
+// pagination are server-side (API_CONTRACT.md); the frontend must never
+// fetch every page and re-filter/sort/paginate in the browser.
+export interface RecordPaginationOut {
+  limit: number
+  offset: number
+  total: number
+  has_more: boolean
+}
+
 export interface RunRecordsResponse {
   execution_id: string
   records: RecordOut[]
+  pagination: RecordPaginationOut
+}
+
+export type RecordSort = "record_ref" | "sku" | "decision" | "profit" | "roi" | "margin"
+export type SortDirection = "asc" | "desc"
+
+export interface RunRecordsQuery {
+  limit?: number
+  offset?: number
+  search?: string
+  decision?: Decision
+  sort?: RecordSort
+  direction?: SortDirection
+}
+
+// GET /api/v1/runs/{execution_id}/analytics -- backend-computed aggregates
+// only (API_CONTRACT.md). The frontend never recomputes these: it renders
+// exactly what the Core/persistence layer already aggregated. `count`
+// fields count usable (VERIFIED) values only; a summary with count 0 has
+// every numeric field as `null`, never 0 -- see docs on provenance-aware
+// averaging (ADR-004): missing/invalid values are never coerced to zero.
+export interface NumericSummary {
+  count: number
+  sum: string | null
+  average: string | null
+  minimum: string | null
+  maximum: string | null
+}
+
+export interface RunAnalyticsOut {
+  execution_id: string
+  records: { total_records: number }
+  decisions: Record<string, number>
+  risks: Record<string, { status: Record<string, number>; severity: Record<string, number> }>
+  provenance: Record<"asin" | "weight" | "selling_price" | "profit" | "roi" | "margin", Record<string, number>>
+  data_quality: { records_with_issues: number; total_issue_count: number }
+  profitability: { profit: NumericSummary; roi: NumericSummary; margin: NumericSummary }
 }

@@ -10,7 +10,7 @@ function makeFile() {
 }
 
 async function fillAndSubmit(user: ReturnType<typeof userEvent.setup>) {
-  await user.upload(screen.getByLabelText(/catalog \(\.xlsx; \.csv pending\)/i), makeFile())
+  await user.upload(await screen.findByLabelText(/catalog \(\.xlsx; \.csv pending\)/i), makeFile())
   await user.type(screen.getByLabelText(/target profit/i), "5")
   await user.type(screen.getByLabelText(/target roi/i), "0.3")
   await user.type(screen.getByLabelText(/ventas mensuales/i), "0")
@@ -43,24 +43,34 @@ describe("App", () => {
       status: "PARTIAL_SUCCESS", input_filename: "catalog.xlsx", input_hash: "abc",
       records_total: 2, records_processed: 2, records_successful: 1, records_with_errors: 1, warnings: 0,
     }
-    const records = [
-      { record_ref: "row_1", marketplace: "US", supplier_sku: "S1", asin: { value: "B0X", status: "VERIFIED" }, upc: { value: null, status: null }, weight: { value: null, status: null }, selling_price: { value: null, status: null }, cog: null, shipping_per_unit: null, profit: { value: "5", status: "VERIFIED" }, roi: { value: "0.4", status: "VERIFIED" }, margin: { value: null, status: null }, break_even_price: { value: null, status: null }, max_cog_target_profit: { value: null, status: null }, max_cog_target_roi: { value: null, status: null }, hazmat_status: "PRESENT", hazmat_severity: "HIGH", bulky_status: "ABSENT", bulky_severity: "NONE", decision: "BUY", decision_reasons: [], issue_count: 0, issues: [] },
-      { record_ref: "row_2", marketplace: "US", supplier_sku: "S2", asin: { value: null, status: "NOT_FOUND" }, upc: { value: null, status: null }, weight: { value: null, status: null }, selling_price: { value: null, status: null }, cog: null, shipping_per_unit: null, profit: { value: null, status: "NOT_FOUND" }, roi: { value: null, status: "NOT_FOUND" }, margin: { value: null, status: null }, break_even_price: { value: null, status: null }, max_cog_target_profit: { value: null, status: null }, max_cog_target_roi: { value: null, status: null }, hazmat_status: "ABSENT", hazmat_severity: "NONE", bulky_status: "ABSENT", bulky_severity: "NONE", decision: "REVIEW", decision_reasons: [], issue_count: 1, issues: ["[WARNING] x"] },
-    ]
+    const analytics = {
+      execution_id: "run-1",
+      records: { total_records: 2 },
+      decisions: { BUY: 1, REVIEW: 1 },
+      risks: { hazmat: { status: { PRESENT: 1, ABSENT: 1 }, severity: { HIGH: 1 } }, bulky: { status: { ABSENT: 2 }, severity: {} } },
+      provenance: { asin: { VERIFIED: 1, NOT_FOUND: 1 }, weight: {}, selling_price: {}, profit: { VERIFIED: 1, NOT_FOUND: 1 }, roi: { VERIFIED: 1, NOT_FOUND: 1 }, margin: {} },
+      data_quality: { records_with_issues: 1, total_issue_count: 1 },
+      profitability: {
+        profit: { count: 1, sum: "5", average: "5", minimum: "5", maximum: "5" },
+        roi: { count: 1, sum: "0.4", average: "0.4", minimum: "0.4", maximum: "0.4" },
+        margin: { count: 0, sum: null, average: null, minimum: null, maximum: null },
+      },
+    }
     vi.stubGlobal(
       "fetch",
       vi.fn((url: string) => Promise.resolve({
         ok: true, status: 200,
-        json: async () => (url.includes("/records") ? { execution_id: "run-1", records } : { items: [run] }),
+        json: async () => (url.includes("/analytics") ? analytics : { items: [run] }),
       })),
     )
     window.history.pushState({}, "", "/")
     render(<App />)
 
     expect(await screen.findByText("catalog.xlsx")).toBeInTheDocument()
-    expect(await screen.findByText(/40\.0%/)).toBeInTheDocument() // average ROI over the one usable record only, waits for records to load
-    expect(screen.getByText("2")).toBeInTheDocument() // total records, from the real run summary
-    expect(screen.getByText(/\$5\.00/)).toBeInTheDocument() // average profit over the one usable record only
+    expect((await screen.findAllByText(/40\.0%/)).length).toBeGreaterThan(0) // average ROI, from the analytics endpoint
+    const totalRecordsCard = screen.getByText("Total records").closest("article")
+    expect(totalRecordsCard).toHaveTextContent("2") // analytics.records.total_records
+    expect(screen.getAllByText(/\$5\.00/).length).toBeGreaterThan(0) // average profit, from analytics.profitability
   })
 
   it("shows the results table and download link on a successful run -- never invents a value the backend didn't send", async () => {

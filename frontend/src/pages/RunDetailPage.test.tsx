@@ -74,7 +74,7 @@ describe("RunDetailPage", () => {
   })
 
   it("renders run summary and records from real API data", async () => {
-    stubFetch({ ok: true, status: 200, body: RUN }, { ok: true, status: 200, body: { execution_id: "run-1", records: [RECORD] } })
+    stubFetch({ ok: true, status: 200, body: RUN }, { ok: true, status: 200, body: { execution_id: "run-1", records: [RECORD], pagination: { limit: 100, offset: 0, total: 1, has_more: false } } })
     renderAt("/runs/run-1")
 
     expect(await screen.findByText("PARTIAL SUCCESS")).toBeInTheDocument()
@@ -84,7 +84,7 @@ describe("RunDetailPage", () => {
   })
 
   it("shows the decision and provenance without collapsing HAZMAT severity into a verified fact", async () => {
-    stubFetch({ ok: true, status: 200, body: RUN }, { ok: true, status: 200, body: { execution_id: "run-1", records: [RECORD] } })
+    stubFetch({ ok: true, status: 200, body: RUN }, { ok: true, status: 200, body: { execution_id: "run-1", records: [RECORD], pagination: { limit: 100, offset: 0, total: 1, has_more: false } } })
     renderAt("/runs/run-1")
 
     expect(await screen.findByText("PASS")).toBeInTheDocument()
@@ -94,7 +94,7 @@ describe("RunDetailPage", () => {
   })
 
   it("shows an empty state when the run has no persisted records", async () => {
-    stubFetch({ ok: true, status: 200, body: RUN }, { ok: true, status: 200, body: { execution_id: "run-1", records: [] } })
+    stubFetch({ ok: true, status: 200, body: RUN }, { ok: true, status: 200, body: { execution_id: "run-1", records: [], pagination: { limit: 100, offset: 0, total: 0, has_more: false } } })
     renderAt("/runs/run-1")
 
     expect(await screen.findByText(/no processed records/i)).toBeInTheDocument()
@@ -115,7 +115,7 @@ describe("RunDetailPage", () => {
   })
 
   it("offers a real download link for the run's Excel artifact", async () => {
-    stubFetch({ ok: true, status: 200, body: RUN }, { ok: true, status: 200, body: { execution_id: "run-1", records: [RECORD] } })
+    stubFetch({ ok: true, status: 200, body: RUN }, { ok: true, status: 200, body: { execution_id: "run-1", records: [RECORD], pagination: { limit: 100, offset: 0, total: 1, has_more: false } } })
     renderAt("/runs/run-1")
 
     const link = await screen.findByRole("link", { name: /download results/i })

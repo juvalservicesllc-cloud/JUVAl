@@ -25,7 +25,7 @@ test("upload Excel -> real backend -> results -> download", async ({ page }) => 
   // Same fixture/thresholds as the backend's own test_pipeline_end_to_end.py
   await expect(page.getByText("4", { exact: true })).toBeVisible() // records_processed
   await expect(page.getByText(/B0TESTAAA1/)).toBeVisible() // real ASIN from the real Core
-  await expect(page.getByText(/\[VERIFIED\]/).first()).toBeVisible() // provenance preserved, not flattened
+  await expect(page.getByText("VERIFIED", { exact: true }).first()).toBeVisible() // provenance preserved, not flattened
 
   const downloadPromise = page.waitForEvent("download")
   await page.getByRole("link", { name: /download results/i }).click()
