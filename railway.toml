@@ -14,16 +14,32 @@
 #     routes to the container, not localhost) and Railway's dynamic
 #     $PORT (never a hardcoded port). Railpack runs startCommand in a
 #     shell, so $PORT expansion works without extra wrapping.
+#     Uses `python -m uvicorn`, not a bare `uvicorn` -- more robust
+#     against PATH/shim differences between builders, though this alone
+#     did not fix the issue below.
 #
 # No healthcheckPath set on purpose -- see ADR-018 "Qué NO resuelve" /
 # docs/architecture/API_CONTRACT.md: a dedicated GET /health endpoint is
 # recommended but NOT implemented yet, pending approval. Without it,
 # Railway falls back to its default TCP-level check on the bound port,
 # which is sufficient to detect a crashed process.
+#
+#   - builder = NIXPACKS, not RAILPACK -- verified on two real deploys
+#     2026-08-18: with RAILPACK, `pip install .[postgres]` completed
+#     successfully in the build logs (all packages, including uvicorn,
+#     "Successfully installed") but the deploy container still failed
+#     with both "uvicorn: command not found" AND, after switching to
+#     `python -m uvicorn`, "No module named uvicorn" -- proving the
+#     runtime container genuinely had no installed site-packages, i.e.
+#     Railpack's build and runtime images were not sharing the pip
+#     install output for this project. Nixpacks (Railway's older,
+#     more mature Python builder) does not exhibit this separation and
+#     is the documented-stable choice for a pyproject.toml-only project
+#     with no requirements.txt.
 
 [build]
-builder = "RAILPACK"
+builder = "NIXPACKS"
 buildCommand = "pip install .[postgres]"
 
 [deploy]
-startCommand = "uvicorn juval.interfaces.api.main:app --host 0.0.0.0 --port $PORT"
+startCommand = "python -m uvicorn juval.interfaces.api.main:app --host 0.0.0.0 --port $PORT"
