@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import datetime as dt
 import re
+import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -248,8 +249,41 @@ def check_auth_posture() -> list[Finding]:
 # --- Runner -----------------------------------------------------------
 
 
+def check_dependency_vulnerabilities() -> list[Finding]:
+    """Run pip-audit against the installed dependency set (AC-13A).
+
+    pip-audit is a dev tool, so its absence is a WARN (the control is not
+    running) rather than a FAIL (the code is not broken). A found
+    vulnerability is a FAIL -- that is the point of the check.
+    """
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "pip_audit", "--progress-spinner", "off"],
+            capture_output=True,
+            text=True,
+            timeout=300,
+            cwd=REPO_ROOT,
+        )
+    except FileNotFoundError:
+        return [Finding("deps.audit", WARN, "pip-audit is not installed; dependency scanning is NOT running")]
+    except subprocess.TimeoutExpired:
+        return [Finding("deps.audit", WARN, "pip-audit timed out; dependency scan inconclusive")]
+
+    output = (result.stdout or "") + (result.stderr or "")
+    if "No module named" in output:
+        return [Finding("deps.audit", WARN, "pip-audit is not installed; dependency scanning is NOT running")]
+    if result.returncode == 0:
+        return [Finding("deps.audit", PASS, "pip-audit: no known vulnerabilities in installed dependencies")]
+    return [Finding("deps.audit", FAIL, "pip-audit reported known vulnerabilities -- run `python -m pip_audit` for detail")]
+
+
 def run_all() -> list[Finding]:
-    return [*check_incident_response_plan(), *check_auth_posture(), *scan_for_secrets()]
+    return [
+        *check_incident_response_plan(),
+        *check_auth_posture(),
+        *check_dependency_vulnerabilities(),
+        *scan_for_secrets(),
+    ]
 
 
 def main() -> int:

@@ -276,6 +276,34 @@ def test_unrecognized_auth_mode_fails_fast(monkeypatch):
         auth.auth_mode()
 
 
+def test_token_value_never_appears_in_logs(enable_auth, keypair, caplog):
+    """A rejected credential must not be written into the log it triggers.
+
+    Logs are shipped, retained and used as Amazon evidence; a token echoed
+    into one is a credential leak with a long tail (SECRETS.md Sec. 4).
+    """
+    token = make_token(keypair, expires_in_seconds=-60)
+    with caplog.at_level("DEBUG"):
+        assert client.get("/api/v1/runs", headers=bearer(token)).status_code == 401
+
+    logged = "\n".join(record.getMessage() for record in caplog.records)
+    assert token not in logged
+    # Not even a substantial fragment of the signature should survive.
+    assert token.split(".")[-1][:16] not in logged
+
+
+def test_error_response_does_not_leak_why_the_token_failed(enable_auth, keypair):
+    """The API must not be an oracle telling an attacker what to fix next."""
+    expired = make_token(keypair, expires_in_seconds=-60)
+    wrong_audience = make_token(keypair, audience="some-other-api")
+
+    first = client.get("/api/v1/runs", headers=bearer(expired))
+    second = client.get("/api/v1/runs", headers=bearer(wrong_audience))
+
+    assert first.status_code == second.status_code == 401
+    assert first.json() == second.json()
+
+
 def test_permissions_are_least_privilege():
     """The role table itself must not silently grant more than intended."""
     assert auth.ROLE_PERMISSIONS["viewer"] == frozenset({auth.RUNS_READ})
