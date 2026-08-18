@@ -431,17 +431,36 @@ Decisiones que quedaban `PENDING` en la versión anterior de esta
 sección, actualizadas:
 - Framework backend: **RESUELTO** (FastAPI, ADR-016).
 - Framework frontend: **RESUELTO e IMPLEMENTED** (React + Vite).
-- Deployment del frontend (Vercel): **aprobado como plataforma
-  objetivo**, CLI instalada (59.1.3), `frontend/vercel.json` preparado;
-  **sin desplegar** — re-confirmado 2026-08-18: `vercel whoami` →
-  `Logged out`; `vercel login` requiere interacción del usuario (OAuth
-  de navegador), no completable por el agente.
-- Hosting del backend: **RESUELTO** (Railway, ADR-018, 2026-08-17
-  bloque 8) tras comparación con Render/Fly.io/VPS. `railway.toml`
-  preparado; **sin desplegar** — re-confirmado 2026-08-18: `railway
-  whoami` → `Unauthorized`; `railway login` requiere interacción del
-  usuario, no completable por el agente. Ningún proyecto Railway está
-  vinculado (`.railway/` no existe en el repositorio).
+- Deployment del frontend (Vercel): **DESPLEGADO EN PRODUCCIÓN
+  2026-08-18**. Proyecto `juval1/juval-frontend`, URL real
+  `https://juval-frontend.vercel.app`. `frontend/vercel.json` requirió
+  una corrección real (rewrite SPA a `index.html` — sin ella, `/upload`,
+  `/products`, `/runs`, `/appearance` devolvían 404 real en navegación
+  directa, verificado por HTTP antes y después). Variable de entorno de
+  producción: únicamente `VITE_API_BASE_URL` (pública, sin secretos).
+  Confirmado en el bundle servido: apunta al backend real de Railway, sin
+  URL local ni DSN embebidos. Verificado con navegador real (Playwright)
+  contra la URL de producción: carga, sin errores de CORS en consola,
+  llama al backend real.
+- Hosting del backend: **DESPLEGADO EN PRODUCCIÓN 2026-08-18** (Railway,
+  ADR-018). Proyecto `juval-backend`, servicio `juval-backend`, URL real
+  `https://juval-backend-production.up.railway.app`. `railway.toml`
+  requirió una corrección real: el builder `RAILPACK` completaba
+  `pip install .[postgres]` en el build pero el contenedor de runtime no
+  heredaba los paquetes instalados (`uvicorn: command not found`, luego
+  `No module named uvicorn` con `python -m uvicorn`) — dos despliegues
+  reales lo probaron. Cambiado a `NIXPACKS`; despliegue posterior
+  exitoso, `/docs` y `/api/v1/runs` responden 200. Variables de
+  producción configuradas (nombres, nunca valores):
+  `JUVAL_EXECUTION_STORE=supabase`, `JUVAL_SUPABASE_DB_URL` (secreto,
+  vía stdin, nunca impreso ni commiteado), `JUVAL_CORS_ORIGINS` (fijado
+  al origin exacto de Vercel, sin wildcard). `JUVAL_AUTH_MODE` no está
+  configurada — auth permanece desactivada intencionalmente. Persistencia
+  Supabase de producción verificada con un ciclo real
+  write→read→cleanup a través de la API desplegada (no solo variables de
+  entorno): subida real con `persist=true`, lectura confirmada en
+  `/runs`, `/runs/{id}`, `/runs/{id}/analytics`, `/runs/{id}/records`, y
+  limpieza posterior verificada con `SELECT COUNT(*) = 0`.
 - Supabase: **aprobado como persistencia de producción** (ADR-017), y
   **verificado contra un proyecto real 2026-08-17/18** — proyecto
   `twrgzsbpazcjhhfolaju` (`ACTIVE_HEALTHY`), migración aplicada,
