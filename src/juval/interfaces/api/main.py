@@ -28,7 +28,7 @@ import os
 import zipfile
 from typing import Optional
 
-from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from openpyxl.utils.exceptions import InvalidFileException
@@ -44,6 +44,7 @@ from juval.infrastructure.logging.sqlite_execution_run_store import SqliteExecut
 from juval.infrastructure.persistence.supabase_execution_run_store import SupabaseExecutionRunStore
 
 from . import service
+from .auth import RUNS_CREATE, RUNS_EXPORT, RUNS_READ, auth_mode, require
 from .models import (
     FeesIn,
     RecordOut,
@@ -69,6 +70,15 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
+
+if auth_mode() == "disabled":
+    # Loud on purpose: an unauthenticated deployment cannot satisfy Amazon
+    # RF-03/RF-04. Production must set JUVAL_AUTH_MODE=oidc (ADR-022).
+    logger.warning(
+        "JUVAL_AUTH_MODE=disabled -- every endpoint is UNAUTHENTICATED. "
+        "This is acceptable only for local development; production must set "
+        "JUVAL_AUTH_MODE=oidc (see docs/adr/ADR-022, SECURITY.md)."
+    )
 
 
 def _execution_run_store() -> Optional[ExecutionRunStore]:
@@ -118,6 +128,7 @@ async def create_run(
     thresholds: str = Form(...),
     fees: str = Form(...),
     persist: bool = Form(False),
+    _principal=Depends(require(RUNS_CREATE)),
 ) -> JSONResponse:
     thresholds_in = _parse_json_form(thresholds, ThresholdsIn, "thresholds")
     fees_in = _parse_json_form(fees, FeesIn, "fees")
@@ -202,7 +213,7 @@ async def create_run(
 
 
 @app.get("/api/v1/runs/{execution_id}/download")
-async def download_run(execution_id: str) -> FileResponse:
+async def download_run(execution_id: str, _principal=Depends(require(RUNS_EXPORT))) -> FileResponse:
     path = service.output_path(execution_id)
     if not path.is_file():
         raise HTTPException(status_code=404, detail="unknown or expired execution_id")
@@ -224,7 +235,10 @@ def _require_execution_run_store() -> ExecutionRunStore:
 
 
 @app.get("/api/v1/runs", response_model=RunsListResponse)
-async def list_runs(limit: int = Query(_RUNS_LIST_DEFAULT_LIMIT, ge=1, le=_RUNS_LIST_MAX_LIMIT)) -> JSONResponse:
+async def list_runs(
+    limit: int = Query(_RUNS_LIST_DEFAULT_LIMIT, ge=1, le=_RUNS_LIST_MAX_LIMIT),
+    _principal=Depends(require(RUNS_READ)),
+) -> JSONResponse:
     store = _require_execution_run_store()
     runs = store.list_execution_runs(limit=limit)
     response = RunsListResponse(items=[service.run_to_summary(r) for r in runs])
@@ -232,7 +246,7 @@ async def list_runs(limit: int = Query(_RUNS_LIST_DEFAULT_LIMIT, ge=1, le=_RUNS_
 
 
 @app.get("/api/v1/runs/{execution_id}", response_model=RunSummaryOut)
-async def get_run(execution_id: str) -> JSONResponse:
+async def get_run(execution_id: str, _principal=Depends(require(RUNS_READ))) -> JSONResponse:
     store = _require_execution_run_store()
     run = store.load_execution_run(execution_id)
     if run is None:
@@ -242,7 +256,7 @@ async def get_run(execution_id: str) -> JSONResponse:
 
 
 @app.get("/api/v1/runs/{execution_id}/records", response_model=RunRecordsResponse)
-async def get_run_records(execution_id: str) -> JSONResponse:
+async def get_run_records(execution_id: str, _principal=Depends(require(RUNS_READ))) -> JSONResponse:
     store = _require_execution_run_store()
     run = store.load_execution_run(execution_id)
     if run is None:

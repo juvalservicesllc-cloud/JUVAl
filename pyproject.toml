@@ -8,6 +8,10 @@ dependencies = [
     "fastapi>=0.110",
     "uvicorn>=0.23",
     "python-multipart>=0.0.9",
+    # OIDC/JWT verification for interfaces/api/auth.py (ADR-022). Required,
+    # not optional: JUVAl must never implement authentication cryptography of
+    # its own (CLAUDE.md Sec. 16). The [crypto] extra supplies RS256.
+    "pyjwt[crypto]>=2.8",
 ]
 
 [project.optional-dependencies]
