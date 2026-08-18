@@ -1,0 +1,44 @@
+# JUVAl CI — tests plus the Amazon compliance controls.
+#
+# The compliance checks run on every push, not on request. Amazon's guidance
+# expects scanning after significant change (AC-13A); a control that only runs
+# when someone remembers to run it is not a control.
+
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  # Weekly: dependency advisories change without the code changing, so a
+  # green build today says nothing about next month.
+  schedule:
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+          python -m pip install pip-audit
+
+      - name: Tests
+        run: python -m pytest -q
+
+      - name: Compliance checks
+        # Incident response plan completeness and review currency (RF-01/RF-05),
+        # API auth posture (RF-03/RF-04), dependency CVEs, and secret scanning.
+        # Exits non-zero on any FAIL; never prints a matched secret value.
+        run: python tools/compliance_check.py

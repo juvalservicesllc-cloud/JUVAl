@@ -7,14 +7,22 @@ viven en `docs/` (arquitectura) y `docs/adr/` (decisiones). Si algo aquí
 parece contradecir `docs/`, **`docs/` y el código ganan** — reportar la
 discrepancia y corregir este archivo, no al revés.
 
-Última verificación contra el repositorio: 2026-08-17 (ver
-`docs/RECONCILIATION_REPORT.md` y `docs/PROJECT_STATUS.md` §Sesión
-2026-08-17, bloques 1-8; `.git` **inicializado** pero **sin commit
-todavía** — falta `git config user.name`/`user.email`, que el agente
-tiene prohibido configurar; **209 tests de backend + 9 de frontend + 1
-E2E real**, todos en verde; **18 ADRs** en `docs/adr/` — ADR-001 a
-ADR-008 y ADR-010 a ADR-018 en estado Aceptada, **solo ADR-009 en
-estado Propuesta**; Fase 2/3 **COMPLETE**; `interfaces/cli/main.py`
+Última verificación contra el repositorio: **2026-08-18**. Git **está
+inicializado, con historial y remoto** (`origin`, GitHub) — el bloqueo
+histórico de `git config user.name`/`user.email` ya no aplica. Backend:
+**303 tests pasando, 3 skipped** (`SKIPPED_EXPECTED`: Supabase contra
+base real), más 9 de frontend + 1 E2E. **22 ADRs** en `docs/adr/` —
+ADR-009 (Propuesta), ADR-021 (Propuesta, superada por ADR-022 en cuanto
+a proveedor) y **ADR-022 (Propuesta — Okta como IdP, pendiente de
+aprobación comercial)**; el resto Aceptadas. **Cumplimiento Amazon:
+`SP_API_DEVELOPER_REGISTRATION = REJECTED_REMEDIATION_REQUIRED`; los
+cinco hallazgos RF-01…RF-05 están en `PARTIAL`, ninguno `COMPLIANT`;
+`REAPPLICATION GATE = BLOCKED`** — ver `docs/compliance/`
+(`SP_API_REGISTRATION_REMEDIATION.md` §20 es el estado vigente).
+El histórico previo decía «209 tests» y «sin commit todavía»: ambas
+afirmaciones eran ciertas al cierre de 2026-08-17 y hoy son falsas.
+Contexto histórico de aquella sesión (bloques 1-8) en
+`docs/RECONCILIATION_REPORT.md` y `docs/PROJECT_STATUS.md`; Fase 2/3 **COMPLETE**; `interfaces/cli/main.py`
 implementado; ADR-014 — PWA; ADR-015 — fallback fail-closed de
 severidad, HAZMAT→HIGH/BULKY→MEDIUM sin aprobación de negocio, sin
 cambiar; ADR-016 — FastAPI, `interfaces/api/` **IMPLEMENTED** (Fase
@@ -335,7 +343,9 @@ Estado por componente:
 | React + Vite (frontend) | **APPROVED** (elección de framework), `interfaces/` frontend **NOT STARTED** — bloqueado por Node.js/npm ausentes, no por decisión pendiente | `docs/PROJECT_STATUS.md` §Sesión 2026-08-17 (bloque 3) |
 | Vercel (deployment) | **APPROVED** como plataforma objetivo, restricciones técnicas reales sin investigar (sin Vercel CLI) | `docs/PROJECT_STATUS.md` §Sesión 2026-08-17 (bloque 3) |
 | Supabase/PostgreSQL | **APPROVED** como persistencia de producción; adapter preparado, **NO verificado contra una base real** — no tratar como equivalente en confianza a SQLite/ADR-013 | ADR-017 (`Estado: Aceptada`, 2026-08-17), `docs/architecture/SUPABASE.md` §1 |
-| Clerk | **PENDING** — no implementar mientras el producto funcione sin autenticación; cuando se introduzca, documentar users/sessions/organizations/roles/permissions/data isolation | sin ADR |
+| **Identidad humana / IdP** | **Okta Workforce Identity RECOMENDADO** — único candidato que satisface nativamente los 11 requisitos HARD (incluidos edad mínima de contraseña y exclusión de nombre, que descartaron a Cognito). **PENDING aprobación comercial** (mínimo 1.500 USD/año). Cognito **RECHAZADO**; Entra External ID y Entra ID workforce **ELIMINADOS**; Clerk sin resolver | ADR-022 (`Propuesta`), ADR-021 (matriz de ownership) |
+| **AuthN/AuthZ backend** | **IMPLEMENTED + TESTED** — `interfaces/api/auth.py`: validación OIDC/JWT (emisor, firma JWKS, audiencia, expiración) y RBAC por capacidades (`viewer`/`operator`/`admin`) aplicado server-side en los 5 endpoints; 33 tests negativos. **Inactivo hasta que `JUVAL_AUTH_MODE=oidc`** y exista tenant | ADR-022, `docs/compliance/ACCESS_CONTROL.md` |
+| Clerk | **DESCARTADO como candidato por defecto** — no seleccionado; ver ADR-022 | ADR-022 |
 | Recomendación técnica de backend (Python 3.11+, `pytest`, `openpyxl`) | Ya en uso (`pyproject.toml`) | `ARCHITECTURE.md` §15 (recomendación, no ADR) |
 
 Cada tecnología de esta lista necesita una razón concreta antes de
@@ -450,12 +460,19 @@ mismo cambio (regla explícita de `DATA_DICTIONARY.md`).
 
 ## 19. Git
 
-No hay `.git` inicializado todavía (decisión pendiente explícita,
-`ARCHITECTURE.md` §14.7) — no ejecutar `git init` ni ningún comando Git
-destructivo sin autorización explícita del usuario. Cuando exista
-repositorio: no commits destructivos, no borrar historial, revisar estado
-antes de cambios grandes, nunca incluir `.env`/secrets/credenciales/
-archivos temporales/datasets privados grandes.
+El repositorio **existe, tiene historial y remoto** (`origin`, GitHub),
+rama `master`. Reglas: no commits destructivos, no borrar historial,
+revisar estado antes de cambios grandes, nunca incluir
+`.env`/secrets/credenciales/archivos temporales/datasets privados
+grandes.
+
+**Cambios concurrentes**: el working tree suele contener modificaciones
+de otro trabajo en curso. Usar **siempre pathspec explícito** al hacer
+`git add`; **prohibido** `git add .`, `git add -A`, `git reset --hard`,
+`git checkout -- .`, `git clean` y cualquier force push. Antes de
+`push`: `git fetch origin` y verificar que no hay divergencia
+inesperada; si `origin/master` avanzó, parar y reportar — nunca
+merge/rebase/force automático.
 
 ## 20. Dependencias
 
