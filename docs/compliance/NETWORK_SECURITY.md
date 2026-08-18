@@ -104,7 +104,40 @@ Amazon as an implemented control.
 |---|---|---|---|---|---|---|
 | **Railway** (backend) | **NO** — `railway.toml` prepared, never deployed (ADR-018) | Provider-managed edge; JUVAl-level ingress rules unconfigured | Provider-level only; no JUVAl-visible IDS/IPS configured | Provider runtime responsibility | Would rely on provider network isolation, not a JUVAl-designed VPC | Provider terminates HTTPS |
 | **Vercel** (PWA) | **NO** | Provider edge/WAF capability | Provider-level | N/A (static assets) | Static hosting, no backend reachability | Provider terminates HTTPS |
-| **Supabase** (PostgreSQL) | Project exists; **not verified against a live JUVAl deployment** | Network restrictions available on paid tiers; current state unverified | Provider-level | Provider responsibility | **RLS is the primary control and has no policies verified for JUVAl tables** | TLS via connection pooler |
+| **Supabase** (PostgreSQL) | Project exists; **not verified against a live JUVAl deployment** | Network restrictions available on paid tiers; current state unverified | Provider-level | Provider responsibility | RLS **enabled, zero policies = fail-closed** on both tables (see §3.1) | TLS via connection pooler |
+
+### 3.1 Supabase Row Level Security — enabled and fail-closed
+
+Both migrations (`20260817000000_execution_runs.sql`,
+`20260817000001_execution_run_records.sql`) end with
+`alter table … enable row level security` and define **no policies**. In
+PostgreSQL that means the table is inaccessible to any non-owner role: the
+public/anon API key can read nothing. That is fail-closed and is the correct
+posture, not an oversight.
+
+Two consequences must be stated precisely, because they are easy to overclaim:
+
+1. **RLS is not the control protecting run data from JUVAl's own users.** The
+   backend connects as the database owner over a direct PostgreSQL connection,
+   and RLS does not constrain the owner. Authorization for human callers is
+   enforced at the API layer (`interfaces/api/auth.py`, RF-04) — that is where
+   the least-privilege decision actually happens.
+2. **RLS is the control that stops the browser reaching the database.** The
+   frontend never queries Supabase for run data; it calls the FastAPI backend.
+   Should an anon key ever leak, RLS with zero policies means it grants no
+   read access to these tables.
+
+**No RLS policies are proposed.** There is no authenticated Supabase end-user
+model — no caller exists for a per-row policy to discriminate between — so
+writing policies now would be speculative and would weaken the current
+fail-closed default rather than strengthen it. If JUVAl ever lets the browser
+query Supabase directly, that is a new architectural decision requiring an ADR,
+and per-row policies become mandatory at that point.
+
+Remaining verification: confirm on the live project that RLS is actually
+enabled (the migrations are written but **not yet applied** to any live
+Supabase project — see `SUPABASE.md`), and that no permissive policy was added
+manually through the dashboard.
 | **GitHub** (source) | Repository exists | N/A | N/A | N/A | Branch/access controls unverified | HTTPS |
 
 ### The honest RF-02 position
@@ -138,7 +171,7 @@ precisely the kind of unevidenced "YES" that caused the original rejection.
 | Firewall / ACL | `VERIFIED` (all 3 profiles enabled) | `PROVIDER_CAPABILITY`, not deployed | **PARTIAL** |
 | IDS / IPS | `VERIFIED` (Defender NIS enabled) | `PROVIDER_CAPABILITY`, not deployed | **PARTIAL** |
 | Anti-virus / anti-malware | `VERIFIED` (Defender, signatures 0 days old) | Provider responsibility | **PARTIAL** |
-| Network segmentation | N/A (single host) | **Logical only**; RLS policies unverified | **NOT_IMPLEMENTED** |
+| Network segmentation | N/A (single host) | **Logical only**; RLS enabled fail-closed (§3.1), not yet verified on the live project | **PARTIAL** |
 | TLS in transit (AC-05) | HTTPS outbound | `PROVIDER_CAPABILITY`, not verified | **NEEDS_VERIFICATION** |
 | Endpoint patching | **FINDING F-01 — 9 months behind** | Provider-managed | **NOT_COMPLIANT** |
 
@@ -154,7 +187,7 @@ actually deployed, because there is no system to evidence.
 | N-1 | Resolve **F-01**: patch and move to a supported OS, or formally exclude the workstation from the boundary | User (**EXTERNAL**) | **YES** |
 | N-2 | Resolve **F-02**: verify disk encryption from an elevated shell | User (**EXTERNAL**) | Yes |
 | N-3 | Deploy the backend so cloud controls exist to evidence | User (**EXTERNAL** — `railway login` is interactive) | **YES** |
-| N-4 | Define and apply Supabase RLS policies for JUVAl tables, then test them negatively | Agent, after N-3 | **YES** |
+| N-4 | Apply the migrations to the live Supabase project and confirm RLS is enabled with no permissive policy added via the dashboard (§3.1). **Do not author per-row policies** — there is no authenticated Supabase caller to discriminate between | User + agent, after N-3 | **YES** |
 | N-5 | Verify TLS termination and database transport after deployment (AC-05) | Agent, after N-3 | Yes |
 | N-6 | Restrict Supabase network access to the backend if the tier permits | User + agent, after N-3 | Improves posture |
 | N-7 | Record dated provider configuration evidence for each deployed component | Both, after N-3 | **YES** |

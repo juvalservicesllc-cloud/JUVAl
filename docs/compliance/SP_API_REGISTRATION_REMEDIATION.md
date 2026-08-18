@@ -646,7 +646,7 @@ Documentation alone is never `COMPLIANT`.
 | **RF-01** | `NOT_IMPLEMENTED` | **PARTIAL** | Yes — [`INCIDENT_RESPONSE_PLAN.md`](INCIDENT_RESPONSE_PLAN.md) §5 defines the 24-hour `security@amazon.com` procedure, the detection clock, the Amazon Information determination and evidence preservation | Structure verified mechanically by `tools/compliance_check.py` (15 tests) | **NO** | Roles unnamed; plan unapproved; no tabletop exercise run (§12 A-1…A-5) |
 | **RF-02** | `NOT_IMPLEMENTED` | **PARTIAL** | Workstation controls verified; cloud controls not deployed — [`NETWORK_SECURITY.md`](NETWORK_SECURITY.md) | Workstation measured 2026-08-18 | Partially — workstation only | **Backend is not deployed**, so there is no system to evidence. Plus finding F-01 (host ~9 months unpatched, OS past end-of-support) |
 | **RF-03** | `NOT_IMPLEMENTED` | **PARTIAL** | Backend half implemented (OIDC validation, `interfaces/api/auth.py`); IdP half designed and provider identified (ADR-022) | Yes — 33 negative security tests | Backend only | No IdP tenant. Okta requires a $1,500/year contract (**commercial approval**) |
-| **RF-04** | `NOT_IMPLEMENTED` | **PARTIAL** | Yes — least-privilege RBAC enforced server-side on every endpoint; [`ACCESS_CONTROL.md`](ACCESS_CONTROL.md) | Yes — positive, negative, and direct-API-bypass tests | Technical half only | No users exist to govern; quarterly review never run; Supabase RLS policies absent |
+| **RF-04** | `NOT_IMPLEMENTED` | **PARTIAL** | Yes — least-privilege RBAC enforced server-side on every endpoint; [`ACCESS_CONTROL.md`](ACCESS_CONTROL.md) | Yes — positive, negative, and direct-API-bypass tests | Technical half only | No users exist to govern; quarterly review never run |
 | **RF-05** | `NOT_IMPLEMENTED` | **PARTIAL** | Yes — roles, six-month review cadence, tabletop process and templates | Review currency checked mechanically | **NO** | Same as RF-01: unapproved, unexercised |
 
 **No finding is `COMPLIANT`.** Every one advanced from `NOT_IMPLEMENTED` to
@@ -720,7 +720,7 @@ The remaining path is gated on user actions, in dependency order:
 | **E-4** | Run the first tabletop exercise and file the record (**never send a test mail to `security@amazon.com`**) | RF-05 | — |
 | **E-5** | Resolve `NETWORK_SECURITY.md` F-01: patch the workstation and move to a supported OS, or formally exclude it from the boundary | RF-02 | — |
 | **E-6** | `railway login` and deploy the backend with `JUVAL_AUTH_MODE=oidc` and `JUVAL_EXECUTION_STORE=supabase` | RF-02, RF-03, RF-04 | Hosting |
-| **E-7** | After E-6: apply and negatively test Supabase RLS policies; verify TLS; capture provider configuration evidence | RF-02, RF-04 | — |
+| **E-7** | After E-6: apply the migrations to the live Supabase project, confirm RLS is enabled with no permissive policy added via the dashboard (`NETWORK_SECURITY.md` §3.1), verify TLS, capture provider configuration evidence | RF-02, RF-04 | — |
 | **E-8** | Run the first quarterly access review and one ≤24-hour removal drill | RF-04 | — |
 | **E-9** | Only then: update the Developer Profile truthfully and open a **new** case (never reopen the prior one) | Reapplication | — |
 

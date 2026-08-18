@@ -146,7 +146,7 @@ proving the gap was under 24 hours.
 | Unique IDs / no shared accounts | **DOCUMENTED** | §2 — no accounts exist |
 | Quarterly review | **DOCUMENTED, NEVER RUN** | §3 |
 | ≤24-hour removal | **DOCUMENTED, NEVER EXERCISED** | §4 |
-| Supabase RLS policies | **NOT IMPLEMENTED** | `NETWORK_SECURITY.md` N-4 |
+| Supabase RLS | **ENABLED, FAIL-CLOSED** (zero policies, by design) — not yet verified on the live project | `NETWORK_SECURITY.md` §3.1 |
 | Production operation | **BLOCKED** | Needs IdP tenant + deployment |
 
 `RF-04 = PARTIAL` — technical control implemented and tested; organizational

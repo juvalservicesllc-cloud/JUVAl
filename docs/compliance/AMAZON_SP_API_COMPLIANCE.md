@@ -71,7 +71,7 @@ of the rejection**. Current state per finding, superseding it:
 | RF-01 | **PARTIAL** | [`INCIDENT_RESPONSE_PLAN.md`](INCIDENT_RESPONSE_PLAN.md) | structure verified mechanically | NO | roles unnamed, plan unapproved, no exercise |
 | RF-02 | **PARTIAL** | [`NETWORK_SECURITY.md`](NETWORK_SECURITY.md) | workstation measured | workstation only | backend not deployed; finding F-01 (host unpatched since 2025-11-19) |
 | RF-03 | **PARTIAL** | backend OIDC validation (`interfaces/api/auth.py`); IdP chosen (ADR-022) | 33 negative security tests | backend only | no IdP tenant; commercial approval pending |
-| RF-04 | **PARTIAL** | least-privilege RBAC enforced server-side | positive + negative + bypass tests | technical half only | no users; no access review; no RLS policies |
+| RF-04 | **PARTIAL** | least-privilege RBAC enforced server-side | positive + negative + bypass tests | technical half only | no users; no access review |
 | RF-05 | **PARTIAL** | roles, six-month cadence, tabletop process | review currency checked mechanically | NO | unapproved, unexercised |
 
 No finding is `COMPLIANT`. Detail, evidence index and the ordered external
