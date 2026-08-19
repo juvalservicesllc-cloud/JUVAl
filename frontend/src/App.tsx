@@ -14,6 +14,7 @@ import { ThemeProvider } from "./theme/ThemeProvider"
 const UploadPage = lazy(() => import("./pages/UploadPage").then((m) => ({ default: m.UploadPage })))
 const RunsPage = lazy(() => import("./pages/RunsPage").then((m) => ({ default: m.RunsPage })))
 const RunDetailPage = lazy(() => import("./pages/RunDetailPage").then((m) => ({ default: m.RunDetailPage })))
+const ProductDetailPage = lazy(() => import("./pages/ProductDetailPage").then((m) => ({ default: m.ProductDetailPage })))
 const AppearancePage = lazy(() => import("./pages/AppearancePage").then((m) => ({ default: m.AppearancePage })))
 
 function RouteFallback() {
@@ -36,6 +37,7 @@ export default function App() {
               <Route path="products" element={<ProductsPage />} />
               <Route path="runs" element={<RunsPage />} />
               <Route path="runs/:executionId" element={<RunDetailPage />} />
+              <Route path="runs/:executionId/records/:recordRef" element={<ProductDetailPage />} />
               <Route path="appearance" element={<AppearancePage />} />
             </Route>
           </Routes>

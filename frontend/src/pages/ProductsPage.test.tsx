@@ -1,7 +1,12 @@
 import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import { MemoryRouter } from "react-router-dom"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { ProductsPage } from "./ProductsPage"
+
+function renderPage() {
+  return render(<MemoryRouter><ProductsPage /></MemoryRouter>)
+}
 
 const run = { execution_id: "r1", started_at: "2026-08-18T12:00:00Z", finished_at: null, status: "SUCCESS", input_filename: "catalog.xlsx", input_hash: "x", records_total: 2, records_processed: 2, records_successful: 2, records_with_errors: 0, warnings: 0 }
 const empty = { value: null, status: null }
@@ -46,9 +51,16 @@ function lastRequestUrl(fetchMock: ReturnType<typeof vi.fn>): URL {
 describe("ProductsPage", () => {
   afterEach(() => vi.unstubAllGlobals())
 
+  it("shows a loading state while the persisted-run selector is being fetched", () => {
+    vi.stubGlobal("fetch", vi.fn().mockReturnValue(new Promise(() => {})))
+    renderPage()
+
+    expect(screen.getByText(/loading catalog/i)).toBeInTheDocument()
+  })
+
   it("issues the initial query against the server contract and renders real records", async () => {
     const fetchMock = stubFetch()
-    render(<ProductsPage />)
+    renderPage()
 
     expect(await screen.findByText("Alpha")).toBeInTheDocument()
     expect(screen.getAllByText("VERIFIED").length).toBeGreaterThan(0)
@@ -66,7 +78,7 @@ describe("ProductsPage", () => {
   it("sends the decision filter server-side and never sends UNKNOWN", async () => {
     const fetchMock = stubFetch()
     const user = userEvent.setup()
-    render(<ProductsPage />)
+    renderPage()
     await screen.findByText("Alpha")
 
     await user.selectOptions(screen.getByLabelText(/filter by decision/i), "BUY")
@@ -77,7 +89,7 @@ describe("ProductsPage", () => {
   it("resets offset to 0 when the decision filter changes", async () => {
     const fetchMock = stubFetch(() => ({ records, total: 120 }))
     const user = userEvent.setup()
-    render(<ProductsPage />)
+    renderPage()
     await screen.findByText("Alpha")
 
     await user.click(screen.getByRole("button", { name: /next/i }))
@@ -90,7 +102,7 @@ describe("ProductsPage", () => {
   it("debounces search (no request per keystroke) and resets offset when it settles", async () => {
     const fetchMock = stubFetch()
     const user = userEvent.setup()
-    render(<ProductsPage />)
+    renderPage()
     await screen.findByText("Alpha")
     const requestsBeforeTyping = fetchMock.mock.calls.filter((call: unknown[]) => String(call[0]).includes("/records")).length
 
@@ -106,7 +118,7 @@ describe("ProductsPage", () => {
   it("toggles sort direction on repeated clicks and resets offset on a new sort key", async () => {
     const fetchMock = stubFetch(() => ({ records, total: 120 }))
     const user = userEvent.setup()
-    render(<ProductsPage />)
+    renderPage()
     await screen.findByText("Alpha")
 
     await user.click(screen.getByRole("button", { name: /^profit/i }))
@@ -122,7 +134,7 @@ describe("ProductsPage", () => {
   it("paginates with Previous/Next using has_more and shows a range label", async () => {
     const fetchMock = stubFetch(() => ({ records, total: 120 }))
     const user = userEvent.setup()
-    render(<ProductsPage />)
+    renderPage()
     await screen.findByText("Alpha")
 
     expect(screen.getByText(/showing 1–50 of 120/i)).toBeInTheDocument()
@@ -143,7 +155,7 @@ describe("ProductsPage", () => {
           : Promise.resolve({ ok: true, status: 200, json: async () => ({ items: [run] }) }),
       ),
     )
-    render(<ProductsPage />)
+    renderPage()
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/search exceeds 200 characters/i)
     expect(screen.getByRole("button", { name: /retry/i })).toBeInTheDocument()
@@ -151,7 +163,7 @@ describe("ProductsPage", () => {
 
   it("shows an explicit empty state when no records match the query", async () => {
     stubFetch(() => ({ records: [], total: 0 }))
-    render(<ProductsPage />)
+    renderPage()
 
     expect(await screen.findByText(/no records match these filters/i)).toBeInTheDocument()
   })

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { ClockCounterClockwise } from "@phosphor-icons/react"
 import { Link } from "react-router-dom"
 import { getRunAnalytics } from "../api/analytics"
 import { ApiError, apiErrorMessage } from "../api/client"
@@ -89,9 +90,7 @@ function RiskPanel({ title, risk }: { title: string; risk: RunAnalyticsOut["risk
         <p className="status" style={{ marginTop: 0, paddingTop: 0, borderTop: "none" }}>No {title.toLowerCase()} data.</p>
       ) : (
         <>
-          <div className="analytics-chart risk-chart">
-            <AnalyticsChart chartType="bar" data={statusData} />
-          </div>
+          <AnalyticsChart chartType="bar" data={statusData} height={150} />
           <ChartTextSummary title={`${title} status`} data={statusData} />
           {severityData.length > 0 && (
             <>
@@ -150,7 +149,6 @@ export function DashboardPage() {
   const selectedRun = runsState.status === "ready" ? runsState.items.find((r) => r.execution_id === selectedRunId) ?? null : null
   const analytics = analyticsState.status === "ready" ? analyticsState.analytics : null
   const decisionData = analytics ? toChartData(analytics.decisions, DECISION_ORDER, DECISION_COLOR) : []
-  const recordsWithoutIssues = analytics ? Math.max(0, analytics.records.total_records - analytics.data_quality.records_with_issues) : 0
 
   return (
     <>
@@ -252,33 +250,18 @@ export function DashboardPage() {
                 </div>
               ) : (
                 <>
+                  {/* B. Primary KPIs -- headline numbers only. Decision counts live in
+                      the Decision Distribution chart below, not duplicated here. */}
                   <section className="metric-grid">
                     <article className="metric-card">
                       <span>Total records</span>
                       <strong>{analytics.records.total_records.toLocaleString()}</strong>
                       <small>From the analytics endpoint</small>
                     </article>
-                    {DECISION_ORDER.filter((key) => key in analytics.decisions).map((key) => (
-                      <article className="metric-card" key={key}>
-                        <span>{key}</span>
-                        <strong>{analytics.decisions[key].toLocaleString()}</strong>
-                        <small>Decision Engine output</small>
-                      </article>
-                    ))}
                     <article className="metric-card">
                       <span>With issues</span>
                       <strong>{analytics.data_quality.records_with_issues.toLocaleString()}</strong>
                       <small>{analytics.data_quality.total_issue_count.toLocaleString()} total issues</small>
-                    </article>
-                    <article className="metric-card">
-                      <span>Without issues</span>
-                      <strong>{recordsWithoutIssues.toLocaleString()}</strong>
-                      <small>total − with issues</small>
-                    </article>
-                    <article className="metric-card">
-                      <span>Average profit</span>
-                      <strong>{formatCurrency(analytics.profitability.profit.average)}</strong>
-                      <small>{analytics.profitability.profit.count.toLocaleString()} VERIFIED records</small>
                     </article>
                     <article className="metric-card">
                       <span>Average ROI</span>
@@ -286,12 +269,13 @@ export function DashboardPage() {
                       <small>{analytics.profitability.roi.count.toLocaleString()} VERIFIED records</small>
                     </article>
                     <article className="metric-card">
-                      <span>Average margin</span>
-                      <strong>{formatPercent(analytics.profitability.margin.average)}</strong>
-                      <small>{analytics.profitability.margin.count.toLocaleString()} VERIFIED records</small>
+                      <span>Average profit</span>
+                      <strong>{formatCurrency(analytics.profitability.profit.average)}</strong>
+                      <small>{analytics.profitability.profit.count.toLocaleString()} VERIFIED records</small>
                     </article>
                   </section>
 
+                  {/* C. Decision distribution -- the single place BUY/REVIEW/PASS/UNKNOWN counts live. */}
                   <section className="panel analytics-panel">
                     <div className="panel-heading">
                       <div>
@@ -318,31 +302,7 @@ export function DashboardPage() {
                     )}
                   </section>
 
-                  <section className="panel">
-                    <div className="panel-heading">
-                      <div>
-                        <p className="eyebrow">RISK OVERVIEW</p>
-                        <h2>HazMat / Bulky</h2>
-                        <p>Presence and policy-derived severity (ADR-020) — never shown as externally verified.</p>
-                      </div>
-                    </div>
-                    <div className="risk-grid">
-                      <RiskPanel title="HazMat" risk={analytics.risks.hazmat} />
-                      <RiskPanel title="Bulky" risk={analytics.risks.bulky} />
-                    </div>
-                  </section>
-
-                  <section className="panel">
-                    <div className="panel-heading">
-                      <div>
-                        <p className="eyebrow">DATA CONFIDENCE</p>
-                        <h2>Provenance by field</h2>
-                        <p>VERIFIED / INFERRED / NOT_FOUND / INVALID — never collapsed into a single confidence rating (ADR-003/ADR-004).</p>
-                      </div>
-                    </div>
-                    <ProvenanceBreakdown provenance={analytics.provenance} />
-                  </section>
-
+                  {/* D. Profitability intelligence */}
                   <section className="panel">
                     <div className="panel-heading">
                       <div>
@@ -357,10 +317,70 @@ export function DashboardPage() {
                       <SummaryCards title="Margin" summary={analytics.profitability.margin} format={formatPercent} />
                     </div>
                   </section>
+
+                  {/* E. Risk intelligence */}
+                  <section className="panel">
+                    <div className="panel-heading">
+                      <div>
+                        <p className="eyebrow">RISK OVERVIEW</p>
+                        <h2>HazMat / Bulky</h2>
+                        <p>Presence and policy-derived severity (ADR-020) — never shown as externally verified.</p>
+                      </div>
+                    </div>
+                    <div className="risk-grid">
+                      <RiskPanel title="HazMat" risk={analytics.risks.hazmat} />
+                      <RiskPanel title="Bulky" risk={analytics.risks.bulky} />
+                    </div>
+                  </section>
+
+                  {/* F. Data quality / provenance */}
+                  <section className="panel">
+                    <div className="panel-heading">
+                      <div>
+                        <p className="eyebrow">DATA CONFIDENCE</p>
+                        <h2>Provenance by field</h2>
+                        <p>VERIFIED / INFERRED / NOT_FOUND / INVALID — never collapsed into a single confidence rating (ADR-003/ADR-004).</p>
+                      </div>
+                    </div>
+                    <ProvenanceBreakdown provenance={analytics.provenance} />
+                  </section>
                 </>
               )}
             </>
           )}
+
+          {/* G. Recent runs / actionable items -- reuses the run list already
+              fetched for the selector above; no second API call. Excludes the
+              run already shown as "Selected Run" above -- otherwise its
+              filename would render twice on the same page. */}
+          <section className="panel">
+            <div className="panel-heading">
+              <div>
+                <p className="eyebrow">RECENT RUNS</p>
+                <h2>Jump back into another run</h2>
+                <p>Newest first. Open a run to see its full record table and download.</p>
+              </div>
+              <Link to="/runs">View all runs</Link>
+            </div>
+            {runsState.items.filter((run) => run.execution_id !== selectedRunId).length === 0 ? (
+              <p className="status" style={{ marginTop: 0, paddingTop: 0, borderTop: "none" }}>No other persisted runs yet.</p>
+            ) : (
+            <div className="run-list">
+              {runsState.items.filter((run) => run.execution_id !== selectedRunId).slice(0, 6).map((run) => (
+                <article key={run.execution_id}>
+                  <span className="run-icon" aria-hidden="true">
+                    <ClockCounterClockwise size={16} weight="regular" />
+                  </span>
+                  <div>
+                    <Link to={`/runs/${encodeURIComponent(run.execution_id)}`}>{run.input_filename}</Link>
+                    <small>{formatTimestamp(run.started_at)} · {run.records_total.toLocaleString()} records</small>
+                  </div>
+                  <StatusBadge value={run.status} />
+                </article>
+              ))}
+            </div>
+            )}
+          </section>
         </>
       )}
     </>

@@ -1,8 +1,8 @@
 import type { AppearanceMode, ThemeColors, ThemeSettings } from "./types"
 
 export const appearancePalettes: Record<AppearanceMode, ThemeColors> = {
-  light: { background: "#f5f7fb", sidebar: "#172033", header: "#ffffff", surface: "#ffffff", text: "#172033", muted: "#64748b", border: "#d9e0eb", accent: "#7c8cff" },
-  dark: { background: "#181a1f", sidebar: "#121419", header: "#1d2026", surface: "#24272e", text: "#f2f4f8", muted: "#9aa1ae", border: "#373c46", accent: "#7c8cff" },
+  light: { background: "#f7f8fb", sidebar: "#14161b", header: "#ffffff", surface: "#ffffff", text: "#16181d", muted: "#56606f", border: "#e2e5ec", accent: "#4f5fe0" },
+  dark: { background: "#14161b", sidebar: "#101216", header: "#14161b", surface: "#1a1d24", text: "#eef0f5", muted: "#9aa2b0", border: "#262a33", accent: "#6a7bff" },
 }
 
 export const defaultThemeSettings: ThemeSettings = {

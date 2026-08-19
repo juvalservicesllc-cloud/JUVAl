@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react"
 import { HexColorPicker } from "react-colorful"
 
-const swatches = ["#7c8cff", "#54a6ff", "#42c7a5", "#e7ad58", "#ed737a", "#ffffff", "#15171c", "#0c0d10"]
+const swatches = ["#6a7bff", "#4f5fe0", "#54a6ff", "#34c77b", "#e0a940", "#e2646c", "#ffffff", "#14161b"]
 
 export function ColorControl({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
-  const validValue = /^#[0-9a-f]{6}$/i.test(value) ? value : "#7c8cff"
+  const validValue = /^#[0-9a-f]{6}$/i.test(value) ? value : "#6a7bff"
   const [hex, setHex] = useState(validValue.toUpperCase())
   useEffect(() => setHex(validValue.toUpperCase()), [validValue])
   function update(next: string) { setHex(next.toUpperCase()); if (/^#[0-9a-f]{6}$/i.test(next)) onChange(next) }

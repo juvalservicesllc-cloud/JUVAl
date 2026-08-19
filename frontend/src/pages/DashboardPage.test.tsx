@@ -122,6 +122,14 @@ describe("DashboardPage", () => {
     expect(screen.getByRole("link", { name: /open run detail/i })).toHaveAttribute("href", "/runs/run-a")
   })
 
+  it("keeps other persisted runs available in Recent Runs without another data source", async () => {
+    stubFetchWithRuns([RUN_A, RUN_B])
+    renderPage()
+
+    expect(await screen.findByText(/recent runs/i)).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "catalog-b.xlsx" })).toHaveAttribute("href", "/runs/run-b")
+  })
+
   it("shows an UNKNOWN decision bucket and every dynamic decision key from the backend", async () => {
     stubFetchWithRuns([RUN_A], { "run-a": analyticsFor("run-a", { decisions: { BUY: 1, UNKNOWN: 2 } }) })
     renderPage()

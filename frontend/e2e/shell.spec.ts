@@ -23,8 +23,8 @@ for (const [name, width] of [["desktop", 1280], ["tablet", 768], ["mobile", 390]
     await page.goto("/upload")
 
     if (width > 600) await expect(page.getByText("Live processing")).toBeVisible()
-    await expect(page.getByText("LIVE API FOR XLSX")).toBeVisible()
-    await expect(page.getByLabel(/catalog \(\.xlsx; \.csv pending\)/i)).toBeVisible()
+    await expect(page.getByText(/one upload creates one processing run/i)).toBeVisible()
+    await expect(page.getByLabel(/catalog workbook/i)).toBeVisible()
     await expect(page.getByText("DEMO MODE")).not.toBeVisible()
   })
 }

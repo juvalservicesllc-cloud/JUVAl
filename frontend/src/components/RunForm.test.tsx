@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { RunForm } from "./RunForm"
 
@@ -12,11 +12,11 @@ function makeFile() {
 describe("RunForm", () => {
   it("renders the file upload input and required parameter fields", () => {
     render(<RunForm disabled={false} onSubmit={vi.fn()} />)
-    expect(screen.getByLabelText(/catalog \(\.xlsx; \.csv pending\)/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/catalog workbook/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/target profit/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/target roi/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/severidad de riesgo máxima/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/referral fee \*/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/maximum accepted risk severity/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^referral fee$/i)).toBeInTheDocument()
   })
 
   it("blocks submit when no file is selected", async () => {
@@ -24,10 +24,10 @@ describe("RunForm", () => {
     const user = userEvent.setup()
     render(<RunForm disabled={false} onSubmit={onSubmit} />)
 
-    await user.click(screen.getByRole("button", { name: /procesar/i }))
+    await user.click(screen.getByRole("button", { name: /^process catalog$/i }))
 
     expect(onSubmit).not.toHaveBeenCalled()
-    expect(screen.getByRole("alert")).toHaveTextContent(/selecciona un archivo/i)
+    expect(screen.getByRole("alert")).toHaveTextContent(/choose the excel workbook/i)
   })
 
   it("blocks submit and shows an error when required parameters are empty -- never invents a commercial default", async () => {
@@ -35,11 +35,11 @@ describe("RunForm", () => {
     const user = userEvent.setup()
     render(<RunForm disabled={false} onSubmit={onSubmit} />)
 
-    await user.upload(screen.getByLabelText(/catalog \(\.xlsx; \.csv pending\)/i), makeFile())
-    await user.click(screen.getByRole("button", { name: /procesar/i }))
+    await user.upload(screen.getByLabelText(/catalog workbook/i), makeFile())
+    await user.click(screen.getByRole("button", { name: /^process catalog$/i }))
 
     expect(onSubmit).not.toHaveBeenCalled()
-    expect(screen.getByRole("alert")).toHaveTextContent(/no existe un valor comercial por defecto/i)
+    expect(screen.getByRole("alert")).toHaveTextContent(/does not invent commercial defaults/i)
   })
 
   it("submits the exact thresholds/fees shape the backend expects once all required fields are filled", async () => {
@@ -47,17 +47,17 @@ describe("RunForm", () => {
     const user = userEvent.setup()
     render(<RunForm disabled={false} onSubmit={onSubmit} />)
 
-    const fileInput = screen.getByLabelText(/catalog \(\.xlsx; \.csv pending\)/i)
+    const fileInput = screen.getByLabelText(/catalog workbook/i)
     await user.upload(fileInput, makeFile())
 
     await user.type(screen.getByLabelText(/target profit/i), "5")
     await user.type(screen.getByLabelText(/target roi/i), "0.3")
-    await user.type(screen.getByLabelText(/ventas mensuales/i), "0")
-    await user.selectOptions(screen.getByLabelText(/severidad de riesgo máxima/i), "LOW")
-    await user.type(screen.getByLabelText(/referral fee \*/i), "3")
+    await user.type(screen.getByLabelText(/minimum estimated monthly sales/i), "0")
+    await user.selectOptions(screen.getByLabelText(/maximum accepted risk severity/i), "LOW")
+    await user.type(screen.getByLabelText(/^referral fee$/i), "3")
     await user.type(screen.getByLabelText(/referral fee rate/i), "0.15")
 
-    await user.click(screen.getByRole("button", { name: /procesar/i }))
+    await user.click(screen.getByRole("button", { name: /^process catalog$/i }))
 
     expect(onSubmit).toHaveBeenCalledTimes(1)
     const values = onSubmit.mock.calls[0][0]
@@ -84,17 +84,28 @@ describe("RunForm", () => {
     const user = userEvent.setup()
     render(<RunForm disabled={false} onSubmit={onSubmit} />)
 
-    await user.upload(screen.getByLabelText(/catalog \(\.xlsx; \.csv pending\)/i), makeFile())
+    await user.upload(screen.getByLabelText(/catalog workbook/i), makeFile())
     await user.type(screen.getByLabelText(/target profit/i), "5")
     await user.type(screen.getByLabelText(/target roi/i), "0.3")
-    await user.type(screen.getByLabelText(/ventas mensuales/i), "0")
-    await user.selectOptions(screen.getByLabelText(/severidad de riesgo máxima/i), "LOW")
-    await user.type(screen.getByLabelText(/referral fee \*/i), "3")
+    await user.type(screen.getByLabelText(/minimum estimated monthly sales/i), "0")
+    await user.selectOptions(screen.getByLabelText(/maximum accepted risk severity/i), "LOW")
+    await user.type(screen.getByLabelText(/^referral fee$/i), "3")
     await user.type(screen.getByLabelText(/referral fee rate/i), "0.15")
     await user.click(screen.getByLabelText(/persist this run/i))
 
-    await user.click(screen.getByRole("button", { name: /procesar/i }))
+    await user.click(screen.getByRole("button", { name: /^process catalog$/i }))
 
     expect(onSubmit.mock.calls[0][0].persist).toBe(true)
+  })
+
+  it("shows selected-file feedback and rejects a CSV before submission", async () => {
+    const user = userEvent.setup()
+    render(<RunForm disabled={false} onSubmit={vi.fn()} />)
+
+    await user.upload(screen.getByLabelText(/catalog workbook/i), makeFile())
+    expect(screen.getByText("sample.xlsx")).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText(/catalog workbook/i), { target: { files: [new File(["csv"], "sample.csv", { type: "text/csv" })] } })
+    expect(screen.getByRole("alert")).toHaveTextContent(/processes excel workbooks/i)
   })
 })

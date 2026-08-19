@@ -43,6 +43,16 @@ const RECORD = {
   issues: [],
 }
 
+const ANALYTICS = {
+  execution_id: "run-1",
+  records: { total_records: 5 },
+  decisions: { BUY: 1, REVIEW: 2, PASS: 2 },
+  risks: {},
+  provenance: {},
+  data_quality: { records_with_issues: 1, total_issue_count: 2 },
+  profitability: { profit: { count: 1, sum: "8", average: "8", minimum: "8", maximum: "8" }, roi: { count: 1, sum: "1.5", average: "1.5", minimum: "1.5", maximum: "1.5" }, margin: { count: 1, sum: "0.45", average: "0.45", minimum: "0.45", maximum: "0.45" } },
+}
+
 function renderAt(path: string) {
   return render(
     <MemoryRouter initialEntries={[path]}>
@@ -57,6 +67,7 @@ function stubFetch(runResponse: { ok: boolean; status: number; body: unknown }, 
   vi.stubGlobal(
     "fetch",
     vi.fn((url: string) => {
+      if (url.includes("/analytics")) return Promise.resolve({ ok: true, status: 200, json: async () => ANALYTICS })
       const isRecords = url.includes("/records")
       const { ok, status, body } = isRecords ? recordsResponse : runResponse
       return Promise.resolve({ ok, status, json: async () => body })
@@ -81,13 +92,15 @@ describe("RunDetailPage", () => {
     expect(screen.getByText("catalog.xlsx")).toBeInTheDocument()
     expect(screen.getByText(/B0TESTAAA1/)).toBeInTheDocument()
     expect(screen.getAllByLabelText("Status: VERIFIED").length).toBeGreaterThan(0)
+    expect(screen.getByText("Canonical run totals")).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "Open Catalog" })).toHaveAttribute("href", "/products")
   })
 
   it("shows the decision and provenance without collapsing HAZMAT severity into a verified fact", async () => {
     stubFetch({ ok: true, status: 200, body: RUN }, { ok: true, status: 200, body: { execution_id: "run-1", records: [RECORD], pagination: { limit: 100, offset: 0, total: 1, has_more: false } } })
     renderAt("/runs/run-1")
 
-    expect(await screen.findByText("PASS")).toBeInTheDocument()
+    expect((await screen.findAllByText("PASS")).length).toBeGreaterThan(0)
     // ResultsTable renders "PRESENT (HIGH)" -- never claims severity is VERIFIED.
     expect(screen.getAllByText(/PRESENT/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/HIGH/).length).toBeGreaterThan(0)

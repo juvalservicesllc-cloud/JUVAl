@@ -16,10 +16,10 @@ describe("AppearancePage", () => {
     const switchControl = await screen.findByRole("switch", { name: /appearance mode/i })
     expect(switchControl).toHaveAttribute("aria-checked", "true")
     await user.click(switchControl)
-    await waitFor(() => expect(document.documentElement.style.getPropertyValue("--bg")).toBe("#f5f7fb"))
+    await waitFor(() => expect(document.documentElement.style.getPropertyValue("--bg")).toBe("#f7f8fb"))
     expect(switchControl).toHaveAttribute("aria-checked", "false")
     await user.click(screen.getByRole("button", { name: /reset to juval defaults/i }))
-    await waitFor(() => expect(document.documentElement.style.getPropertyValue("--bg")).toBe("#181a1f"))
+    await waitFor(() => expect(document.documentElement.style.getPropertyValue("--bg")).toBe("#14161b"))
   })
 
   it("preserves accent and local brand assets when changing mode", async () => {
@@ -29,7 +29,7 @@ describe("AppearancePage", () => {
     render(<App />)
 
     await user.click(await screen.findByRole("switch", { name: /appearance mode/i }))
-    await waitFor(() => expect(document.documentElement.style.getPropertyValue("--bg")).toBe("#181a1f"))
+    await waitFor(() => expect(document.documentElement.style.getPropertyValue("--bg")).toBe("#14161b"))
     expect(document.documentElement.style.getPropertyValue("--accent")).toBe("#112233")
     expect(document.documentElement.style.getPropertyValue("--app-background-image")).toContain("data:image/png")
     expect(screen.getByAltText("Workspace logo")).toBeInTheDocument()

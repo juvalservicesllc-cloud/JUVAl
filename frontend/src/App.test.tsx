@@ -10,14 +10,14 @@ function makeFile() {
 }
 
 async function fillAndSubmit(user: ReturnType<typeof userEvent.setup>) {
-  await user.upload(await screen.findByLabelText(/catalog \(\.xlsx; \.csv pending\)/i), makeFile())
+  await user.upload(await screen.findByLabelText(/catalog workbook/i), makeFile())
   await user.type(screen.getByLabelText(/target profit/i), "5")
   await user.type(screen.getByLabelText(/target roi/i), "0.3")
-  await user.type(screen.getByLabelText(/ventas mensuales/i), "0")
-  await user.selectOptions(screen.getByLabelText(/severidad de riesgo máxima/i), "LOW")
-  await user.type(screen.getByLabelText(/referral fee \*/i), "3")
+  await user.type(screen.getByLabelText(/minimum estimated monthly sales/i), "0")
+  await user.selectOptions(screen.getByLabelText(/maximum accepted risk severity/i), "LOW")
+  await user.type(screen.getByLabelText(/^referral fee$/i), "3")
   await user.type(screen.getByLabelText(/referral fee rate/i), "0.15")
-  await user.click(screen.getByRole("button", { name: /procesar/i }))
+  await user.click(screen.getByRole("button", { name: /^process catalog$/i }))
 }
 
 describe("App", () => {

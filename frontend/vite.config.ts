@@ -15,8 +15,8 @@ export default defineConfig({
         name: 'JUVAl',
         short_name: 'JUVAl',
         description: 'Amazon Sourcing Decision Engine',
-        theme_color: '#0a7d24',
-        background_color: '#ffffff',
+        theme_color: '#14161b',
+        background_color: '#14161b',
         display: 'standalone',
         icons: [
           {

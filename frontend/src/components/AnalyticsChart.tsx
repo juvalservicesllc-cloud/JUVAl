@@ -60,7 +60,7 @@ export function ChartTextSummary({ title, data }: { title: string; data: Analyti
   )
 }
 
-export function AnalyticsChart({ data, chartType }: { data: AnalyticsDatum[]; chartType: ChartType }) {
+export function AnalyticsChart({ data, chartType, height }: { data: AnalyticsDatum[]; chartType: ChartType; height?: number }) {
   const shared = (
     <>
       <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
@@ -105,8 +105,13 @@ export function AnalyticsChart({ data, chartType }: { data: AnalyticsDatum[]; ch
   }
 
   return (
-    <div className="analytics-chart" data-testid="analytics-chart" role="img" aria-label={`${chartType} chart: ${data.map((d) => `${d.label} ${d.value}`).join(", ")}`}>
-      <ResponsiveContainer width="100%" height="100%">
+    <div className="analytics-chart" data-testid="analytics-chart" role="img" aria-label={`${chartType} chart: ${data.map((d) => `${d.label} ${d.value}`).join(", ")}`} style={height ? { height } : undefined}>
+      {/* A numeric height is passed explicitly (not "100%") wherever this chart
+          renders inside a container shorter than the default .analytics-chart
+          CSS height (e.g. the two-up risk-chart layout) -- ResponsiveContainer
+          only reliably measures its own explicit size, not a CSS override on
+          an ancestor it doesn't observe. */}
+      <ResponsiveContainer width="100%" height={height ?? "100%"}>
         {chart}
       </ResponsiveContainer>
     </div>

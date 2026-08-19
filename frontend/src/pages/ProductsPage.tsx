@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react"
+import { CaretDown, CaretUp, MagnifyingGlass } from "@phosphor-icons/react"
+import { Link } from "react-router-dom"
 import { ApiError, apiErrorMessage } from "../api/client"
 import { getRunRecords } from "../api/records"
 import { getRuns } from "../api/runs"
@@ -103,7 +105,7 @@ export function ProductsPage() {
     return (
       <button type="button" onClick={() => changeSort(key)} aria-pressed={active}>
         {SORT_LABEL[key]}
-        {active && <span aria-hidden="true">{direction === "asc" ? " ▲" : " ▼"}</span>}
+        {active && (direction === "asc" ? <CaretUp size={11} weight="bold" aria-hidden="true" /> : <CaretDown size={11} weight="bold" aria-hidden="true" />)}
       </button>
     )
   }
@@ -146,13 +148,16 @@ export function ProductsPage() {
             </label>
             <label>
               Search
-              <input
-                aria-label="Search catalog"
-                value={searchInput}
-                maxLength={200}
-                onChange={(event) => setSearchInput(event.target.value)}
-                placeholder="SKU, title, brand, ASIN"
-              />
+              <span className="search-input">
+                <MagnifyingGlass size={14} weight="regular" aria-hidden="true" />
+                <input
+                  aria-label="Search catalog"
+                  value={searchInput}
+                  maxLength={200}
+                  onChange={(event) => setSearchInput(event.target.value)}
+                  placeholder="SKU, title, brand, ASIN"
+                />
+              </span>
             </label>
             <label>
               Decision
@@ -193,7 +198,8 @@ export function ProductsPage() {
                       <th>{sortButton("profit")}</th>
                       <th>{sortButton("roi")}</th>
                       <th>{sortButton("margin")}</th>
-                      <th>Risk</th>
+                      <th>HazMat</th>
+                      <th>Bulky</th>
                       <th>{sortButton("decision")}</th>
                       <th>Issues</th>
                     </tr>
@@ -201,18 +207,23 @@ export function ProductsPage() {
                   <tbody>
                     {recordsState.records.map((record) => (
                       <tr key={record.record_ref}>
-                        <td className="mono">{record.record_ref}</td>
+                        <td className="mono">
+                          <Link to={`/runs/${encodeURIComponent(selectedRunId)}/records/${encodeURIComponent(record.record_ref)}`} state={{ record }}>
+                            {record.record_ref}
+                          </Link>
+                        </td>
                         <td>{record.supplier_sku ?? "—"}</td>
-                        <td>
+                        <td className="product-cell" title={text(record.title?.value)}>
                           <strong>{text(record.title?.value) || "—"}</strong>
                           {record.brand?.value ? <div className="text-muted">{text(record.brand.value)}</div> : null}
                         </td>
                         <td><ProvenanceValue value={record.asin} /></td>
-                        <td><ProvenanceValue value={record.selling_price} /></td>
-                        <td><ProvenanceValue value={record.profit} /></td>
-                        <td><ProvenanceValue value={record.roi} /></td>
-                        <td><ProvenanceValue value={record.margin} /></td>
-                        <td>{record.hazmat_status ?? "UNKNOWN"} / {record.bulky_status ?? "UNKNOWN"}</td>
+                        <td className="numeric-cell"><ProvenanceValue value={record.selling_price} /></td>
+                        <td className="numeric-cell"><ProvenanceValue value={record.profit} /></td>
+                        <td className="numeric-cell"><ProvenanceValue value={record.roi} /></td>
+                        <td className="numeric-cell"><ProvenanceValue value={record.margin} /></td>
+                        <td><StatusBadge value={record.hazmat_status ?? "UNKNOWN"} /></td>
+                        <td><StatusBadge value={record.bulky_status ?? "UNKNOWN"} /></td>
                         <td>{record.decision ? <StatusBadge value={record.decision} /> : "—"}</td>
                         <td>{record.issue_count > 0 ? record.issue_count : "—"}</td>
                       </tr>
