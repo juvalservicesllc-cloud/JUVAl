@@ -7,6 +7,7 @@
 | Method | Read-only inspection of the developer workstation; official provider documentation for capability claims. No configuration was changed. |
 | Amazon finding | **RF-02** — firewall, IDS/IPS, anti-virus/anti-malware, network segmentation |
 | Related control | `AC-06` (DPP §1.1), `AC-05` (TLS, DPP §1.5) |
+| Scope note | This audit covers the **workstation** and the **cloud services**. A third node exists -- the Linux development/validation server `juval-server` -- audited separately in [`HOST_CONTROLS_JUVAL_SERVER.md`](HOST_CONTROLS_JUVAL_SERVER.md) (measured 2026-08-24). It runs no JUVAl service and holds no production data, but it does hold a working copy of the repository, and it has one **NOT_IMPLEMENTED** control: SSH password authentication is enabled (H-5). |
 
 Three states are kept strictly distinct throughout, because collapsing them is
 exactly how a compliance answer becomes untrue:
