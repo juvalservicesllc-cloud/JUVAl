@@ -25,3 +25,7 @@ dist-ssr
 
 .vercel
 .env*
+
+# Playwright writes failure traces/screenshots here on every run
+test-results/
+playwright-report/
