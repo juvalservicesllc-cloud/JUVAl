@@ -9,6 +9,7 @@ import { ProductThumbnail } from "../components/ProductThumbnail"
 import { ProvenanceValue } from "../components/ProvenanceValue"
 import { StatusBadge } from "../components/StatusBadge"
 import type { Decision, RecordOut, RecordPaginationOut, RecordSort, RunSummaryOut, SortDirection } from "../types"
+import { count, money, percent } from "../format"
 
 type RunsState = { kind: "loading" } | { kind: "error"; message: string } | { kind: "empty" } | { kind: "ready"; runs: RunSummaryOut[] }
 type RecordsState =
@@ -46,12 +47,12 @@ function formatMoney(value: unknown): string {
   if (value === null || value === undefined) return "—"
   if (value === null) return "—"
   const amount = Number(value)
-  return Number.isFinite(amount) ? amount.toLocaleString(undefined, { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"
+  return Number.isFinite(amount) ? money(amount) : "—"
 }
 
 function formatPercent(value: unknown): string {
   const amount = Number(value)
-  return Number.isFinite(amount) ? `${(amount * 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%` : "—"
+  return Number.isFinite(amount) ? percent(amount) : "—"
 }
 
 function formattedField(value: RecordOut["profit"], formatter: (value: unknown) => string) {
@@ -248,7 +249,7 @@ export function ProductsPage() {
             </div>
             <dl className="catalog-context-meta">
               <dt>Status</dt><dd><StatusBadge value={selectedRun?.status ?? "UNKNOWN"} /></dd>
-              <dt>Records</dt><dd>{selectedRun?.records_total.toLocaleString() ?? "—"}</dd>
+              <dt>Records</dt><dd>{selectedRun ? count(selectedRun.records_total) : "—"}</dd>
               <dt>Execution</dt><dd className="mono">{selectedRunId}</dd>
             </dl>
           </section>
@@ -336,7 +337,7 @@ export function ProductsPage() {
           </section>
 
           <div className="catalog-query-state" aria-live="polite">
-            <span>{pagination ? `${pagination.total.toLocaleString()} result${pagination.total === 1 ? "" : "s"}` : "Querying results…"}</span>
+            <span>{pagination ? `${count(pagination.total)} result${pagination.total === 1 ? "" : "s"}` : "Querying results…"}</span>
             {search && <span className="query-chip">Search: “{search}”</span>}
             {decision !== "ALL" && <span className="query-chip">Decision: {decision}</span>}
             {minRoi && <span className="query-chip">ROI ≥ {minRoi}% · {confidence === "VERIFIED_ONLY" ? "verified" : "verified + inferred"}</span>}
@@ -394,7 +395,7 @@ export function ProductsPage() {
                     Previous
                   </button>
                   <span aria-live="polite">
-                    Showing {rangeStart.toLocaleString()}–{rangeEnd.toLocaleString()} of {pagination.total.toLocaleString()}
+                    Showing {count(rangeStart)}–{count(rangeEnd)} of {count(pagination.total)}
                   </span>
                   <button
                     type="button"

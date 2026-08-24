@@ -6,6 +6,7 @@ import { AnalyticsChart, type ChartType } from "../components/AnalyticsChart"
 import { ProvenanceValue } from "../components/ProvenanceValue"
 import { StatusBadge } from "../components/StatusBadge"
 import type { FieldValueOut, RecordOut } from "../types"
+import { money, percent } from "../format"
 
 type DetailState =
   | { status: "loading" }
@@ -20,19 +21,19 @@ function text(value: unknown): string {
 function formatCurrency(value: string | null): string {
   if (value === null) return "—"
   const n = Number(value)
-  return Number.isFinite(n) ? n.toLocaleString(undefined, { style: "currency", currency: "USD" }) : "—"
+  return Number.isFinite(n) ? money(n) : "—"
 }
 
 function formatPercent(value: FieldValueOut): string {
   if (value.value === null || value.value === undefined) return "No value"
   const n = Number(value.value)
-  return Number.isFinite(n) ? `${(n * 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%` : "No value"
+  return Number.isFinite(n) ? percent(n) : "No value"
 }
 
 function formatMoneyField(value: FieldValueOut): string {
   if (value.value === null || value.value === undefined) return "No value"
   const n = Number(value.value)
-  return Number.isFinite(n) ? n.toLocaleString(undefined, { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "No value"
+  return Number.isFinite(n) ? money(n) : "No value"
 }
 
 function Field({ label, value }: { label: string; value: FieldValueOut }) {

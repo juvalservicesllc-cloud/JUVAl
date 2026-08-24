@@ -13,6 +13,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
+import { count } from "../format"
 
 export type ChartType = "line" | "bar" | "donut"
 
@@ -51,7 +52,7 @@ export function ChartTextSummary({ title, data }: { title: string; data: Analyti
         <li key={d.label}>
           <span>{d.label}</span>
           <strong>
-            {d.value.toLocaleString()}
+            {count(d.value)}
             {total > 0 && <em>{` (${((d.value / total) * 100).toFixed(0)}%)`}</em>}
           </strong>
         </li>
@@ -69,7 +70,7 @@ export function AnalyticsChart({ data, chartType, height }: { data: AnalyticsDat
       <Tooltip
         cursor={chartType === "line" ? { stroke: "var(--accent)", strokeWidth: 1 } : { fill: "var(--surface-hover)" }}
         contentStyle={tooltipStyle}
-        formatter={(value) => Number(value).toLocaleString()}
+        formatter={(value) => count(Number(value))}
       />
     </>
   )
@@ -85,7 +86,7 @@ export function AnalyticsChart({ data, chartType, height }: { data: AnalyticsDat
   } else if (chartType === "donut") {
     chart = (
       <PieChart margin={{ top: 4, right: 4, left: 4, bottom: 4 }}>
-        <Tooltip contentStyle={tooltipStyle} formatter={(value, name) => [Number(value).toLocaleString(), name]} />
+        <Tooltip contentStyle={tooltipStyle} formatter={(value, name) => [count(Number(value)), name]} />
         <Pie data={data} dataKey="value" nameKey="label" innerRadius="55%" outerRadius="90%" paddingAngle={data.length > 1 ? 2 : 0} animationDuration={240}>
           {data.map((d, index) => (
             <Cell key={d.label} fill={d.color ?? FALLBACK_COLORS[index % FALLBACK_COLORS.length]} />

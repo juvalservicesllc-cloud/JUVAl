@@ -5,6 +5,7 @@ import { getRuns } from "../api/runs"
 import { ApiError, apiErrorMessage } from "../api/client"
 import { StatusBadge } from "../components/StatusBadge"
 import type { RunSummaryOut } from "../types"
+import { count } from "../format"
 
 type RunsState =
   | { status: "loading" }
@@ -139,11 +140,11 @@ export function RunsPage() {
                   <td>
                     <StatusBadge value={run.status} />
                   </td>
-                  <td className="numeric-cell">{run.records_total.toLocaleString()}</td>
-                  <td className="numeric-cell">{run.records_processed.toLocaleString()}</td>
-                  <td className="numeric-cell">{run.records_successful.toLocaleString()}</td>
-                  <td className="numeric-cell">{run.records_with_errors.toLocaleString()}</td>
-                  <td className="numeric-cell">{run.warnings.toLocaleString()}</td>
+                  <td className="numeric-cell">{count(run.records_total)}</td>
+                  <td className="numeric-cell">{count(run.records_processed)}</td>
+                  <td className="numeric-cell">{count(run.records_successful)}</td>
+                  <td className="numeric-cell">{count(run.records_with_errors)}</td>
+                  <td className="numeric-cell">{count(run.warnings)}</td>
                 </tr>
               ))}
             </tbody>

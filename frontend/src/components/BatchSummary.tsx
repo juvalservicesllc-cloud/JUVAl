@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom"
 import { StatusBadge } from "./StatusBadge"
 import type { BatchResponse } from "../types"
+import { count } from "../format"
 
 /**
  * The included-file table for one multi-file submission.
@@ -19,10 +20,10 @@ export function BatchSummary({ batch, currentExecutionId }: { batch: BatchRespon
         <dt>Batch ID</dt><dd className="mono">{batch.batch_id}</dd>
         <dt>Submitted</dt><dd>{new Date(batch.created_at).toLocaleString()}</dd>
         <dt>Files</dt><dd>{batch.total_files} ({batch.succeeded_files} produced a run, {batch.failed_files} did not)</dd>
-        <dt>Rows scanned</dt><dd>{batch.records_total.toLocaleString()}</dd>
-        <dt>Records processed</dt><dd>{batch.records_processed.toLocaleString()}</dd>
-        <dt>Records with errors</dt><dd>{batch.records_with_errors.toLocaleString()}</dd>
-        <dt>Warnings</dt><dd>{batch.warning_count.toLocaleString()}</dd>
+        <dt>Rows scanned</dt><dd>{count(batch.records_total)}</dd>
+        <dt>Records processed</dt><dd>{count(batch.records_processed)}</dd>
+        <dt>Records with errors</dt><dd>{count(batch.records_with_errors)}</dd>
+        <dt>Warnings</dt><dd>{count(batch.warning_count)}</dd>
       </dl>
       <div className="batch-file-scroll">
         <table className="batch-file-table">
@@ -45,10 +46,10 @@ export function BatchSummary({ batch, currentExecutionId }: { batch: BatchRespon
                   <td className="numeric-cell">{(file.size_bytes / 1024).toFixed(0)} KB</td>
                   <td><StatusBadge value={file.status} /></td>
                   {/* "—" for a rejected file: it never ran, so it has no count. */}
-                  <td className="numeric-cell">{processed ? file.records_total.toLocaleString() : "—"}</td>
-                  <td className="numeric-cell">{processed ? file.records_processed.toLocaleString() : "—"}</td>
-                  <td className="numeric-cell">{processed ? file.records_with_errors.toLocaleString() : "—"}</td>
-                  <td className="numeric-cell">{processed ? file.warning_count.toLocaleString() : "—"}</td>
+                  <td className="numeric-cell">{processed ? count(file.records_total) : "—"}</td>
+                  <td className="numeric-cell">{processed ? count(file.records_processed) : "—"}</td>
+                  <td className="numeric-cell">{processed ? count(file.records_with_errors) : "—"}</td>
+                  <td className="numeric-cell">{processed ? count(file.warning_count) : "—"}</td>
                   <td>
                     {file.execution_id && batch.persisted
                       ? file.execution_id === currentExecutionId

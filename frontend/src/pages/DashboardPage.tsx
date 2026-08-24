@@ -8,6 +8,7 @@ import { AnalyticsChart, ChartTextSummary, type AnalyticsDatum, type ChartType }
 import { ProvenanceBreakdown } from "../components/ProvenanceBreakdown"
 import { StatusBadge } from "../components/StatusBadge"
 import type { NumericSummary, RunAnalyticsOut, RunSummaryOut } from "../types"
+import { count, money, percent } from "../format"
 
 type RunsState =
   | { status: "loading" }
@@ -45,13 +46,13 @@ function toChartData(counts: Record<string, number>, order: string[] = [], color
 function formatCurrency(value: string | null): string {
   if (value === null) return "—"
   const n = Number(value)
-  return Number.isFinite(n) ? n.toLocaleString(undefined, { style: "currency", currency: "USD" }) : "—"
+  return Number.isFinite(n) ? money(n) : "—"
 }
 
 function formatPercent(value: string | null): string {
   if (value === null) return "—"
   const n = Number(value)
-  return Number.isFinite(n) ? `${(n * 100).toFixed(1)}%` : "—"
+  return Number.isFinite(n) ? percent(n, 1) : "—"
 }
 
 function formatTimestamp(value: string): string {
@@ -73,7 +74,7 @@ function SummaryCards({ title, summary, format }: { title: string; summary: Nume
           <dt>Maximum</dt>
           <dd>{format(summary.maximum)}</dd>
           <dt>Count</dt>
-          <dd>{summary.count.toLocaleString()} records</dd>
+          <dd>{count(summary.count)} records</dd>
         </dl>
       )}
     </div>
@@ -91,7 +92,7 @@ function BrandPanel({ brands }: { brands: RunAnalyticsOut["brands"] | undefined 
         <div>
           <p className="eyebrow">BRAND MIX</p>
           <h2>Records per brand</h2>
-          <p>Brands as recorded by the supplier file. {brands?.distinct ?? 0} distinct brand{brands?.distinct === 1 ? "" : "s"}; {(brands?.not_recorded ?? 0).toLocaleString()} record{brands?.not_recorded === 1 ? "" : "s"} carry no brand and are counted separately, never merged into one.</p>
+          <p>Brands as recorded by the supplier file. {brands?.distinct ?? 0} distinct brand{brands?.distinct === 1 ? "" : "s"}; {count(brands?.not_recorded ?? 0)} record{brands?.not_recorded === 1 ? "" : "s"} carry no brand and are counted separately, never merged into one.</p>
         </div>
       </div>
       {data.length === 0 ? (
@@ -141,7 +142,7 @@ function PriceSpreadPanel({ spread }: { spread: RunAnalyticsOut["price_spread"] 
         <div>
           <p className="eyebrow">SOURCING SPREAD</p>
           <h2>Selling price over cost of goods</h2>
-          <p>Gross spread per unit before fees, across the {(spread?.count ?? 0).toLocaleString()} record{spread?.count === 1 ? "" : "s"} with a VERIFIED selling price and a recorded COG. Records without both are excluded, never assumed.</p>
+          <p>Gross spread per unit before fees, across the {count(spread?.count ?? 0)} record{spread?.count === 1 ? "" : "s"} with a VERIFIED selling price and a recorded COG. Records without both are excluded, never assumed.</p>
         </div>
       </div>
       {data.length === 0 ? (
@@ -150,7 +151,7 @@ function PriceSpreadPanel({ spread }: { spread: RunAnalyticsOut["price_spread"] 
         <>
           <dl className="run-summary">
             <dt>Average spread</dt><dd>{formatCurrency(spread?.average_amount ?? null)}</dd>
-            <dt>At or below cost</dt><dd>{(spread?.at_or_below_cog ?? 0).toLocaleString()} record{spread?.at_or_below_cog === 1 ? "" : "s"}</dd>
+            <dt>At or below cost</dt><dd>{count(spread?.at_or_below_cog ?? 0)} record{spread?.at_or_below_cog === 1 ? "" : "s"}</dd>
           </dl>
           <AnalyticsChart chartType="bar" data={data} />
           <ul className="chart-text-summary" aria-label="Largest sourcing spreads, as text">
@@ -343,23 +344,23 @@ export function DashboardPage() {
                   <section className="metric-grid">
                     <article className="metric-card">
                       <span>Total records</span>
-                      <strong>{analytics.records.total_records.toLocaleString()}</strong>
+                      <strong>{count(analytics.records.total_records)}</strong>
                       <small>From the analytics endpoint</small>
                     </article>
                     <article className="metric-card">
                       <span>With issues</span>
-                      <strong>{analytics.data_quality.records_with_issues.toLocaleString()}</strong>
-                      <small>{analytics.data_quality.total_issue_count.toLocaleString()} total issues</small>
+                      <strong>{count(analytics.data_quality.records_with_issues)}</strong>
+                      <small>{count(analytics.data_quality.total_issue_count)} total issues</small>
                     </article>
                     <article className="metric-card">
                       <span>Average ROI</span>
                       <strong>{formatPercent(analytics.profitability.roi.average)}</strong>
-                      <small>{analytics.profitability.roi.count.toLocaleString()} VERIFIED records</small>
+                      <small>{count(analytics.profitability.roi.count)} VERIFIED records</small>
                     </article>
                     <article className="metric-card">
                       <span>Average profit</span>
                       <strong>{formatCurrency(analytics.profitability.profit.average)}</strong>
-                      <small>{analytics.profitability.profit.count.toLocaleString()} VERIFIED records</small>
+                      <small>{count(analytics.profitability.profit.count)} VERIFIED records</small>
                     </article>
                   </section>
 
@@ -469,7 +470,7 @@ export function DashboardPage() {
                   </span>
                   <div>
                     <Link to={`/runs/${encodeURIComponent(run.execution_id)}`}>{run.input_filename}</Link>
-                    <small>{formatTimestamp(run.started_at)} · {run.records_total.toLocaleString()} records</small>
+                    <small>{formatTimestamp(run.started_at)} · {count(run.records_total)} records</small>
                   </div>
                   <StatusBadge value={run.status} />
                 </article>
