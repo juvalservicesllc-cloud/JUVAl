@@ -21,6 +21,7 @@ only the file and line where one was found.
 from __future__ import annotations
 
 import datetime as dt
+import json
 import re
 import subprocess
 import sys
@@ -260,7 +261,7 @@ def check_dependency_vulnerabilities() -> list[Finding]:
     """
     try:
         result = subprocess.run(
-            [sys.executable, "-m", "pip_audit", "--progress-spinner", "off"],
+            [sys.executable, "-m", "pip_audit", "--progress-spinner", "off", "--format", "json"],
             capture_output=True,
             text=True,
             timeout=300,
@@ -276,7 +277,32 @@ def check_dependency_vulnerabilities() -> list[Finding]:
         return [Finding("deps.audit", WARN, "pip-audit is not installed; dependency scanning is NOT running")]
     if result.returncode == 0:
         return [Finding("deps.audit", PASS, "pip-audit: no known vulnerabilities in installed dependencies")]
-    return [Finding("deps.audit", FAIL, "pip-audit reported known vulnerabilities -- run `python -m pip_audit` for detail")]
+    return [Finding("deps.audit", FAIL, f"pip-audit reported known vulnerabilities: {_vulnerable_packages(result.stdout)}")]
+
+
+def _vulnerable_packages(stdout: str) -> str:
+    """Name the affected package, version and advisory IDs.
+
+    A control that reports only "there are vulnerabilities" is not evidence
+    anyone can act on -- and the environment that fails is often CI, not the
+    machine reading the message, so "run it yourself for detail" can be
+    unreproducible. Report the detail where the failure happens.
+    """
+    try:
+        report = json.loads(stdout)
+    except (ValueError, TypeError):
+        return "could not parse the pip-audit report -- run `python -m pip_audit` for detail"
+
+    affected = [
+        f"{dep.get('name', '?')}=={dep.get('version', '?')} "
+        f"({', '.join(v.get('id', '?') for v in dep['vulns'])}"
+        + (f"; fixed in {', '.join(sorted({f for v in dep['vulns'] for f in v.get('fix_versions') or []}))}"
+           if any(v.get("fix_versions") for v in dep["vulns"]) else "; no fixed version published")
+        + ")"
+        for dep in report.get("dependencies", [])
+        if dep.get("vulns")
+    ]
+    return "; ".join(affected) or "pip-audit exited non-zero but reported no vulnerable package"
 
 
 def run_all() -> list[Finding]:

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import datetime as dt
 import importlib.util
+import json
 import sys
 from pathlib import Path
 
@@ -145,3 +146,41 @@ def test_secret_scan_skips_virtualenvs(tmp_path):
     (vendored / "x.py").write_text(f"k = '{_fake_aws_key()}'\n", encoding="utf-8")
     findings = compliance_check.scan_for_secrets(root=tmp_path)
     assert not [f for f in findings if f.status == FAIL]
+
+
+def test_dependency_finding_names_the_affected_package():
+    """A dependency FAIL must be actionable where it happens.
+
+    The environment that fails is usually CI, not the machine reading the
+    message, so "run pip-audit yourself for detail" can be unreproducible --
+    the finding has to carry the package, version, advisory and fix.
+    """
+    report = json.dumps(
+        {
+            "dependencies": [
+                {"name": "urllib3", "version": "2.0.1",
+                 "vulns": [{"id": "GHSA-v845-jxx5-vc9f", "fix_versions": ["2.0.7"]}]},
+                {"name": "openpyxl", "version": "3.1.5", "vulns": []},
+            ]
+        }
+    )
+    message = compliance_check._vulnerable_packages(report)
+    assert "urllib3==2.0.1" in message
+    assert "GHSA-v845-jxx5-vc9f" in message
+    assert "fixed in 2.0.7" in message
+    # A clean dependency is not named -- only the affected one.
+    assert "openpyxl" not in message
+
+
+def test_dependency_finding_says_so_when_no_fix_exists():
+    report = json.dumps(
+        {"dependencies": [{"name": "foo", "version": "1.0",
+                           "vulns": [{"id": "PYSEC-2026-1", "fix_versions": []}]}]}
+    )
+    assert "no fixed version published" in compliance_check._vulnerable_packages(report)
+
+
+def test_dependency_finding_degrades_instead_of_crashing_on_bad_output():
+    # pip-audit failing in a way that produces no JSON must not take the whole
+    # compliance run down -- the control still has to report a usable FAIL.
+    assert "could not parse" in compliance_check._vulnerable_packages("<not json>")
