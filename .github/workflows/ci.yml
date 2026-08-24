@@ -45,3 +45,37 @@ jobs:
         # API auth posture (RF-03/RF-04), dependency CVEs, and secret scanning.
         # Exits non-zero on any FAIL; never prints a matched secret value.
         run: python tools/compliance_check.py
+
+  frontend:
+    # The PWA is the primary interface (ADR-014) and its suite, typecheck and
+    # build were gates in CLAUDE.md while running nowhere but a developer
+    # machine. A gate nobody enforces is not a gate.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # .node-version is the single pin; do not hardcode a version here.
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # ci, not install: the lockfile decides, so a green build cannot come
+      # from a dependency set nobody recorded.
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Tests
+        run: npm test
+
+      # `npm run build` is `tsc -b && vite build`, so this is the typecheck
+      # gate as well as the build gate.
+      - name: Build
+        run: npm run build
