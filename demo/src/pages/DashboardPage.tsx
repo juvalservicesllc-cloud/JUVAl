@@ -1,0 +1,28 @@
+import{useState}from"react";import{Bar,BarChart,ResponsiveContainer,Tooltip,XAxis,YAxis}from"recharts";import{useDemoApp}from"../app/context";import{productPath}from"../product-route";import{sourceIdOf}from"../favorites";import{analytics as computeAnalytics}from"../engine";import{findExactMatches}from"../matching";import{fmt}from"./shared";
+const palette=["#6d5dfc","#16835d","#a36508","#bd3c52","#2d7dd2"];function Chart({title,description,data}:{title:string;description:string;data:{name:string;value:number}[]}){const summary=data.length?data.map(x=>`${x.value} ${x.name}`).join(", "):"No data";return <section className="panel"><h2>{title}</h2><p>{description}</p><p>{summary}</p>{data.length?<div className="chart"><ResponsiveContainer><BarChart data={data}><XAxis dataKey="name"/><YAxis allowDecimals={false}/><Tooltip/><Bar dataKey="value" fill={palette[0]}/></BarChart></ResponsiveContainer></div>:<p>No data available for this run.</p>}</section>}
+export function DashboardPage(){
+  const{records,analytics:a,go,active}=useDemoApp()
+  const[sourceFilter,setSourceFilter]=useState("")
+  if(!records.length)return <><section className="hero"><p>WEST MARINE / END-TO-END</p><h1>Supplier list to explainable demo decision.</h1><button onClick={()=>go("/import")}>RUN WEST MARINE DEMO</button></section><p className="panel">Load the included West Marine CSV or select compatible files.</p></>
+  const files=active?.files??[]
+  const validFiles=files.filter(f=>f.status==="VALID").length
+  const filteredRecords=sourceFilter?records.filter(r=>sourceIdOf(r)===sourceFilter):records
+  const filtered=computeAnalytics(filteredRecords)
+  const matches=findExactMatches(records)
+  const kpis=[["Files",files.length],["Valid files",validFiles],["Invalid files",files.length-validFiles],["Total products",filtered.total],["BUY",filtered.decisions.BUY],["REVIEW",filtered.decisions.REVIEW],["PASS",filtered.decisions.PASS],["Issues",filtered.issues],["Estimated demo profit",fmt(filtered.profit,"$")],["Average ROI",filtered.avgRoi===null?"No data":`${(filtered.avgRoi*100).toFixed(1)}%`],["Average margin",filtered.avgMargin===null?"No data":`${(filtered.avgMargin*100).toFixed(1)}%`]]
+  const toData=(source:Record<string,number>|[string,number][])=>Array.isArray(source)?source.map(([name,value])=>({name,value})):Object.entries(source).map(([name,value])=>({name,value}))
+  const prices=filtered.priceAnalysis.largestDiscounts.map(x=>({name:x.title.slice(0,18),value:x.amount}))
+  return <>
+    <section className="hero"><p>BATCH OVERVIEW</p><h1>{active?.inputFilename}</h1><small>{files.length} file(s) · {a.total} supplier records · LOCAL DEMO RUN</small></section>
+    {files.length>1&&<p className="panel">{matches.length} exact cross-file matches found. <a href="/compare">Compare matched products →</a></p>}
+    <div className="filters"><label>Analytics source<select aria-label="Analytics source" value={sourceFilter} onChange={event=>setSourceFilter(event.target.value)}><option value="">All sources</option>{files.map(f=><option key={f.sourceFileId} value={f.sourceFileId}>{f.filename}</option>)}</select></label></div>
+    <div className="kpis">{kpis.map(([name,value])=><article key={String(name)}><small>{name}</small><strong>{value}</strong></article>)}</div>
+    <h2>Opportunity</h2><div className="grid"><Chart title="Decision distribution" description="Deterministic demo decisions for the selected source(s)." data={toData(filtered.decisions)}/><Chart title="Supplier price discounts" description="Calculated from comparable supplier source prices." data={prices}/></div>
+    <section className="panel"><h2>DEMO OPPORTUNITY RANKING</h2><p>Amazon and risk inputs are simulated demo data.</p>{filtered.topOpportunities.length?filtered.topOpportunities.map(item=>{const r=filteredRecords.find(x=>x.recordRef===item.recordRef)!;return <p key={item.recordRef}><a href={active?productPath(active.runId,sourceIdOf(r),item.recordRef):"#"} aria-label={`Open ${item.title} product detail`}>{item.title}</a> · {fmt(r.cost,"$")} → {fmt(r.selling,"$")} · {fmt(item.profit,"$")} · {r.roi===null?"No ROI":`${(r.roi*100).toFixed(1)}%`} · {r.decision} · {r.hazmat}</p>}):<p>No opportunities available.</p>}</section>
+    <h2>Risk</h2><div className="grid"><Chart title="Hazmat distribution" description="Demo risk status by record." data={toData(filtered.hazards)}/><Chart title="Bulky distribution" description="Demo risk status by record." data={toData(filtered.bulky)}/></div>
+    <h2>Source & data quality</h2><div className="grid"><Chart title="Amazon provenance" description="Generated Amazon match provenance." data={toData(filtered.match)}/><Chart title="Brand distribution" description="Top brands in the supplier source." data={toData(filtered.brands)}/><Chart title="Data-quality issues" description="Affected records by issue type." data={toData(filtered.issueTypes)}/></div>
+    {files.length>1&&<><h2>Source analytics</h2><div className="table"><table><thead><tr><th>Source</th><th>Records</th><th>BUY</th><th>REVIEW</th><th>PASS</th><th>Avg ROI</th><th>Avg profit</th><th>Issues</th><th>Amazon fixture</th><th>Inferred</th><th>Not found</th></tr></thead><tbody>
+      {files.map(f=>{const sourceRecords=records.filter(r=>sourceIdOf(r)===f.sourceFileId),s=computeAnalytics(sourceRecords);return <tr key={f.sourceFileId}><td>{f.filename}</td><td>{s.total}</td><td>{s.decisions.BUY}</td><td>{s.decisions.REVIEW}</td><td>{s.decisions.PASS}</td><td>{s.avgRoi===null?"—":`${(s.avgRoi*100).toFixed(1)}%`}</td><td>{fmt(s.profit/(s.total||1),"$")}</td><td>{s.issues}</td><td>{s.fixtureMatches}</td><td>{s.inferredMatches}</td><td>{s.asinNotFound}</td></tr>})}
+    </tbody></table></div></>}
+  </>
+}

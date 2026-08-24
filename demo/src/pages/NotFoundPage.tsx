@@ -1,0 +1,1 @@
+import{useDemoApp}from"../app/context";export function NotFoundPage(){const{go}=useDemoApp();return <section className="panel"><h1>Demo page not found</h1><button onClick={()=>go("/")}>Return to dashboard</button></section>}

@@ -1,0 +1,4 @@
+import type { DemoRecord } from "./demo-engine"
+export type PriceHistory={provenance:"DEMO_FIXTURE";points:{date:string;price:number;supplierCost:number|null}[];current:number;average:number;low:number;high:number}
+const hash=(s:string)=>[...s].reduce((n,c)=>(n*31+c.charCodeAt(0))>>>0,7);const round=(n:number)=>Number(n.toFixed(2))
+export function priceHistory(record:DemoRecord):PriceHistory|null{if(record.match==="NOT_FOUND"||record.selling===null)return null;const seed=hash(record.recordRef),base=record.selling,points=Array.from({length:90},(_,i)=>{const drift=Math.sin((i+seed%17)/7)*.07+((seed+i*13)%9-4)*.006;const price=round(base*(1+drift));return{date:`Day ${i+1}`,price,supplierCost:record.cost}}),values=points.map(p=>p.price);return{provenance:"DEMO_FIXTURE",points,current:base,average:round(values.reduce((a,b)=>a+b,0)/values.length),low:Math.min(...values),high:Math.max(...values)}}
