@@ -184,3 +184,15 @@ def test_dependency_finding_degrades_instead_of_crashing_on_bad_output():
     # pip-audit failing in a way that produces no JSON must not take the whole
     # compliance run down -- the control still has to report a usable FAIL.
     assert "could not parse" in compliance_check._vulnerable_packages("<not json>")
+
+
+def test_dependency_finding_reports_each_advisory_once():
+    # pip-audit returns the same advisory from several feeds; listing it twice
+    # makes a one-vulnerability finding read like two.
+    report = json.dumps(
+        {"dependencies": [{"name": "setuptools", "version": "79.0.1", "vulns": [
+            {"id": "PYSEC-2026-3447", "fix_versions": ["83.0.0"]},
+            {"id": "PYSEC-2026-3447", "fix_versions": ["83.0.0"]},
+        ]}]}
+    )
+    assert compliance_check._vulnerable_packages(report) == "setuptools==79.0.1 (PYSEC-2026-3447; fixed in 83.0.0)"

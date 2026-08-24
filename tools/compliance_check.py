@@ -295,7 +295,7 @@ def _vulnerable_packages(stdout: str) -> str:
 
     affected = [
         f"{dep.get('name', '?')}=={dep.get('version', '?')} "
-        f"({', '.join(v.get('id', '?') for v in dep['vulns'])}"
+        f"({', '.join(sorted({v.get('id', '?') for v in dep['vulns']}))}"
         + (f"; fixed in {', '.join(sorted({f for v in dep['vulns'] for f in v.get('fix_versions') or []}))}"
            if any(v.get("fix_versions") for v in dep["vulns"]) else "; no fixed version published")
         + ")"
