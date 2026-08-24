@@ -47,6 +47,24 @@ def test_sqlite_pages_filtered_snapshots_without_loading_whole_run(tmp_path):
     assert [item["record_ref"] for item in filtered.items] == ["row_03"]
 
 
+def test_sqlite_economic_confidence_risk_and_provenance_filters(tmp_path):
+    store = SqliteExecutionRunStore(tmp_path / "runs.db")
+    records = [snapshot(1), snapshot(2)]
+    records[1]["roi"]["status"] = "INFERRED"
+    records[1]["hazmat_status"] = "PRESENT"
+    store.save_execution_run(run(), records)
+
+    verified = store.list_records("run-page", RecordSnapshotQuery(limit=10, min_roi=0.15, confidence="VERIFIED_ONLY"))
+    inferred = store.list_records("run-page", RecordSnapshotQuery(limit=10, min_roi=0.15, confidence="INCLUDE_INFERRED"))
+    risky = store.list_records("run-page", RecordSnapshotQuery(limit=10, hazmat="PRESENT"))
+    provenance = store.list_records("run-page", RecordSnapshotQuery(limit=10, provenance_field="roi", provenance_status="INFERRED"))
+
+    assert [item["record_ref"] for item in verified.items] == []
+    assert [item["record_ref"] for item in inferred.items] == ["row_02"]
+    assert [item["record_ref"] for item in risky.items] == ["row_02"]
+    assert [item["record_ref"] for item in provenance.items] == ["row_02"]
+
+
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv("JUVAL_RUN_STORAGE_DIR", str(tmp_path))
@@ -74,6 +92,30 @@ def test_api_records_pagination_filters_and_sorting(client):
     filtered = client.get(f"/api/v1/runs/{execution_id}/records?decision={decision}&sort=roi&direction=desc")
     assert filtered.status_code == 200
     assert all(record["decision"] == decision for record in filtered.json()["records"])
+
+
+def test_api_filtered_export_is_available_for_the_same_query(client):
+    body = upload(client).json()
+    response = client.get(f"/api/v1/runs/{body['execution_id']}/records/export?min_roi=0.3&confidence=VERIFIED_ONLY&sort=roi&direction=desc")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+def test_filtered_export_metadata_states_that_roi_and_margin_are_ratios(client, tmp_path):
+    """0.3 in the query metadata means 30%, not 0.3% -- the sheet says so, so a
+    reader cannot misjudge a sourcing threshold from the file alone."""
+    import io
+
+    import openpyxl
+
+    body = upload(client).json()
+    response = client.get(f"/api/v1/runs/{body['execution_id']}/records/export?min_roi=0.3&min_margin=0.2")
+    workbook = openpyxl.load_workbook(io.BytesIO(response.content))
+    metadata = {row[0]: row[1] for row in workbook["query_metadata"].iter_rows(values_only=True)}
+
+    assert "0.30 = 30%" in metadata["units"]
+    assert '"min_roi": "0.3"' in metadata["filters"]
+    assert '"min_margin": "0.2"' in metadata["filters"]
 
 
 def test_api_run_analytics_is_database_aggregated_and_preserves_zero(client):

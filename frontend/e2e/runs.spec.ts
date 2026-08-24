@@ -13,6 +13,6 @@ for (const [name, width] of [["desktop", 1280], ["tablet", 768], ["mobile", 390]
     await expect(page.getByRole("heading", { name: "Processing Runs", level: 2 })).toBeVisible()
     await expect(page.getByText("DEMO MODE")).not.toBeVisible()
     await expect(page.getByText(/loading run history/i)).not.toBeVisible({ timeout: 10_000 })
-    await expect(page.getByRole("link", { name: /upload catalog/i })).toBeVisible()
+    await expect(page.getByRole("link", { name: "Upload" })).toBeVisible()
   })
 }

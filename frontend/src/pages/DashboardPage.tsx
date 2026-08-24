@@ -80,6 +80,94 @@ function SummaryCards({ title, summary, format }: { title: string; summary: Nume
   )
 }
 
+// Internal analytics recovered from canonical snapshot fields. None of these
+// need an external provider: brand, issue code, selling price and COG are all
+// data JUVAl already imported and persisted.
+function BrandPanel({ brands }: { brands: RunAnalyticsOut["brands"] | undefined }) {
+  const data = (brands?.items ?? []).map((item) => ({ label: item.label, value: item.count }))
+  return (
+    <section className="panel analytics-panel">
+      <div className="panel-heading">
+        <div>
+          <p className="eyebrow">BRAND MIX</p>
+          <h2>Records per brand</h2>
+          <p>Brands as recorded by the supplier file. {brands?.distinct ?? 0} distinct brand{brands?.distinct === 1 ? "" : "s"}; {(brands?.not_recorded ?? 0).toLocaleString()} record{brands?.not_recorded === 1 ? "" : "s"} carry no brand and are counted separately, never merged into one.</p>
+        </div>
+      </div>
+      {data.length === 0 ? (
+        <p className="status">No brand was recorded on any record in this run.</p>
+      ) : (
+        <>
+          <AnalyticsChart chartType="bar" data={data} />
+          <ChartTextSummary title="Brand distribution" data={data} />
+        </>
+      )}
+    </section>
+  )
+}
+
+function IssueTypePanel({ issueTypes }: { issueTypes: RunAnalyticsOut["issue_types"] | undefined }) {
+  const data = (issueTypes ?? []).slice(0, 10).map((item) => ({ label: item.code, value: item.count }))
+  return (
+    <section className="panel analytics-panel">
+      <div className="panel-heading">
+        <div>
+          <p className="eyebrow">DATA QUALITY BY TYPE</p>
+          <h2>Which issues occurred</h2>
+          <p>Grouped by the canonical ProcessingIssue code, so a run's total issue count breaks down into the problems that actually need fixing.</p>
+        </div>
+      </div>
+      {data.length === 0 ? (
+        <p className="status">No issue codes are recorded for this run.</p>
+      ) : (
+        <>
+          <AnalyticsChart chartType="bar" data={data} />
+          <ChartTextSummary title="Issue types" data={data} />
+        </>
+      )}
+    </section>
+  )
+}
+
+function PriceSpreadPanel({ spread }: { spread: RunAnalyticsOut["price_spread"] | undefined }) {
+  const largest = spread?.largest ?? []
+  // Axis labels use record_ref, not title: two records from the same supplier
+  // often share a title, and two identically labelled bars are unreadable.
+  // The title stays in the text summary, where there is room for it.
+  const data = largest.map((entry) => ({ label: entry.record_ref, value: Number(entry.amount) }))
+  return (
+    <section className="panel analytics-panel">
+      <div className="panel-heading">
+        <div>
+          <p className="eyebrow">SOURCING SPREAD</p>
+          <h2>Selling price over cost of goods</h2>
+          <p>Gross spread per unit before fees, across the {(spread?.count ?? 0).toLocaleString()} record{spread?.count === 1 ? "" : "s"} with a VERIFIED selling price and a recorded COG. Records without both are excluded, never assumed.</p>
+        </div>
+      </div>
+      {data.length === 0 ? (
+        <p className="status">No record in this run has both a VERIFIED selling price and a recorded COG.</p>
+      ) : (
+        <>
+          <dl className="run-summary">
+            <dt>Average spread</dt><dd>{formatCurrency(spread?.average_amount ?? null)}</dd>
+            <dt>At or below cost</dt><dd>{(spread?.at_or_below_cog ?? 0).toLocaleString()} record{spread?.at_or_below_cog === 1 ? "" : "s"}</dd>
+          </dl>
+          <AnalyticsChart chartType="bar" data={data} />
+          <ul className="chart-text-summary" aria-label="Largest sourcing spreads, as text">
+            {largest.map((entry) => (
+              <li key={entry.record_ref}>
+                <span className="mono">{entry.record_ref}</span>
+                {entry.title && <span className="text-muted">{entry.title}</span>}
+                <strong>{formatCurrency(entry.amount)}{entry.percent !== null && <em>{` (${(Number(entry.percent) * 100).toFixed(1)}% of price)`}</em>}</strong>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </section>
+  )
+}
+
 function RiskPanel({ title, risk }: { title: string; risk: RunAnalyticsOut["risks"][string] | undefined }) {
   const statusData = toChartData(risk?.status ?? {}, ["PRESENT", "ABSENT", "UNKNOWN"], RISK_STATUS_COLOR)
   const severityData = toChartData(risk?.severity ?? {}, SEVERITY_ORDER, SEVERITY_COLOR)
@@ -344,6 +432,14 @@ export function DashboardPage() {
                     </div>
                     <ProvenanceBreakdown provenance={analytics.provenance} />
                   </section>
+
+                  {/* G. Internal analytics -- supplier/brand/issue intelligence
+                      derived from canonical persisted fields, no provider. */}
+                  <PriceSpreadPanel spread={analytics.price_spread} />
+                  <div className="analytics-duo">
+                    <BrandPanel brands={analytics.brands} />
+                    <IssueTypePanel issueTypes={analytics.issue_types} />
+                  </div>
                 </>
               )}
             </>

@@ -63,17 +63,35 @@ function renderAt(path: string) {
   )
 }
 
-function stubFetch(runResponse: { ok: boolean; status: number; body: unknown }, recordsResponse: { ok: boolean; status: number; body: unknown }) {
+const BATCH = {
+  batch_id: "batch-9", created_at: "2026-08-17T12:00:00Z", status: "PARTIAL_SUCCESS",
+  total_files: 2, succeeded_files: 1, failed_files: 1, persisted: true,
+  records_total: 5, records_processed: 4, records_with_errors: 1, warning_count: 2,
+  files: [
+    { ordinal: 0, filename: "catalog.xlsx", content_type: null, size_bytes: 2048, status: "PARTIAL_SUCCESS", execution_id: "run-1", warnings: [], errors: [], records_total: 5, records_processed: 4, records_with_errors: 1, warning_count: 2 },
+    { ordinal: 1, filename: "broken.pdf", content_type: null, size_bytes: 12, status: "REJECTED", execution_id: null, warnings: [], errors: ["unsupported file type .pdf"], records_total: 0, records_processed: 0, records_with_errors: 0, warning_count: 0 },
+  ],
+}
+
+function stubFetch(
+  runResponse: { ok: boolean; status: number; body: unknown },
+  recordsResponse: { ok: boolean; status: number; body: unknown },
+  batchResponse: { ok: boolean; status: number; body: unknown } = { ok: false, status: 404, body: { detail: "this run is not part of a batch" } },
+) {
   vi.stubGlobal(
     "fetch",
     vi.fn((url: string) => {
       if (url.includes("/analytics")) return Promise.resolve({ ok: true, status: 200, json: async () => ANALYTICS })
+      if (url.endsWith("/batch")) return Promise.resolve({ ok: batchResponse.ok, status: batchResponse.status, json: async () => batchResponse.body })
       const isRecords = url.includes("/records")
       const { ok, status, body } = isRecords ? recordsResponse : runResponse
       return Promise.resolve({ ok, status, json: async () => body })
     }),
   )
 }
+
+const OK_RUN = { ok: true, status: 200, body: RUN }
+const OK_RECORDS = { ok: true, status: 200, body: { execution_id: "run-1", records: [RECORD], pagination: { limit: 100, offset: 0, total: 1, has_more: false } } }
 
 describe("RunDetailPage", () => {
   afterEach(() => vi.unstubAllGlobals())
@@ -125,6 +143,37 @@ describe("RunDetailPage", () => {
     renderAt("/runs/run-1")
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/internal server error/i)
+  })
+
+  it("shows the included-file table when the run came from a multi-file batch", async () => {
+    stubFetch(OK_RUN, OK_RECORDS, { ok: true, status: 200, body: BATCH })
+    renderAt("/runs/run-1")
+
+    expect(await screen.findByText(/batch context/i)).toBeInTheDocument()
+    expect(screen.getByText("broken.pdf")).toBeInTheDocument()
+    expect(screen.getByText("unsupported file type .pdf")).toBeInTheDocument()
+    // The current run is marked as such rather than offered as a link to itself.
+    expect(screen.getByText("This run")).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: /open batch/i })).toHaveAttribute("href", "/batches/batch-9")
+  })
+
+  it("never shows counts for a rejected file that produced no run", async () => {
+    stubFetch(OK_RUN, OK_RECORDS, { ok: true, status: 200, body: BATCH })
+    renderAt("/runs/run-1")
+
+    await screen.findByText("broken.pdf")
+    const rejectedRow = screen.getByText("broken.pdf").closest("tr")
+    // A file that never ran shows "—", not a zero that reads as a measurement.
+    expect(rejectedRow).toHaveTextContent("—")
+    expect(rejectedRow).not.toHaveTextContent(/\b0\b/)
+  })
+
+  it("omits batch context entirely for a standalone run", async () => {
+    stubFetch(OK_RUN, OK_RECORDS)
+    renderAt("/runs/run-1")
+
+    expect(await screen.findByText("PARTIAL SUCCESS")).toBeInTheDocument()
+    expect(screen.queryByText(/batch context/i)).not.toBeInTheDocument()
   })
 
   it("offers a real download link for the run's Excel artifact", async () => {

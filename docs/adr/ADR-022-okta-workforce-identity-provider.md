@@ -1,7 +1,18 @@
 # ADR-022: Okta Workforce Identity as the human identity provider (Proposed)
 
-- Estado: **Propuesta** — técnicamente resuelta, **pendiente de aprobación
-  comercial del usuario** (contrato anual mínimo, §5).
+- Estado: **RECHAZADA (SUPERSEDED) — 2026-08-19.** Decisión explícita del
+  usuario: Okta queda descartado como proveedor de identidad para JUVAl,
+  independientemente de la resolución técnica descrita abajo. Ninguna
+  recomendación de este documento (comprar, configurar, investigar Okta)
+  sigue vigente. Ver `ADR-021` §"Alternative search after Okta rejection
+  (2026-08-19)" para la investigación de reemplazo. El contenido técnico
+  de este ADR se conserva como registro histórico — no se borra — porque
+  documenta evidencia primaria real (los dos gaps que descalificaron a
+  Cognito/Entra) que sigue siendo relevante para evaluar cualquier
+  candidato futuro.
+- Estado histórico (previo a 2026-08-19): **Propuesta** — técnicamente
+  resuelta, **pendiente de aprobación comercial del usuario** (contrato
+  anual mínimo, §5).
 - Fecha: 2026-08-18.
 - Alcance: elección del Identity Provider para **identidad humana** (RF-03) y
   la frontera de autorización backend (RF-04). No crea cuentas, tenant,
@@ -172,5 +183,11 @@ Consecuencias operativas:
 
 ## Estado
 
-**Propuesta.** No aprobada. La decisión técnica está cerrada con evidencia
-primaria; la decisión comercial pertenece al usuario.
+**RECHAZADA (SUPERSEDED), 2026-08-19.** El usuario descartó Okta
+explícitamente por decisión arquitectónica/comercial propia. La resolución
+técnica anterior ("Okta satisface los 11 requisitos HARD nativamente")
+sigue siendo evidencia primaria válida y se conserva sin editar arriba,
+pero ya no constituye una recomendación vigente. No investigar, cotizar,
+ni configurar Okta en trabajo futuro salvo que el usuario revierta esta
+decisión explícitamente. Ver `ADR-021` §"Alternative search after Okta
+rejection (2026-08-19)".

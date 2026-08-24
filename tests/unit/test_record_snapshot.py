@@ -83,17 +83,23 @@ def test_title_brand_category_dimensions_carry_their_real_provenance():
 
     snapshot = record_to_snapshot(record)
 
-    assert snapshot["title"] == {"value": "Widget", "status": "VERIFIED"}
-    assert snapshot["brand"] == {"value": "Acme", "status": "VERIFIED"}
+    assert snapshot["title"]["value"] == "Widget"
+    assert snapshot["title"]["provenance"]["source"] == "supplier_file"
+    assert snapshot["brand"]["value"] == "Acme"
+    assert snapshot["brand"]["status"] == "VERIFIED"
     # category failed validation upstream -- INVALID never carries a usable
     # `value` (only `raw_value`, which the snapshot doesn't expose), so the
     # snapshot must relay {value: None, status: INVALID}, never the raw text.
-    assert snapshot["category"] == {"value": None, "status": "INVALID"}
-    assert snapshot["height"] == {"value": "4", "status": "VERIFIED"}
-    assert snapshot["width"] == {"value": None, "status": "NOT_FOUND"}
+    assert snapshot["category"]["value"] is None
+    assert snapshot["category"]["status"] == "INVALID"
+    assert snapshot["height"]["value"] == "4"
+    assert snapshot["height"]["status"] == "VERIFIED"
+    assert snapshot["width"]["value"] is None
+    assert snapshot["width"]["status"] == "NOT_FOUND"
     # length was never given a FieldValue at all (info/dims default) -- must
     # be the same shape as an explicitly-not-found field, never a KeyError.
-    assert snapshot["length"] == {"value": None, "status": None}
+    assert snapshot["length"]["value"] is None
+    assert snapshot["length"]["status"] is None
 
 
 def test_absent_product_info_and_dimensions_never_invent_a_status():
@@ -109,4 +115,64 @@ def test_absent_product_info_and_dimensions_never_invent_a_status():
     snapshot = record_to_snapshot(record)
 
     for field_name in ("title", "brand", "category", "height", "width", "length"):
-        assert snapshot[field_name] == {"value": None, "status": None}
+        assert snapshot[field_name]["value"] is None
+        assert snapshot[field_name]["status"] is None
+        assert snapshot[field_name]["provenance"] is None
+
+
+def test_profitability_intermediate_terms_are_persisted_for_the_detail_view():
+    """total_fees/seller_proceeds/total_cost already exist on
+    ProfitabilityResult; the snapshot must carry them instead of dropping
+    them at the persistence boundary."""
+
+    from juval.domain.costs import CostInputs, FeeInputs
+    from juval.processing.profitability import compute_profitability
+
+    price = FieldValue.verified(Decimal("30"), source="s", method="m", retrieved_at=NOW)
+    profitability = compute_profitability(
+        selling_price=price,
+        costs=CostInputs(cog=Decimal("10"), shipping_per_unit=Decimal("2")),
+        fees=FeeInputs(referral_fee=Decimal("3"), referral_fee_rate=Decimal("0.15"), fulfillment_fee=Decimal("2")),
+        now=NOW,
+    )
+    record = SourcingRecord(
+        record_ref="row_1",
+        product=Product(identification=Identification(asin=FieldValue.verified("B0EXAMPLE1", source="s", method="m", retrieved_at=NOW), marketplace="US")),
+        costs=CostInputs(cog=Decimal("10"), shipping_per_unit=Decimal("2")),
+        profitability=profitability,
+    )
+    snapshot = record_to_snapshot(record)
+
+    assert snapshot["total_fees"] == "5"
+    assert snapshot["seller_proceeds"] == "25"
+    assert snapshot["total_cost"] == "12"
+
+
+def test_unusable_price_leaves_intermediate_terms_absent_not_zero():
+    record = SourcingRecord(
+        record_ref="row_1",
+        product=Product(identification=Identification(asin=FieldValue.verified("B0EXAMPLE1", source="s", method="m", retrieved_at=NOW), marketplace="US")),
+    )
+    snapshot = record_to_snapshot(record)
+
+    assert snapshot["total_fees"] is None
+    assert snapshot["seller_proceeds"] is None
+    assert snapshot["total_cost"] is None
+
+
+def test_issue_codes_travel_alongside_the_rendered_issue_strings():
+    from juval.domain.issues import IssueLevel, ProcessingIssue
+
+    record = SourcingRecord(
+        record_ref="row_1",
+        product=Product(identification=Identification(asin=FieldValue.verified("B0EXAMPLE1", source="s", method="m", retrieved_at=NOW), marketplace="US")),
+        issues=(
+            ProcessingIssue(level=IssueLevel.WARNING, code="UNKNOWN_COLUMN", message="ignored"),
+            ProcessingIssue(level=IssueLevel.RECORD_ERROR, code="INVALID_NUMBER", message="bad"),
+        ),
+    )
+    snapshot = record_to_snapshot(record)
+
+    assert snapshot["issue_codes"] == ["UNKNOWN_COLUMN", "INVALID_NUMBER"]
+    assert snapshot["issue_count"] == 2
+    assert snapshot["issues"][0].startswith("[WARNING] UNKNOWN_COLUMN")

@@ -49,7 +49,7 @@ function lastRequestUrl(fetchMock: ReturnType<typeof vi.fn>): URL {
 }
 
 describe("ProductsPage", () => {
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => { vi.unstubAllGlobals(); localStorage.clear() })
 
   it("shows a loading state while the persisted-run selector is being fetched", () => {
     vi.stubGlobal("fetch", vi.fn().mockReturnValue(new Promise(() => {})))
@@ -63,8 +63,12 @@ describe("ProductsPage", () => {
     renderPage()
 
     expect(await screen.findByText("Alpha")).toBeInTheDocument()
+    expect(screen.getByRole("heading", { name: "Catalog" })).toBeInTheDocument()
+    expect(screen.getByText(/run context/i)).toBeInTheDocument()
     expect(screen.getAllByText("VERIFIED").length).toBeGreaterThan(0)
     expect(screen.getAllByText("INFERRED").length).toBeGreaterThan(0)
+    expect(screen.getByText("10.00%")).toBeInTheDocument()
+    expect(screen.getByText("40.00%")).toBeInTheDocument()
 
     const url = lastRequestUrl(fetchMock)
     expect(url.searchParams.get("limit")).toBe("50")
@@ -84,6 +88,74 @@ describe("ProductsPage", () => {
     await user.selectOptions(screen.getByLabelText(/filter by decision/i), "BUY")
 
     await waitFor(() => expect(lastRequestUrl(fetchMock).searchParams.get("decision")).toBe("BUY"))
+  })
+
+  it("sends economic thresholds and explicit confidence server-side", async () => {
+    const fetchMock = stubFetch()
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText("Alpha")
+    // The operator types a percentage; the canonical query carries the ratio.
+    await user.type(screen.getByLabelText("Minimum ROI percentage"), "30")
+    await user.selectOptions(screen.getByLabelText("Economic confidence"), "INCLUDE_INFERRED")
+    await waitFor(() => {
+      const url = lastRequestUrl(fetchMock)
+      expect(url.searchParams.get("min_roi")).toBe("0.3")
+      expect(url.searchParams.get("confidence")).toBe("INCLUDE_INFERRED")
+    })
+    expect(screen.getByText(/ROI ≥ 30%/)).toBeInTheDocument()
+  })
+
+  it("converts the margin percentage to a canonical ratio too", async () => {
+    const fetchMock = stubFetch()
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText("Alpha")
+    await user.type(screen.getByLabelText("Minimum margin percentage"), "12.5")
+    await waitFor(() => expect(lastRequestUrl(fetchMock).searchParams.get("min_margin")).toBe("0.125"))
+    expect(screen.getByText(/Margin ≥ 12.5%/)).toBeInTheDocument()
+  })
+
+  it("never sends 0 for a cleared percentage filter", async () => {
+    const fetchMock = stubFetch()
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText("Alpha")
+    const roi = screen.getByLabelText("Minimum ROI percentage")
+    await user.type(roi, "30")
+    await waitFor(() => expect(lastRequestUrl(fetchMock).searchParams.get("min_roi")).toBe("0.3"))
+    await user.clear(roi)
+    await waitFor(() => expect(lastRequestUrl(fetchMock).searchParams.has("min_roi")).toBe(false))
+  })
+
+  it("allows presentation-only column visibility and reset", async () => {
+    stubFetch()
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText("Alpha")
+    await user.click(screen.getByText("Configure columns"))
+    await user.click(screen.getByLabelText("ASIN / UPC"))
+    expect(screen.queryByRole("columnheader", { name: "ASIN" })).not.toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: /reset columns/i }))
+    await waitFor(() => expect(screen.getByRole("columnheader", { name: "ASIN" })).toBeInTheDocument())
+  })
+
+  it("resets the active query state without changing the selected run contract", async () => {
+    const fetchMock = stubFetch()
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText("Alpha")
+
+    await user.selectOptions(screen.getByLabelText(/filter by decision/i), "BUY")
+    await waitFor(() => expect(screen.getByRole("button", { name: /reset search & filters/i })).toBeInTheDocument())
+    await user.click(screen.getByRole("button", { name: /reset search & filters/i }))
+
+    await waitFor(() => {
+      const url = lastRequestUrl(fetchMock)
+      expect(url.searchParams.has("decision")).toBe(false)
+      expect(url.searchParams.get("sort")).toBe("record_ref")
+      expect(screen.queryByRole("button", { name: /reset search & filters/i })).not.toBeInTheDocument()
+    })
   })
 
   it("resets offset to 0 when the decision filter changes", async () => {
@@ -166,5 +238,67 @@ describe("ProductsPage", () => {
     renderPage()
 
     expect(await screen.findByText(/no records match these filters/i)).toBeInTheDocument()
+  })
+
+  it("keeps row issues available through an accessible progressive disclosure", async () => {
+    const issueRecord = { ...recordFor(0, "VERIFIED"), issue_count: 1, issues: ["Missing supplier dimensions"] }
+    stubFetch(() => ({ records: [issueRecord], total: 1 }))
+    const user = userEvent.setup()
+    renderPage()
+
+    await screen.findByText("Alpha")
+    const disclosure = screen.getByText("1 issue")
+    expect(screen.getByText("Missing supplier dimensions")).not.toBeVisible()
+    await user.click(disclosure)
+    expect(screen.getByText("Missing supplier dimensions")).toBeVisible()
+  })
+
+  it("keeps row inspection as an explicit run-scoped action", async () => {
+    stubFetch()
+    renderPage()
+
+    await screen.findByText("Alpha")
+    expect(screen.getByRole("link", { name: /open detail for row-0/i })).toHaveAttribute("href", "/runs/r1/records/row-0")
+  })
+})
+
+describe("ProductsPage filtered export", () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it("exports the exact canonical query the table is showing, percentages converted", async () => {
+    stubFetch()
+    const open = vi.fn()
+    vi.stubGlobal("open", open)
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText("Alpha")
+
+    await user.type(screen.getByLabelText("Minimum ROI percentage"), "30")
+    await user.type(screen.getByLabelText("Minimum margin percentage"), "20")
+    await user.selectOptions(screen.getByLabelText("Filter by decision"), "BUY")
+    await user.click(screen.getByRole("button", { name: /export filtered view/i }))
+
+    const url = new URL(open.mock.calls.at(-1)![0] as string, "http://localhost")
+    expect(url.pathname).toContain("/records/export")
+    // The export must carry ratios, exactly like the table's own query --
+    // otherwise the downloaded file would not match what was on screen.
+    expect(url.searchParams.get("min_roi")).toBe("0.3")
+    expect(url.searchParams.get("min_margin")).toBe("0.2")
+    expect(url.searchParams.get("decision")).toBe("BUY")
+  })
+
+  it("omits a cleared percentage filter from the export query", async () => {
+    stubFetch()
+    const open = vi.fn()
+    vi.stubGlobal("open", open)
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText("Alpha")
+
+    await user.click(screen.getByRole("button", { name: /export filtered view/i }))
+
+    const url = new URL(open.mock.calls.at(-1)![0] as string, "http://localhost")
+    expect(url.searchParams.has("min_roi")).toBe(false)
+    expect(url.searchParams.has("min_margin")).toBe(false)
   })
 })

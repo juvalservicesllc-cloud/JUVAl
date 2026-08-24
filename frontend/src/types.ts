@@ -24,6 +24,20 @@ export interface FeesIn {
 export interface FieldValueOut {
   value: string | number | boolean | null
   status: "VERIFIED" | "INFERRED" | "NOT_FOUND" | "INVALID" | null
+  unit?: string | null
+  raw_value?: string | number | boolean | null
+  provenance?: ProvenanceOut | null
+}
+
+export interface ProvenanceOut {
+  source: string
+  source_type: string
+  verification_status: "VERIFIED" | "INFERRED" | "NOT_FOUND" | "INVALID"
+  retrieved_at: string
+  method: string
+  confidence: number | null
+  evidence: string | null
+  source_reference: string | null
 }
 
 export interface RecordOut {
@@ -42,6 +56,11 @@ export interface RecordOut {
   selling_price: FieldValueOut
   cog: string | null
   shipping_per_unit: string | null
+  // Intermediate Profitability Engine terms. `null` means the snapshot did
+  // not store them (unusable selling price, or a pre-F1 snapshot) -- never 0.
+  total_fees?: string | null
+  seller_proceeds?: string | null
+  total_cost?: string | null
   profit: FieldValueOut
   roi: FieldValueOut
   margin: FieldValueOut
@@ -56,6 +75,9 @@ export interface RecordOut {
   decision_reasons: string[]
   issue_count: number
   issues: string[]
+  // Canonical ProcessingIssue codes; absent on snapshots written before the
+  // field existed, and never reconstructed from the rendered strings.
+  issue_codes?: string[]
 }
 
 export interface RunResponse {
@@ -70,6 +92,38 @@ export interface RunResponse {
   warnings: number
   persisted: boolean
   records: RecordOut[]
+}
+
+export interface BatchFileResponse {
+  ordinal: number
+  filename: string
+  content_type: string | null
+  size_bytes: number
+  status: "SUCCESS" | "PARTIAL_SUCCESS" | "FAILED" | "REJECTED"
+  execution_id: string | null
+  warnings: string[]
+  errors: string[]
+  // Counts from this file's own child ExecutionRun. A REJECTED file never ran,
+  // so 0 here means "never processed", not a measured zero.
+  records_total: number
+  records_processed: number
+  records_with_errors: number
+  warning_count: number
+}
+
+export interface BatchResponse {
+  batch_id: string
+  created_at: string
+  status: "SUCCESS" | "PARTIAL_SUCCESS" | "FAILED"
+  total_files: number
+  succeeded_files: number
+  failed_files: number
+  persisted: boolean
+  records_total: number
+  records_processed: number
+  records_with_errors: number
+  warning_count: number
+  files: BatchFileResponse[]
 }
 
 export interface RunFailedResponse {
@@ -87,7 +141,7 @@ export type RunState =
   | { status: "success"; result: RunResponse }
   | { status: "error"; message: string }
 
-export type ProvenanceStatus = "VERIFIED" | "INFERRED" | "NOT_FOUND"
+export type ProvenanceStatus = "VERIFIED" | "INFERRED" | "NOT_FOUND" | "INVALID"
 export type Decision = "BUY" | "REVIEW" | "PASS"
 
 // GET /api/v1/runs -- real ExecutionRun fields (API_CONTRACT.md §2b).
@@ -129,7 +183,7 @@ export interface RunRecordsResponse {
   pagination: RecordPaginationOut
 }
 
-export type RecordSort = "record_ref" | "sku" | "decision" | "profit" | "roi" | "margin"
+export type RecordSort = "record_ref" | "sku" | "asin" | "title" | "price" | "cog" | "decision" | "profit" | "roi" | "margin" | "hazmat" | "bulky"
 export type SortDirection = "asc" | "desc"
 
 export interface RunRecordsQuery {
@@ -139,6 +193,14 @@ export interface RunRecordsQuery {
   decision?: Decision
   sort?: RecordSort
   direction?: SortDirection
+  min_roi?: string
+  min_profit?: string
+  min_margin?: string
+  confidence?: "VERIFIED_ONLY" | "INCLUDE_INFERRED"
+  hazmat?: string
+  bulky?: string
+  provenance_field?: "asin" | "selling_price" | "profit" | "roi" | "margin"
+  provenance_status?: "VERIFIED" | "INFERRED" | "NOT_FOUND" | "INVALID"
 }
 
 // GET /api/v1/runs/{execution_id}/analytics -- backend-computed aggregates
@@ -155,6 +217,22 @@ export interface NumericSummary {
   maximum: string | null
 }
 
+// Internal analytics projections aggregated from canonical snapshot fields
+// (no provider data, no ranking model). `not_recorded` stays separate from any
+// named brand, and a spread `percent` is null when the price is not > 0.
+export interface BrandDistributionOut {
+  items: { label: string; count: number }[]
+  distinct: number
+  not_recorded: number
+}
+
+export interface PriceSpreadOut {
+  count: number
+  average_amount: string | null
+  at_or_below_cog: number
+  largest: { record_ref: string; title: string | null; amount: string; percent: string | null }[]
+}
+
 export interface RunAnalyticsOut {
   execution_id: string
   records: { total_records: number }
@@ -163,4 +241,7 @@ export interface RunAnalyticsOut {
   provenance: Record<"asin" | "weight" | "selling_price" | "profit" | "roi" | "margin", Record<string, number>>
   data_quality: { records_with_issues: number; total_issue_count: number }
   profitability: { profit: NumericSummary; roi: NumericSummary; margin: NumericSummary }
+  brands: BrandDistributionOut
+  issue_types: { code: string; count: number }[]
+  price_spread: PriceSpreadOut
 }

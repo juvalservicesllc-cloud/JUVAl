@@ -36,8 +36,20 @@ function analyticsFor(executionId: string, overrides: Record<string, unknown> = 
       roi: { count: 2, sum: "0.6", average: "0.3", minimum: "0.2", maximum: "0.4" },
       margin: { count: 3, sum: "0.9", average: "0.3", minimum: "0.1", maximum: "0.5" },
     },
+    brands: { items: [{ label: "Acme", count: 2 }], distinct: 1, not_recorded: 1 },
+    issue_types: [{ code: "MISSING_UNIT", count: 2 }],
+    price_spread: {
+      count: 2, average_amount: "8", at_or_below_cog: 1,
+      largest: [{ record_ref: "row_2", title: "Widget", amount: "10", percent: "0.5" }],
+    },
     ...overrides,
   }
+}
+
+const EMPTY_INTERNAL_ANALYTICS = {
+  brands: { items: [], distinct: 0, not_recorded: 4 },
+  issue_types: [],
+  price_spread: { count: 0, average_amount: null, at_or_below_cog: 0, largest: [] },
 }
 
 function renderPage() {
@@ -229,6 +241,47 @@ describe("DashboardPage", () => {
     )
     await user.click(screen.getByRole("button", { name: /retry/i }))
     await waitFor(() => expect(screen.getAllByText("2").length).toBeGreaterThan(0))
+  })
+
+  it("renders brand mix and keeps unrecorded brands as their own count", async () => {
+    stubFetchWithRuns([RUN_A])
+    renderPage()
+
+    await screen.findByText("catalog-a.xlsx")
+    expect(await screen.findByText(/records per brand/i)).toBeInTheDocument()
+    expect(screen.getByText("Acme")).toBeInTheDocument()
+    // The record with no brand is reported separately, never merged into Acme.
+    expect(screen.getByText(/1 record carr(y|ies) no brand/i)).toBeInTheDocument()
+  })
+
+  it("breaks data quality down by canonical issue code, not just a total", async () => {
+    stubFetchWithRuns([RUN_A])
+    renderPage()
+
+    await screen.findByText("catalog-a.xlsx")
+    expect(await screen.findByText(/which issues occurred/i)).toBeInTheDocument()
+    expect(screen.getByText("MISSING_UNIT")).toBeInTheDocument()
+  })
+
+  it("renders the sourcing spread with its excluded-record rule stated", async () => {
+    stubFetchWithRuns([RUN_A])
+    renderPage()
+
+    await screen.findByText("catalog-a.xlsx")
+    expect(await screen.findByText(/selling price over cost of goods/i)).toBeInTheDocument()
+    expect(screen.getByText(/VERIFIED selling price and a recorded COG/i)).toBeInTheDocument()
+    expect(screen.getByText("1 record")).toBeInTheDocument() // at or below cost
+    expect(screen.getByText("row_2")).toBeInTheDocument()
+  })
+
+  it("states honestly when internal analytics have no usable data instead of charting zero", async () => {
+    stubFetchWithRuns([RUN_A], { "run-a": analyticsFor("run-a", EMPTY_INTERNAL_ANALYTICS) })
+    renderPage()
+
+    await screen.findByText("catalog-a.xlsx")
+    expect(await screen.findByText(/no brand was recorded on any record/i)).toBeInTheDocument()
+    expect(screen.getByText(/no issue codes are recorded/i)).toBeInTheDocument()
+    expect(screen.getByText(/no record in this run has both a VERIFIED selling price and a recorded COG/i)).toBeInTheDocument()
   })
 
   it("toggles the decision chart between donut and bars", async () => {

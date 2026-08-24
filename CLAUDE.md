@@ -10,11 +10,18 @@ discrepancia y corregir este archivo, no al revés.
 Última verificación contra el repositorio: **2026-08-18**. Git **está
 inicializado, con historial y remoto** (`origin`, GitHub) — el bloqueo
 histórico de `git config user.name`/`user.email` ya no aplica. Backend:
-**303 tests pasando, 3 skipped** (`SKIPPED_EXPECTED`: Supabase contra
-base real), más 9 de frontend + 1 E2E. **22 ADRs** en `docs/adr/` —
+**347 tests pasando, 7 skipped** (`SKIPPED_EXPECTED`: Supabase contra
+base real), más **107 de frontend** (`npx vitest run`) y **27 E2E
+Playwright contra el stack real** (FastAPI + SQLite + PWA) — los tres
+verificados 2026-08-19 tras la recuperación de capacidades Waves B-D
+(ver `docs/architecture/PRODUCT_BEHAVIORAL_PARITY.md`). **26 ADRs** en
+`docs/adr/` —
 ADR-009 (Propuesta), ADR-021 (Propuesta, superada por ADR-022 en cuanto
 a proveedor) y **ADR-022 (Propuesta — Okta como IdP, pendiente de
-aprobación comercial)**; el resto Aceptadas. **Cumplimiento Amazon:
+aprobación comercial)**; el resto Aceptadas, incluida **ADR-023
+(Aceptada — gobernanza del Product Experience/Design System del
+frontend, 2026-08-19, inicio del rediseño UI/UX Premium)**. **Cumplimiento
+Amazon:
 `SP_API_DEVELOPER_REGISTRATION = REJECTED_REMEDIATION_REQUIRED`; los
 cinco hallazgos RF-01…RF-05 están en `PARTIAL`, ninguno `COMPLIANT`;
 `REAPPLICATION GATE = BLOCKED`** — ver `docs/compliance/`
@@ -156,7 +163,7 @@ definidos hacia adentro (inversión de dependencias). Normativo:
 | `domain/` | Implementado y probado: `provenance.py`, `product.py`, `costs.py`, `risk.py`, `decision.py`, `identifiers.py`, `units.py`, `issues.py`, `sourcing_record.py` (§7, ADR-011), `execution_run.py` (§15) |
 | `processing/` | Implementado y probado: `profitability.py`, `decision_engine.py`, `decision_score.py`, `data_quality.py`, `pipeline.py` (`process_record`/`process_batch`, ver `docs/architecture/PROCESSING_PIPELINE.md`) |
 | `application/` | Implementado: `run_pipeline.py` — único módulo que conecta `infrastructure/` y `processing/` (§3.2 de `ARCHITECTURE.md`) |
-| `infrastructure/excel` | Implementado y probado: `column_mapping.py`, `importer.py`, `exporter.py` (§8, ver `docs/architecture/EXCEL_PROCESSING.md`) |
+| `infrastructure/excel` | Implementado y probado: `column_mapping.py`, `importer.py` (XLSX **y CSV** — ADR-026, un solo contrato tabular), `exporter.py` (§8, ver `docs/architecture/EXCEL_PROCESSING.md`) |
 | `infrastructure/enrichment` | Vacío (solo `README.md`) — no implementado |
 | `infrastructure/logging` | Implementado (parcial): `sqlite_execution_run_store.py` (persistencia local de `ExecutionRun`, ADR-013). Logging técnico operacional (stdout/archivo) sigue sin implementar |
 | `infrastructure/persistence` | Implementado, **no verificado contra una base real** (2026-08-17): `supabase_execution_run_store.py` (ADR-017) — sin `supabase`/`psql` disponibles en este entorno, ver `docs/architecture/SUPABASE.md` §1 |
@@ -194,7 +201,12 @@ nunca un campo `asin` propio de `SourcingRecord`).
 ## 8. Excel
 
 Excel es formato de **intercambio** (input/output), nunca el modelo de
-dominio (ADR-002). Flujo **IMPLEMENTED**
+dominio (ADR-002). Desde **ADR-026** hay dos formatos de entrada, `.xlsx`
+y `.csv`, con **un solo contrato tabular**: `import_file()` despacha por
+sufijo y todo lo que va por debajo del iterador de filas (`_import_rows`)
+es idéntico, así que un CSV y un XLSX con los mismos encabezados producen
+exactamente los mismos registros. La salida sigue siendo `.xlsx`
+únicamente. Flujo **IMPLEMENTED**
 (`infrastructure/excel/{column_mapping,importer,exporter}.py`, ver
 `docs/architecture/EXCEL_PROCESSING.md` para el detalle columna por
 columna):
@@ -392,7 +404,12 @@ upload. `.gitignore` actual ya excluye `.venv/`, `__pycache__/`, `*.pyc`,
 
 ## 17. Testing
 
-Estado real: **209 tests pasando, 0 fallos, 0 skips**
+Estado real (2026-08-19): **347 tests pasando, 7 skipped**. El bloque
+siguiente describe el desglose histórico de Fase 4A y ya no coincide con
+el conteo actual; se conserva como contexto de aquella fase, no como
+estado vigente.
+
+Histórico de Fase 4A: **209 tests pasando, 0 fallos, 0 skips**
 (`.venv/Scripts/python -m pytest -q`) — 138 en `tests/unit/` (14
 archivos, sin I/O; incluye 2 tests puramente estructurales de
 `SupabaseExecutionRunStore`, ADR-017, sin verificación contra una base
@@ -423,7 +440,8 @@ afirmar que el error se reportó correctamente (`tests/README.md`).
 
 ## 18. Documentación y ADR
 
-`docs/adr/` contiene **18 ADRs** (ADR-001 a ADR-018), la mayoría
+`docs/adr/` contiene **26 ADRs** (ADR-001 a ADR-026; verificado por
+conteo de archivos 2026-08-20), la mayoría
 fechados 2026-08-16, ADR-014 a ADR-018 fechadas 2026-08-17. ADR-001 a
 ADR-008 y ADR-010 a ADR-018 están en `Estado: Aceptada`: separación
 UI/Core, Excel como intercambio, provenance, estados de verificación,
@@ -443,10 +461,15 @@ está preparado pero **no verificado contra una base real**, ver
 confianza a `SqliteExecutionRunStore`), **Railway como hosting del
 backend** (ADR-018 — `railway.toml` preparado, **sin desplegar**, ver
 `docs/PROJECT_STATUS.md` §Sesión 2026-08-17 (bloque 8) para el comando
-exacto pendiente). **Solo ADR-009 (Development Loop + Completion Gates)
-permanece en `Estado: Propuesta`** — no tratarla como proceso
-obligatorio hasta que el usuario la confirme explícitamente (ver
-`docs/DEVELOPMENT_LOOP.md`, `docs/PHASE_GATES.md`). **Respetar los ADRs
+exacto pendiente). ADR-019 a ADR-026 se agregaron después: ADR-023
+(gobernanza del Design System), ADR-024 (IA de producto y contrato de
+Catalog), ADR-025 (ingesta multi-archivo, diez archivos por batch) y
+ADR-026 (CSV como formato de entrada) están **Aceptadas**.
+**ADR-009 (Development Loop + Completion Gates) y ADR-021 permanecen en
+`Estado: Propuesta`** — no tratarlas como proceso obligatorio hasta que
+el usuario las confirme explícitamente (ver `docs/DEVELOPMENT_LOOP.md`,
+`docs/PHASE_GATES.md`). El estado de ADR-022 lo mantiene el workstream de
+identidad, no este contrato. **Respetar los ADRs
 Aceptados** — si una nueva implementación contradice uno, no ignorarlo:
 reportar el conflicto.
 

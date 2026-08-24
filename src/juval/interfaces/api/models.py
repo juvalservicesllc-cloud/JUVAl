@@ -41,6 +41,17 @@ class FeesIn(BaseModel):
     other_selling_fees: Decimal = Decimal("0")
 
 
+class ProvenanceOut(BaseModel):
+    source: str
+    source_type: str
+    verification_status: str
+    retrieved_at: str
+    method: str
+    confidence: Optional[float] = None
+    evidence: Optional[str] = None
+    source_reference: Optional[str] = None
+
+
 class FieldValueOut(BaseModel):
     """Never collapses a FieldValue to a bare value (ADR-003/ADR-004) --
     value and verification_status always travel together, same rule the
@@ -49,6 +60,11 @@ class FieldValueOut(BaseModel):
 
     value: Optional[Any] = None
     status: Optional[str] = None
+    unit: Optional[str] = None
+    raw_value: Optional[Any] = None
+    # ``None`` is meaningful for legacy snapshots written before F1. It is
+    # never reconstructed at read time.
+    provenance: Optional[ProvenanceOut] = None
 
 
 class RecordOut(BaseModel):
@@ -72,6 +88,12 @@ class RecordOut(BaseModel):
     selling_price: FieldValueOut
     cog: Optional[Decimal] = None
     shipping_per_unit: Optional[Decimal] = None
+    # Intermediate Profitability Engine terms (ProfitabilityResult). Absent on
+    # snapshots written before they were persisted; `None` there means "not
+    # stored", never zero.
+    total_fees: Optional[Decimal] = None
+    seller_proceeds: Optional[Decimal] = None
+    total_cost: Optional[Decimal] = None
     profit: FieldValueOut
     roi: FieldValueOut
     margin: FieldValueOut
@@ -86,6 +108,7 @@ class RecordOut(BaseModel):
     decision_reasons: list[str] = []
     issue_count: int = 0
     issues: list[str] = []
+    issue_codes: list[str] = []
 
 
 class RunResponse(BaseModel):
@@ -108,6 +131,39 @@ class RunFailedResponse(BaseModel):
     input_filename: str
     input_hash: str
     message: str
+
+
+class BatchFileOut(BaseModel):
+    ordinal: int
+    filename: str
+    content_type: Optional[str] = None
+    size_bytes: int
+    status: Literal["SUCCESS", "PARTIAL_SUCCESS", "FAILED", "REJECTED"]
+    execution_id: Optional[str] = None
+    warnings: list[str] = []
+    errors: list[str] = []
+    # Counts from this file's own child ExecutionRun. A REJECTED file never ran,
+    # so these stay 0 -- "never processed", not a measured zero.
+    records_total: int = 0
+    records_processed: int = 0
+    records_with_errors: int = 0
+    warning_count: int = 0
+
+
+class BatchResponse(BaseModel):
+    batch_id: str
+    created_at: str
+    status: Literal["SUCCESS", "PARTIAL_SUCCESS", "FAILED"]
+    total_files: int
+    succeeded_files: int
+    failed_files: int
+    persisted: bool
+    # Aggregates across every child run in the batch.
+    records_total: int = 0
+    records_processed: int = 0
+    records_with_errors: int = 0
+    warning_count: int = 0
+    files: list[BatchFileOut]
 
 
 class RunSummaryOut(BaseModel):
@@ -146,6 +202,42 @@ class RecordPaginationOut(BaseModel):
     has_more: bool
 
 
+class BrandCountOut(BaseModel):
+    label: str
+    count: int
+
+
+class BrandDistributionOut(BaseModel):
+    """Brands actually recorded in the run. `not_recorded` stays its own count
+    -- an absent brand is never folded into a named one."""
+
+    items: list[BrandCountOut] = []
+    distinct: int = 0
+    not_recorded: int = 0
+
+
+class IssueTypeOut(BaseModel):
+    code: str
+    count: int
+
+
+class PriceSpreadEntryOut(BaseModel):
+    record_ref: str
+    title: Optional[str] = None
+    amount: Decimal
+    # None when the selling price is not > 0, so a percentage would be undefined.
+    percent: Optional[Decimal] = None
+
+
+class PriceSpreadOut(BaseModel):
+    """Selling price minus COG across the run, VERIFIED selling prices only."""
+
+    count: int = 0
+    average_amount: Optional[Decimal] = None
+    at_or_below_cog: int = 0
+    largest: list[PriceSpreadEntryOut] = []
+
+
 class RunAnalyticsOut(BaseModel):
     execution_id: str
     records: dict[str, int]
@@ -154,3 +246,6 @@ class RunAnalyticsOut(BaseModel):
     provenance: dict[str, dict[str, int]]
     data_quality: dict[str, int]
     profitability: dict[str, dict[str, int | str | None]]
+    brands: BrandDistributionOut = BrandDistributionOut()
+    issue_types: list[IssueTypeOut] = []
+    price_spread: PriceSpreadOut = PriceSpreadOut()

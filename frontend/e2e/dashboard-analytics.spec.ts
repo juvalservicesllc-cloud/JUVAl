@@ -10,7 +10,7 @@ const FIXTURE = path.resolve(__dirname, "../../tests/fixtures/sample_sourcing_TE
 // configured -- see e2e/README.md.
 test("dashboard shows real analytics for the latest persisted run, then opens Run Detail", async ({ page }) => {
   await page.goto("/upload")
-  await page.getByLabel(/catalog workbook/i).setInputFiles(FIXTURE)
+  await page.getByLabel(/catalog files/i).setInputFiles(FIXTURE)
   await page.getByLabel(/target profit/i).fill("5")
   await page.getByLabel(/target roi/i).fill("0.3")
   await page.getByLabel(/minimum estimated monthly sales/i).fill("0")
@@ -22,9 +22,15 @@ test("dashboard shows real analytics for the latest persisted run, then opens Ru
   await page.getByRole("button", { name: /process catalog/i }).click()
   await expect(page.getByText("PARTIAL SUCCESS").first()).toBeVisible({ timeout: 15_000 })
 
+  // Select this spec's own run rather than assuming it is the newest: workers
+  // run in parallel against one database, so "latest" is not this spec's to
+  // claim (see e2e/README.md).
+  const executionId = (await page.getByText("Execution ID").locator("xpath=following-sibling::dd[1]").innerText()).trim()
+
   await page.goto("/")
   await expect(page.getByRole("heading", { name: "Dashboard", level: 1 })).toBeVisible()
   await expect(page.getByText("DEMO MODE")).not.toBeVisible()
+  await page.getByLabel(/select run/i).selectOption(executionId)
 
   const totalRecordsCard = page.locator("article.metric-card", { hasText: "Total records" })
   await expect(totalRecordsCard).toBeVisible({ timeout: 10_000 })

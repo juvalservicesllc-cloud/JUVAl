@@ -73,6 +73,19 @@ def test_records_load_in_original_processing_order(tmp_path):
     assert [r["record_ref"] for r in loaded] == ["row_0", "row_1", "row_2", "row_3", "row_4"]
 
 
+def test_load_record_uses_run_scoped_composite_identity(tmp_path):
+    store = SqliteExecutionRunStore(tmp_path / "execution_runs.db")
+    snapshot_a = record_to_snapshot(_record("row_1", asin_status="verified"))
+    snapshot_b = record_to_snapshot(_record("row_1", asin_status="not_found"))
+    store.save_execution_run(_run(execution_id="run-a", records_total=1, records_processed=1, records_successful=1), [snapshot_a])
+    store.save_execution_run(_run(execution_id="run-b", records_total=1, records_processed=1, records_successful=1), [snapshot_b])
+
+    assert store.load_record("run-a", "row_1") == snapshot_a
+    assert store.load_record("run-b", "row_1") == snapshot_b
+    assert store.load_record("run-a", "missing") is None
+    assert store.load_record("missing", "row_1") is None
+
+
 def test_same_record_ref_in_different_runs_does_not_collide(tmp_path):
     # ADR-012: record_ref is unique only within one execution -- two runs
     # reusing "row_1" (e.g. the same catalog re-processed) must both persist.
@@ -109,7 +122,9 @@ def test_provenance_round_trips_through_persistence(tmp_path, asin_status, expec
     )
     loaded = store.load_records("run-prov")[0]
 
-    assert loaded["asin"] == {"value": expected_value, "status": expected_status}
+    assert loaded["asin"]["value"] == expected_value
+    assert loaded["asin"]["status"] == expected_status
+    assert loaded["asin"]["provenance"]["source"] == "s"
 
 
 def test_snapshot_is_structured_json_not_a_python_repr(tmp_path):
@@ -127,7 +142,8 @@ def test_snapshot_is_structured_json_not_a_python_repr(tmp_path):
 
     parsed = json.loads(raw)  # must be valid JSON, not repr()/pickle
     assert parsed["record_ref"] == "row_1"
-    assert parsed["asin"] == {"value": "B0EXAMPLE1", "status": "VERIFIED"}
+    assert parsed["asin"]["value"] == "B0EXAMPLE1"
+    assert parsed["asin"]["provenance"]["method"] == "m"
 
 
 def test_load_records_for_unknown_execution_id_returns_empty_list(tmp_path):

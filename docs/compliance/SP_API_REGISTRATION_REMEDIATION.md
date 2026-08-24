@@ -1333,3 +1333,29 @@ IDENTITY SECURITY GATE = BLOCKED (unchanged)
 REAPPLICATION GATE = BLOCKED (unchanged — RF-01–RF-05 still not COMPLIANT)
 AMAZON_COMPLIANCE_READINESS = NOT_READY (unchanged)
 ```
+
+## 29. RF-03 normative forensic audit — baseline reconfirmed, unchanged (2026-08-19)
+
+Full detail — the 11-control forensic matrix, the literal reviewer-wording
+parse, fresh independent re-verification of Amazon's official Key Security
+Control Guidance text, the annual-rotation human-vs-service boundary
+reconfirmation, and the per-provider reopening assessment — is maintained
+in [`ADR-021`](../adr/ADR-021-identity-provider-authentication-boundary.md)
+§"RF-03 normative forensic audit (2026-08-19)", so it is not duplicated
+here.
+
+Outcome summary: audited the 11 `HARD IdP REQUIREMENTS` baseline
+adversarially against Amazon's own primary sources (not assumed correct).
+4 of the 11 are literally in the reviewer's own rejection sentence; the
+other 7 are not in that sentence but are directly, verbatim sourced from
+the same official Key Security Control Guidance document the reviewer's
+question compresses. Zero items found to be internal JUVAl interpretation
+without primary-source backing. Zero new mandatory controls discovered.
+**Baseline confirmed identical — no prior IdP rejection (Cognito, Auth0,
+JumpCloud, Entra External ID) requires reopening.**
+
+```
+RF-03 = NOT_COMPLIANT (unchanged)
+IDENTITY SECURITY GATE = BLOCKED (unchanged)
+REAPPLICATION GATE = BLOCKED (unchanged)
+```

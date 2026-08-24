@@ -29,6 +29,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     root.style.setProperty("--app-background-position", settings.backgroundPosition)
     root.style.setProperty("--app-overlay-opacity", String(settings.backgroundImageDataUrl ? settings.overlayOpacity : 0))
     root.style.setProperty("--app-overlay-color", settings.appearanceMode === "dark" ? "12, 14, 18" : "245, 247, 251")
+    // Native controls the UA paints itself -- select dropdowns, scrollbars,
+    // focus rings, autofill -- follow `color-scheme`, not our custom
+    // properties. Without this they track the OS instead of the appearance the
+    // operator chose, so an app-dark/OS-light browser renders the Catalog's
+    // filter selects as light panels on a dark surface.
+    root.style.colorScheme = settings.appearanceMode
     try { saveThemeSettings(settings); setStorageError(null) } catch { setStorageError("Live preview is active, but this browser could not save the appearance settings.") }
   }, [settings])
 

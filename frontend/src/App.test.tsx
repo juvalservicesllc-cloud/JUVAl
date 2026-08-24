@@ -10,7 +10,7 @@ function makeFile() {
 }
 
 async function fillAndSubmit(user: ReturnType<typeof userEvent.setup>) {
-  await user.upload(await screen.findByLabelText(/catalog workbook/i), makeFile())
+  await user.upload(await screen.findByLabelText(/catalog files/i), makeFile())
   await user.type(screen.getByLabelText(/target profit/i), "5")
   await user.type(screen.getByLabelText(/target roi/i), "0.3")
   await user.type(screen.getByLabelText(/minimum estimated monthly sales/i), "0")
@@ -25,16 +25,17 @@ describe("App", () => {
     vi.unstubAllGlobals()
   })
 
-  it("navigates the shell and keeps Products run-scoped when no persisted catalog exists", async () => {
+  it("navigates the shell and keeps Catalog run-scoped when no persisted run exists", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ items: [] }) }))
     const user = userEvent.setup()
     window.history.pushState({}, "", "/")
     render(<App />)
 
     expect(await screen.findByText(/no persisted runs yet/i)).toBeInTheDocument()
-    await user.click(screen.getByRole("link", { name: /products/i }))
+    await user.click(screen.getByRole("link", { name: "Catalog" }))
 
     expect(await screen.findByText(/no persisted runs yet/i)).toBeInTheDocument()
+    expect(screen.getByText("Live processing")).toBeInTheDocument()
   })
 
   it("dashboard renders real run analytics from the API, not demo KPIs", async () => {

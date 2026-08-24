@@ -9,10 +9,14 @@ function makeFile() {
   })
 }
 
+function makeNamedFile(name: string) {
+  return new File(["dummy"], name, { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
+}
+
 describe("RunForm", () => {
   it("renders the file upload input and required parameter fields", () => {
     render(<RunForm disabled={false} onSubmit={vi.fn()} />)
-    expect(screen.getByLabelText(/catalog workbook/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/catalog files/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/target profit/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/target roi/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/maximum accepted risk severity/i)).toBeInTheDocument()
@@ -27,7 +31,7 @@ describe("RunForm", () => {
     await user.click(screen.getByRole("button", { name: /^process catalog$/i }))
 
     expect(onSubmit).not.toHaveBeenCalled()
-    expect(screen.getByRole("alert")).toHaveTextContent(/choose the excel workbook/i)
+    expect(screen.getByRole("alert")).toHaveTextContent(/choose at least one catalog file/i)
   })
 
   it("blocks submit and shows an error when required parameters are empty -- never invents a commercial default", async () => {
@@ -35,7 +39,7 @@ describe("RunForm", () => {
     const user = userEvent.setup()
     render(<RunForm disabled={false} onSubmit={onSubmit} />)
 
-    await user.upload(screen.getByLabelText(/catalog workbook/i), makeFile())
+    await user.upload(screen.getByLabelText(/catalog files/i), makeFile())
     await user.click(screen.getByRole("button", { name: /^process catalog$/i }))
 
     expect(onSubmit).not.toHaveBeenCalled()
@@ -47,7 +51,7 @@ describe("RunForm", () => {
     const user = userEvent.setup()
     render(<RunForm disabled={false} onSubmit={onSubmit} />)
 
-    const fileInput = screen.getByLabelText(/catalog workbook/i)
+    const fileInput = screen.getByLabelText(/catalog files/i)
     await user.upload(fileInput, makeFile())
 
     await user.type(screen.getByLabelText(/target profit/i), "5")
@@ -84,7 +88,7 @@ describe("RunForm", () => {
     const user = userEvent.setup()
     render(<RunForm disabled={false} onSubmit={onSubmit} />)
 
-    await user.upload(screen.getByLabelText(/catalog workbook/i), makeFile())
+    await user.upload(screen.getByLabelText(/catalog files/i), makeFile())
     await user.type(screen.getByLabelText(/target profit/i), "5")
     await user.type(screen.getByLabelText(/target roi/i), "0.3")
     await user.type(screen.getByLabelText(/minimum estimated monthly sales/i), "0")
@@ -98,14 +102,45 @@ describe("RunForm", () => {
     expect(onSubmit.mock.calls[0][0].persist).toBe(true)
   })
 
-  it("shows selected-file feedback and rejects a CSV before submission", async () => {
+  it("shows selected-file feedback and accepts CSV alongside XLSX", async () => {
     const user = userEvent.setup()
     render(<RunForm disabled={false} onSubmit={vi.fn()} />)
 
-    await user.upload(screen.getByLabelText(/catalog workbook/i), makeFile())
+    await user.upload(screen.getByLabelText(/catalog files/i), makeFile())
     expect(screen.getByText("sample.xlsx")).toBeInTheDocument()
 
-    fireEvent.change(screen.getByLabelText(/catalog workbook/i), { target: { files: [new File(["csv"], "sample.csv", { type: "text/csv" })] } })
-    expect(screen.getByRole("alert")).toHaveTextContent(/processes excel workbooks/i)
+    fireEvent.change(screen.getByLabelText(/catalog files/i), { target: { files: [new File(["csv"], "sample.csv", { type: "text/csv" })] } })
+    expect(screen.getByText("sample.csv")).toBeInTheDocument()
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument()
+  })
+
+  it("names an unsupported file instead of silently dropping it", async () => {
+    render(<RunForm disabled={false} onSubmit={vi.fn()} />)
+
+    fireEvent.change(screen.getByLabelText(/catalog files/i), {
+      target: { files: [new File(["x"], "keep.xlsx"), new File(["x"], "notes.pdf", { type: "application/pdf" })] },
+    })
+
+    expect(screen.getByText("keep.xlsx")).toBeInTheDocument()
+    expect(screen.getByRole("alert")).toHaveTextContent("notes.pdf")
+    expect(screen.getByText("1 of 10 files queued")).toBeInTheDocument()
+  })
+
+  it("queues ten workbooks and removes one without affecting the others", async () => {
+    const user = userEvent.setup()
+    render(<RunForm disabled={false} onSubmit={vi.fn()} />)
+    await user.upload(screen.getByLabelText(/catalog files/i), Array.from({ length: 10 }, (_, index) => makeNamedFile(`file-${index}.xlsx`)))
+    expect(screen.getByText("10 of 10 files queued")).toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Remove file-3.xlsx" }))
+    expect(screen.getByText("9 of 10 files queued")).toBeInTheDocument()
+    expect(screen.queryByText("file-3.xlsx")).not.toBeInTheDocument()
+  })
+
+  it("identifies overflow files by name", async () => {
+    const user = userEvent.setup()
+    render(<RunForm disabled={false} onSubmit={vi.fn()} />)
+    await user.upload(screen.getByLabelText(/catalog files/i), Array.from({ length: 11 }, (_, index) => makeNamedFile(`file-${index}.xlsx`)))
+    expect(screen.getByRole("alert")).toHaveTextContent("file-10.xlsx")
+    expect(screen.getByText("10 of 10 files queued")).toBeInTheDocument()
   })
 })

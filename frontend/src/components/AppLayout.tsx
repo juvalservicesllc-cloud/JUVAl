@@ -14,12 +14,12 @@ import { useTheme } from "../theme/useTheme"
 
 const primaryNavigation = [
   { to: "/", label: "Dashboard", icon: House, end: true },
-  { to: "/upload", label: "Upload Catalog", icon: UploadSimple, end: false },
-  { to: "/products", label: "Products", icon: GridFour, end: false },
+  { to: "/upload", label: "Upload", icon: UploadSimple, end: false },
+  { to: "/products", label: "Catalog", icon: GridFour, end: false },
   { to: "/runs", label: "Runs", icon: ClockCounterClockwise, end: false },
 ] as const
 
-const titles: Record<string, string> = { "/": "Dashboard", "/upload": "Upload Catalog", "/products": "Products", "/runs": "Processing Runs", "/appearance": "Appearance" }
+const titles: Record<string, string> = { "/": "Dashboard", "/upload": "Upload", "/products": "Catalog", "/runs": "Processing Runs", "/appearance": "Appearance" }
 // Live/demo data-source signal only makes sense for surfaces that render
 // data -- Appearance is a local settings page, neither "live" nor "demo".
 const liveDataRoutes = new Set(["/", "/upload", "/products", "/runs"])
@@ -46,9 +46,9 @@ export function AppLayout() {
   }, [collapsed])
 
   // Upload, Runs (list + detail + record detail), and Dashboard are real
-  // backend data -- only Products' demo/live status is per-run, already
+  // backend data -- only Catalog's demo/live status is per-run, already
   // labelled inline; the shell only needs a coarse route check here.
-  const isLiveRoute = pathname === "/upload" || pathname === "/" || pathname.startsWith("/runs")
+  const isLiveRoute = pathname === "/upload" || pathname === "/" || pathname === "/products" || pathname.startsWith("/runs")
   const isRecordDetail = pathname.includes("/records/")
   const isRunDetail = pathname.startsWith("/runs/") && !isRecordDetail
   const showEnvironmentBadge = liveDataRoutes.has(pathname) || isRunDetail || isRecordDetail

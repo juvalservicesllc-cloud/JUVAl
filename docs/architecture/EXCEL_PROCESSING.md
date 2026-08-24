@@ -6,9 +6,32 @@ vista legible de esa capa — si hay discrepancia, el código gana.
 
 ## 1. Flujo
 
+Desde ADR-026 hay **dos formatos de entrada y un solo contrato tabular**:
+`.xlsx` (vía `openpyxl`) y `.csv` (vía el módulo `csv` de la stdlib).
+`import_file()` despacha por sufijo; cualquier otro sufijo levanta
+`UnsupportedInputFormat`, nunca se adivina el formato. Todo lo que está por
+debajo del iterador de filas —resolución de encabezados, mapeo de columnas,
+validación, provenance y construcción del `SourcingRecord`— es
+`_import_rows()`, **idéntico para ambos**, así que un CSV y un XLSX con los
+mismos encabezados producen exactamente los mismos registros.
+
+Diferencias reales entre los dos lectores, y solo estas:
+
+- Un workbook reporta la celda vacía como `None`; un CSV como `""`. Ambos se
+  normalizan al mismo `NOT_FOUND` — nunca a `0`.
+- Una fila completamente vacía se salta como blanca en ambos (la comprobación
+  es agnóstica del formato), en vez de convertirse en un registro lleno de
+  errores de campo faltante.
+- El CSV se lee con `utf-8-sig` para descartar el BOM que Excel escribe al
+  exportar; sin eso el primer encabezado quedaría corrupto.
+- Coma como único delimitador. No hay sniffing: adivinar mal el delimitador
+  parte la fila en columnas equivocadas y produce números incorrectos.
+
+La **salida** sigue siendo `.xlsx` únicamente; no existe export CSV.
+
 ```
-Excel Input (.xlsx)
-   │  openpyxl.load_workbook
+Input (.xlsx | .csv)
+   │  openpyxl.load_workbook  |  csv.reader (utf-8-sig)
    ▼
 Parse            (fila 1 = headers; filas 2..N = datos; celdas en bruto)
    │

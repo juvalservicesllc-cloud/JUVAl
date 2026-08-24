@@ -13,6 +13,7 @@ contract this module implements.
 
 from __future__ import annotations
 
+import csv
 import re
 from dataclasses import dataclass
 from datetime import datetime
@@ -52,6 +53,10 @@ DEFAULT_RISK_SEVERITY: dict[RiskType, Severity] = {
     RiskType.HAZMAT: Severity.HIGH,
     RiskType.BULKY: Severity.MEDIUM,
 }
+
+# Accepted input file suffixes -- the only two formats the API and the CLI
+# will import. Extending this set means extending `import_file` too.
+SUPPORTED_INPUT_SUFFIXES: frozenset[str] = frozenset({".xlsx", ".csv"})
 
 
 @dataclass(frozen=True)
@@ -504,6 +509,30 @@ def _build_record(
     return record, issues
 
 
+class UnsupportedInputFormat(ValueError):
+    """Raised for a file whose suffix is not an accepted tabular format."""
+
+
+def import_file(path: Path, *, now: datetime) -> ImportResult:
+    """Import any supported tabular format by suffix.
+
+    XLSX and CSV are two encodings of the same tabular contract: identical
+    headers, identical column mapping, identical validation and identical
+    provenance. Only the row source differs (ADR-002 -- the file format is an
+    interchange detail, never the domain model).
+    """
+
+    path = Path(path)
+    suffix = path.suffix.lower()
+    if suffix == ".csv":
+        return import_csv(path, now=now)
+    if suffix == ".xlsx":
+        return import_excel(path, now=now)
+    raise UnsupportedInputFormat(
+        f"{path.name!r} has an unsupported extension; expected one of: {', '.join(sorted(SUPPORTED_INPUT_SUFFIXES))}"
+    )
+
+
 def import_excel(path: Path, *, now: datetime, sheet_name: Optional[str] = None) -> ImportResult:
     path = Path(path)
     workbook = openpyxl.load_workbook(path, data_only=True, read_only=True)
@@ -519,11 +548,35 @@ def import_excel(path: Path, *, now: datetime, sheet_name: Optional[str] = None)
         workbook.close()
 
 
+def import_csv(path: Path, *, now: datetime) -> ImportResult:
+    """Same contract as `import_excel`, reading a delimited text file.
+
+    `utf-8-sig` transparently drops the BOM Excel writes when it exports a
+    CSV. Every cell arrives as `str`, which `_parse_cell` already handles
+    identically to a text cell in a workbook -- an empty string is absent
+    (NOT_FOUND), exactly like a blank spreadsheet cell, and is never
+    defaulted to zero.
+    """
+
+    path = Path(path)
+    with path.open("r", encoding="utf-8-sig", newline="") as handle:
+        rows = [tuple(row) for row in csv.reader(handle)]
+    return _import_rows(iter(rows), path, now=now)
+
+
 def _import_from_workbook(
     workbook: openpyxl.workbook.Workbook, path: Path, *, now: datetime, sheet_name: Optional[str] = None
 ) -> ImportResult:
     sheet = workbook[sheet_name] if sheet_name else workbook.worksheets[0]
-    rows_iter = sheet.iter_rows(values_only=True)
+    return _import_rows(sheet.iter_rows(values_only=True), path, now=now)
+
+
+def _import_rows(rows_iter, path: Path, *, now: datetime) -> ImportResult:
+    """Header resolution, row validation and record building for any source.
+
+    Everything below the row iterator is format-independent on purpose: a CSV
+    and an XLSX with the same headers must produce byte-identical records.
+    """
 
     try:
         raw_headers = next(rows_iter)
@@ -549,7 +602,10 @@ def _import_from_workbook(
     rows_skipped_blank = 0
 
     for row_number, raw_row in enumerate(rows_iter, start=2):
-        if raw_row is None or all(v is None for v in raw_row):
+        # Format-agnostic blankness: a workbook reports an empty cell as
+        # None, a CSV reports it as "". Both mean the same absent row, so
+        # neither is scanned into a record full of missing-field errors.
+        if raw_row is None or all(cell is None or str(cell).strip() == "" for cell in raw_row):
             rows_skipped_blank += 1
             continue
         rows_scanned += 1

@@ -1,14 +1,22 @@
 # Juval — Testing Strategy
 
-Estado real verificado por ejecución directa: **209 tests pasando**
-(`.venv/Scripts/python -m pytest -q`, ~2s, 0 fallos, 0 skips;
-actualizado 2026-08-17 tras implementar `interfaces/api/` — FastAPI,
-Fase 4A, ADR-016 — y preparar (sin verificar contra una base real) el
-adapter de Supabase, ADR-017). Este número cambia con cada tarea que
-agregue código — no lo tomes como vigente sin volver a correr `pytest`;
-es una fotografía, no una promesa.
+Estado real verificado por ejecución directa (2026-08-19, tras la
+recuperación de capacidades Waves B-D): **347 tests pasando, 7 skipped**
+(`.venv/Scripts/python -m pytest -q`, ~17s) — 158 en `tests/unit/` y 189
+en `tests/integration/`. Los 7 skips son `SKIPPED_EXPECTED`: Supabase
+contra una base real, que no existe en este entorno.
 
-**Unit test coverage ≠ product validation.** Los 209 tests confirman que
+Además, fuera de `pytest`: **107 tests de frontend** (`npx vitest run`) y
+**27 E2E de Playwright contra el stack real** (PWA + FastAPI + SQLite,
+sin mocks) — ver `frontend/e2e/README.md`.
+
+Este número cambia con cada tarea que agregue código — no lo tomes como
+vigente sin volver a correr `pytest`; es una fotografía, no una promesa.
+El inventario por archivo de la sección 1 corresponde al cierre de Fase
+4A y ya no está completo; regenéralo con `pytest --collect-only` antes de
+citarlo.
+
+**Unit test coverage ≠ product validation.** Los tests confirman que
 el Processing Core, el Domain, la capa Excel, el CLI y la API se
 comportan como sus propios autores esperaban, con datos sintéticos
 (`sample_sourcing_TEST_DATA.xlsx`, explícitamente marcado TEST DATA) y
@@ -16,9 +24,10 @@ bajo las condiciones que el propio suite decidió ejercitar. **No**
 confirman: que el modelo de negocio (reglas de decisión, severidad de
 riesgo, thresholds) sea correcto para el negocio real (ver
 `DECISION_ENGINE.md` §7, ADR-010); que el sistema funcione con archivos
-Excel reales de proveedores (fuera de la fixture); que exista ninguna
-interfaz gráfica de usuario (la API existe, pero el frontend PWA/`.exe`
-siguen sin implementar); que `SupabaseExecutionRunStore` funcione
+Excel reales de proveedores (fuera de la fixture); nada sobre la
+interfaz gráfica (el frontend PWA existe y tiene su propia cobertura de
+vitest/Playwright, que `pytest` no ejecuta; el `.exe` sigue descartado
+por ADR-014); que `SupabaseExecutionRunStore` funcione
 contra una base de datos real (solo 2 tests estructurales, sin instancia
 disponible — ver `docs/architecture/SUPABASE.md` §1); ni que el sistema
 sea seguro en producción (ver `SECURITY.md`).

@@ -4,16 +4,20 @@ import { downloadUrl } from "../api"
 import { getRunAnalytics } from "../api/analytics"
 import { ApiError, apiErrorMessage } from "../api/client"
 import { getRunRecords } from "../api/records"
+import { getRunBatch } from "../api/batches"
 import { getRun } from "../api/runs"
+import { BatchSummary } from "../components/BatchSummary"
 import { ResultsTable } from "../components/ResultsTable"
 import { StatusBadge } from "../components/StatusBadge"
-import type { RecordOut, RunAnalyticsOut, RunSummaryOut } from "../types"
+import type { BatchResponse, RecordOut, RunAnalyticsOut, RunSummaryOut } from "../types"
 
 type DetailState =
   | { status: "loading" }
   | { status: "not-found" }
   | { status: "error"; message: string }
-  | { status: "ready"; run: RunSummaryOut; records: RecordOut[]; analytics: RunAnalyticsOut }
+  // `batch` is null when the run was submitted on its own -- a normal outcome,
+  // not a failure. Batch scope and ExecutionRun scope stay distinct.
+  | { status: "ready"; run: RunSummaryOut; records: RecordOut[]; analytics: RunAnalyticsOut; batch: BatchResponse | null }
 
 function formatTimestamp(value: string | null): string {
   if (value === null) return "—"
@@ -29,8 +33,15 @@ export function RunDetailPage() {
     if (!executionId) return
     const controller = new AbortController()
     setState({ status: "loading" })
-    Promise.all([getRun(executionId, controller.signal), getRunRecords(executionId, { limit: 100 }, controller.signal), getRunAnalytics(executionId, controller.signal)])
-      .then(([run, recordsResponse, analytics]) => setState({ status: "ready", run, records: recordsResponse.records, analytics }))
+    Promise.all([
+      getRun(executionId, controller.signal),
+      getRunRecords(executionId, { limit: 100 }, controller.signal),
+      getRunAnalytics(executionId, controller.signal),
+      // A standalone run legitimately has no batch: 404 resolves to null
+      // instead of failing the whole page.
+      getRunBatch(executionId, controller.signal).catch(() => null),
+    ])
+      .then(([run, recordsResponse, analytics, batch]) => setState({ status: "ready", run, records: recordsResponse.records, analytics, batch }))
       .catch((error: unknown) => {
         if (controller.signal.aborted) return
         if (error instanceof ApiError && error.status === 404) {
@@ -122,6 +133,19 @@ export function RunDetailPage() {
             <article className="metric-card"><span>Records with errors</span><strong>{state.run.records_with_errors}</strong><small>Require record-level review</small></article>
             <article className="metric-card"><span>Warnings</span><strong>{state.run.warnings}</strong><small>Reported by processing</small></article>
           </section>
+          {state.batch && (
+            <section className="panel">
+              <div className="panel-heading">
+                <div>
+                  <p className="eyebrow">BATCH CONTEXT</p>
+                  <h2>Submitted with {state.batch.total_files - 1} other file{state.batch.total_files === 2 ? "" : "s"}</h2>
+                  <p>This run is one independent execution inside a multi-file submission. The counts below are per file — this run's own totals are the ones above.</p>
+                </div>
+                <Link to={`/batches/${encodeURIComponent(state.batch.batch_id)}`} className="secondary-button">Open batch</Link>
+              </div>
+              <BatchSummary batch={state.batch} currentExecutionId={state.run.execution_id} />
+            </section>
+          )}
           <section className="panel run-outcomes">
             <div className="panel-heading"><div><p className="eyebrow">DECISION OUTCOMES</p><h2>Canonical run totals</h2><p>Aggregated by the backend across the persisted run; not calculated from this page of records.</p></div></div>
             <dl className="decision-summary">
@@ -141,7 +165,7 @@ export function RunDetailPage() {
           <section className="panel run-next-action">
             <p className="eyebrow">NEXT ACTION</p>
             <h2>Continue in Catalog</h2>
-            <p>Use Catalog to continue working with the run-scoped records. Its structural migration remains M2.</p>
+            <p>Use Catalog to continue working with the run-scoped records.</p>
             <Link to="/products" className="secondary-button">Open Catalog</Link>
           </section>
         </>

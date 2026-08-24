@@ -2,7 +2,7 @@
 // logic -- never computes profit/ROI/decision/severity, only shapes an
 // HTTP request and parses the response. The backend base URL is never
 // hardcoded (VITE_API_BASE_URL, see .env.example / README).
-import type { FeesIn, RunFailedResponse, RunResponse, ThresholdsIn } from "./types"
+import type { BatchResponse, FeesIn, RunFailedResponse, RunResponse, ThresholdsIn } from "./types"
 import { ApiError, apiUrl, requestJson } from "./api/client"
 
 export { ApiError }
@@ -24,6 +24,13 @@ export async function submitRun(
     body: form,
   })
   return body as RunResponse | RunFailedResponse
+}
+
+export async function submitBatch(files: File[], thresholds: ThresholdsIn, fees: FeesIn, persist: boolean): Promise<BatchResponse> {
+  const form = new FormData()
+  files.forEach((file) => form.append("files", file))
+  form.append("thresholds", JSON.stringify(thresholds)); form.append("fees", JSON.stringify(fees)); form.append("persist", String(persist))
+  return await requestJson("/api/v1/batches", { method: "POST", body: form }) as BatchResponse
 }
 
 export function downloadUrl(executionId: string): string {

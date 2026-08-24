@@ -20,6 +20,8 @@ without pulling in an HTTP-layer dependency.
 from __future__ import annotations
 
 from decimal import Decimal
+from datetime import datetime
+from enum import Enum
 from typing import Any, Optional
 
 from juval.domain.provenance import FieldValue
@@ -27,11 +29,46 @@ from juval.domain.risk import RiskFlag, RiskType
 from juval.domain.sourcing_record import SourcingRecord
 
 
+def _json_value(value: Any) -> Any:
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, tuple):
+        return [_json_value(item) for item in value]
+    if isinstance(value, list):
+        return [_json_value(item) for item in value]
+    if isinstance(value, dict):
+        return {str(key): _json_value(item) for key, item in value.items()}
+    return value
+
+
 def _fv(fv: Optional[FieldValue[Any]]) -> dict[str, Any]:
     if fv is None:
-        return {"value": None, "status": None}
-    value = str(fv.value) if isinstance(fv.value, Decimal) else fv.value
-    return {"value": value, "status": fv.status.value}
+        return {"value": None, "status": None, "provenance": None, "unit": None, "raw_value": None}
+    provenance = fv.provenance
+    return {
+        "value": _json_value(fv.value),
+        "status": fv.status.value,
+        "unit": fv.unit,
+        "raw_value": _json_value(fv.raw_value),
+        "provenance": {
+            "source": provenance.source,
+            "source_type": provenance.source_type.value,
+            "verification_status": provenance.verification_status.value,
+            "retrieved_at": provenance.retrieved_at.isoformat(),
+            "method": provenance.method,
+            "confidence": provenance.confidence,
+            "evidence": provenance.evidence,
+            "source_reference": provenance.source_reference,
+        },
+    }
+
+
+def _decimal_str(value: Optional[Decimal]) -> Optional[str]:
+    return str(value) if value is not None else None
 
 
 def _severity_value(flag: Optional[RiskFlag]) -> Optional[str]:
@@ -67,9 +104,19 @@ def record_to_snapshot(record: SourcingRecord) -> dict[str, Any]:
         break_even_price = _fv(record.profitability.break_even_price)
         max_cog_target_profit = _fv(record.profitability.max_cog_target_profit)
         max_cog_target_roi = _fv(record.profitability.max_cog_target_roi)
+        # Intermediate terms the Profitability Engine already computed
+        # (ProfitabilityResult.total_fees/seller_proceeds/total_cost). They are
+        # plain Decimals there, so they stay plain here -- same convention as
+        # `cog`/`shipping_per_unit`. They are None exactly when selling_price
+        # was unusable, which `profit.status` already reports; nothing is
+        # coerced to zero.
+        total_fees = _decimal_str(record.profitability.total_fees)
+        seller_proceeds = _decimal_str(record.profitability.seller_proceeds)
+        total_cost = _decimal_str(record.profitability.total_cost)
     else:
         profit = roi = margin = break_even_price = {"value": None, "status": None}
         max_cog_target_profit = max_cog_target_roi = {"value": None, "status": None}
+        total_fees = seller_proceeds = total_cost = None
 
     hazmat_flag = record.risk.flag_for(RiskType.HAZMAT)
     bulky_flag = record.risk.flag_for(RiskType.BULKY)
@@ -97,6 +144,9 @@ def record_to_snapshot(record: SourcingRecord) -> dict[str, Any]:
         "selling_price": _fv(price.selling_price_used),
         "cog": str(cog) if cog is not None else None,
         "shipping_per_unit": str(shipping_per_unit) if shipping_per_unit is not None else None,
+        "total_fees": total_fees,
+        "seller_proceeds": seller_proceeds,
+        "total_cost": total_cost,
         "profit": profit,
         "roi": roi,
         "margin": margin,
@@ -111,4 +161,9 @@ def record_to_snapshot(record: SourcingRecord) -> dict[str, Any]:
         "decision_reasons": decision_reasons,
         "issue_count": len(record.issues),
         "issues": [f"[{i.level.value}] {i.code}: {i.message}" for i in record.issues],
+        # Canonical ProcessingIssue codes, kept separately from the rendered
+        # `issues` strings so issue-type analytics group by the real code and
+        # never parse a display string back into one. Absent on snapshots
+        # written before this field existed -- never reconstructed at read time.
+        "issue_codes": [i.code for i in record.issues],
     }

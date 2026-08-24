@@ -2,49 +2,69 @@
 
 ## Status and scope
 
-**M0 — APPROVED DESIGN, NOT IMPLEMENTED** (2026-08-19). This document is the
-implementation contract for later UX slices. `frontend/` is the production
-PWA; `demo/` is a UX reference only. The code and API contract remain the
-source of truth for what is implemented today.
+**M0 — APPROVED DESIGN, LARGELY IMPLEMENTED** (design 2026-08-19; status
+re-verified against the code 2026-08-20). The information architecture,
+Catalog contract and percentage semantics below are implemented and covered
+by tests; Compare and Saved Opportunities remain deferred for the reasons
+stated in their sections. `frontend/` is the production PWA; `demo/` is a UX
+reference only. The code and API contract remain the source of truth for what
+is implemented today — where this document and the code disagree, the code
+wins and this file is corrected.
 
 ## Information architecture
 
 | Destination | User question | Data source | Primary action | Drill-down / mobile |
 |---|---|---|---|---|
 | Dashboard | What happened, what needs attention, what next? | One selected persisted run and its real analytics | Upload / open the active catalog | Compact KPI/action cards; drill into run or catalog |
-| Upload | How do I process this supplier catalog? | `POST /api/v1/runs` | Submit XLSX with explicit thresholds/fees | Validation, real upload/processing state, then result |
+| Upload | How do I process these supplier catalogs? | `POST /api/v1/runs`, `POST /api/v1/batches` | Submit up to ten CSV/XLSX files with explicit thresholds/fees | Per-file validation, real processing state naming every submitted file, then per-file and aggregate result |
 | Catalog | Which records in this run should I inspect? | `GET /runs/{id}/records` | Open record detail | Run selector and filters remain visible; table becomes cards/essential columns on mobile |
-| Runs | What has been processed and is auditable? | `GET /runs`, run snapshots | Open a run | Run Detail -> record detail |
+| Runs | What has been processed and is auditable? | `GET /runs`, run snapshots | Open a run | Run Detail -> batch context / record detail |
+| Batch Detail | Which files did one submission contain, and how did each fare? | `GET /batches/{id}`, `GET /runs/{id}/batch` | Open a child run | Included-file table; each processed file links to its own independent run |
 | Settings / Appearance | How should this workspace look? | local visual preferences only | Change appearance | Not primary navigation |
 
 Upload is the only entry into processing. Validation, processing and result
 are states of that workflow; Run Detail is its auditable review surface.
 Catalog replaces the user-facing term Products but stays run-scoped.
 
+A Batch groups child runs; it never merges them. Batch scope and
+`ExecutionRun` scope stay distinct everywhere: Catalog, Product Detail and
+exports remain per child execution, and a run reached from a batch still shows
+its own totals as the primary numbers.
+
+**Percentage vs ratio.** The domain stores ROI and margin as ratios (`0.30`);
+operators read and type percent (`30`). `frontend/src/contract.ts` is the
+single conversion point: the input takes a percentage, the canonical query and
+the export carry the ratio, and the active-filter chip reads `30%`. The
+domain's ratio semantics are never changed to match an input control.
+
 ## Product-detail model
 
-The canonical order is Decision, Identity, Economics, Risks, Data Quality,
-Provenance, Market, Explanation, Actions. Every sensitive value displays its
+The canonical order is Decision, Identity, Source, Economics, Risks, Data
+Quality, Provenance, Market, Explanation, Actions. Source reports the file,
+row and source type read from stored field provenance -- never reconstructed;
+a snapshot without provenance says so. Economics includes the Profitability
+Engine's intermediate terms (selling fees, seller proceeds, total landed
+cost); when a snapshot did not store them the row renders an em dash, never
+`$0.00`. Every sensitive value displays its
 `FieldValue` status. The current market chart is a `DEMO_FIXTURE`; it cannot
 alter BUY/REVIEW/PASS, ranking or filtering. A stable direct record lookup is
 required before Product Detail can rely on URL refresh beyond the first page.
 
-### Provenance payload gap to close in M3
+### Provenance payload (F1)
 
-Today `FieldValueOut` and the persisted snapshot carry only `value` and
-`status`. That preserves verification state, but **not** the complete domain
-`Provenance` (`source`, `source_type`, `retrieved_at`, `method`, optional
-`confidence`, `evidence`, and `source_reference`). Therefore a Product Detail
-cannot yet provide the approved Provenance section from a persisted snapshot.
+F1 now serializes the complete domain `Provenance` additively in each
+`FieldValueOut` (`source`, `source_type`, `retrieved_at`, `method`, optional
+`confidence`, `evidence`, and `source_reference`), plus the existing `unit` and
+`raw_value` when present. New snapshots therefore retain the information
+needed by Product Detail and Catalog without recalculation.
 
-M3 must add that payload additively to the canonical snapshot and `RecordOut`
-(for example, `FieldValueOut.provenance`), and Catalog and detail must return
-the same projection. Existing historical snapshots that do not contain it must
-return an explicit absent/legacy provenance payload; they must never have
-provenance reconstructed or inferred at read time. This is a snapshot/API
-evolution, not a new calculation, global identity, or business rule.
+Catalog and detail return the same projection. Existing historical snapshots
+that do not contain it return an explicit absent/legacy provenance payload
+(`provenance: null`); they are never reconstructed or inferred at read time.
+This is a snapshot/API evolution, not a new calculation, global identity, or
+business rule.
 
-## Contract A — canonical single-record lookup (PROPOSED)
+## Contract A — canonical single-record lookup (IMPLEMENTED F1)
 
 ```
 GET /api/v1/runs/{execution_id}/records/{record_ref}
@@ -177,7 +197,8 @@ is a primary route or a localStorage feature.
 1. **M1:** real Upload -> processing/result -> Run Detail UX; no invented
    stages.
 2. **M2:** Catalog terminology and structural UX using current query support.
-3. **M3:** Contract A implementation and stable run-scoped Product Detail.
+3. **F1:** Contract A implementation and additive persisted provenance.
+4. **F2:** stable run-scoped Product Detail presentation using F1 contracts.
 4. **M4:** Contract B/C implementation, indexes justified by supported query
    fields, and query-faithful export.
 5. **M5:** actionable Dashboard using real query/analytics capabilities.

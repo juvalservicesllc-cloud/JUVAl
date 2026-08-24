@@ -25,7 +25,7 @@ from juval.domain.decision import Thresholds
 from juval.domain.execution_run import ExecutionRun, ExecutionStatus, hash_file
 from juval.domain.issues import IssueLevel
 from juval.domain.sourcing_record import SourcingRecord
-from juval.infrastructure.excel.importer import import_excel
+from juval.infrastructure.excel.importer import import_file
 from juval.processing.data_quality import DataQualityConfig
 from juval.processing.pipeline import process_batch
 
@@ -41,7 +41,7 @@ def run_pipeline(
     quality_config: DataQualityConfig = DataQualityConfig(),
 ) -> tuple[ExecutionRun, tuple[SourcingRecord, ...]]:
     input_path = Path(input_path)
-    import_result = import_excel(input_path, now=now)
+    import_result = import_file(input_path, now=now)
 
     if import_result.fatal:
         run = ExecutionRun(

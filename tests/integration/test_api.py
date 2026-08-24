@@ -51,9 +51,135 @@ def _upload(client, *, thresholds=_THRESHOLDS, fees=_FEES, persist=None, filenam
     )
 
 
+def _batch(client, files, *, persist=None):
+    data = {"thresholds": _THRESHOLDS, "fees": _FEES}
+    if persist is not None:
+        data["persist"] = persist
+    return client.post(
+        "/api/v1/batches",
+        files=[("files", (name, content, content_type)) for name, content, content_type in files],
+        data=data,
+    )
+
+
+def _fixture_as_csv() -> bytes:
+    """Re-emit the XLSX fixture as CSV so both formats carry identical data."""
+    import csv
+    import io
+
+    import openpyxl
+
+    workbook = openpyxl.load_workbook(FIXTURE, data_only=True, read_only=True)
+    try:
+        buffer = io.StringIO(newline="")
+        writer = csv.writer(buffer, lineterminator="\r\n")
+        for row in workbook.worksheets[0].iter_rows(values_only=True):
+            writer.writerow(["" if cell is None else cell for cell in row])
+    finally:
+        workbook.close()
+    return buffer.getvalue().encode("utf-8")
+
+
 def test_endpoint_exists(client):
     resp = _upload(client)
     assert resp.status_code != 404
+
+
+def test_batch_processes_two_files_and_preserves_ordered_child_runs(client):
+    payload = FIXTURE.read_bytes()
+    response = _batch(client, [("first.xlsx", payload, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"), ("second.xlsx", payload, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")], persist="true")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "PARTIAL_SUCCESS"
+    assert [item["filename"] for item in body["files"]] == ["first.xlsx", "second.xlsx"]
+    assert all(item["execution_id"] for item in body["files"])
+    loaded = client.get(f"/api/v1/batches/{body['batch_id']}")
+    assert loaded.status_code == 200
+    assert loaded.json()["files"] == body["files"]
+
+
+def test_batch_rejects_overflow_without_processing(client):
+    payload = FIXTURE.read_bytes()
+    files = [(f"file-{index}.xlsx", payload, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") for index in range(11)]
+    response = _batch(client, files)
+    assert response.status_code == 422
+    assert "at most 10" in response.json()["detail"]
+
+
+def test_batch_isolates_unimportable_file_and_keeps_valid_sibling(client):
+    """A CSV without the required columns fails on its own; its sibling still runs."""
+    payload = FIXTURE.read_bytes()
+    response = _batch(client, [("valid.xlsx", payload, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"), ("bad.csv", b"a,b\n1,2", "text/csv")])
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "PARTIAL_SUCCESS"
+    assert [item["status"] for item in body["files"]] == ["PARTIAL_SUCCESS", "FAILED"]
+    assert body["files"][0]["execution_id"]
+    assert body["files"][1]["records_processed"] == 0
+
+
+def test_batch_rejects_unsupported_file_type_by_name(client):
+    payload = FIXTURE.read_bytes()
+    response = _batch(client, [("valid.xlsx", payload, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"), ("notes.pdf", b"%PDF-1.4", "application/pdf")])
+    assert response.status_code == 200
+    body = response.json()
+    files = body["files"]
+    assert [item["status"] for item in files] == ["PARTIAL_SUCCESS", "REJECTED"]
+    assert files[1]["filename"] == "notes.pdf"
+    assert files[1]["execution_id"] is None
+    assert ".pdf" in files[1]["errors"][0]
+
+
+def test_batch_reports_per_file_and_aggregate_counts(client):
+    payload = FIXTURE.read_bytes()
+    response = _batch(client, [("first.xlsx", payload, None), ("second.xlsx", payload, None)], persist="true")
+    body = response.json()
+    assert [item["records_total"] for item in body["files"]] == [5, 5]
+    assert [item["records_processed"] for item in body["files"]] == [4, 4]
+    assert body["records_total"] == 10
+    assert body["records_processed"] == 8
+    # Counts survive persistence, so the batch view never recomputes them.
+    assert client.get(f"/api/v1/batches/{body['batch_id']}").json()["records_total"] == 10
+
+
+def test_run_exposes_its_batch_and_standalone_run_does_not(client):
+    payload = FIXTURE.read_bytes()
+    batch = _batch(client, [("first.xlsx", payload, None), ("second.xlsx", payload, None)], persist="true").json()
+    child = batch["files"][0]["execution_id"]
+    linked = client.get(f"/api/v1/runs/{child}/batch")
+    assert linked.status_code == 200
+    assert linked.json()["batch_id"] == batch["batch_id"]
+    assert [item["filename"] for item in linked.json()["files"]] == ["first.xlsx", "second.xlsx"]
+
+    standalone = _upload(client, persist="true").json()["execution_id"]
+    assert client.get(f"/api/v1/runs/{standalone}/batch").status_code == 404
+
+
+def test_csv_upload_produces_the_same_records_as_the_workbook(client):
+    """XLSX and CSV are two encodings of one tabular contract (ADR-002)."""
+    xlsx = _upload(client).json()
+    csv_bytes = _fixture_as_csv()
+    from_csv = _upload(client, filename="sample.csv", content=csv_bytes)
+    assert from_csv.status_code == 200
+    body = from_csv.json()
+    assert body["records_total"] == xlsx["records_total"]
+    assert body["records_processed"] == xlsx["records_processed"]
+    assert body["status"] == xlsx["status"]
+    assert [record["record_ref"] for record in body["records"]] == [record["record_ref"] for record in xlsx["records"]]
+    assert [record["decision"] for record in body["records"]] == [record["decision"] for record in xlsx["records"]]
+    assert [record["roi"]["value"] for record in body["records"]] == [record["roi"]["value"] for record in xlsx["records"]]
+
+
+def test_upload_preserves_the_submitted_filename(client):
+    body = _upload(client, filename="Supplier Q3 catalog.xlsx", persist="true").json()
+    assert body["input_filename"] == "Supplier Q3 catalog.xlsx"
+
+
+def test_upload_rejects_path_traversal_and_unsupported_types(client):
+    assert _upload(client, filename="../../etc/passwd.xlsx").status_code == 200  # traversal stripped, still a workbook
+    unsupported = _upload(client, filename="payload.exe")
+    assert unsupported.status_code == 422
+    assert ".exe" in unsupported.json()["detail"]
 
 
 def test_valid_upload_runs_the_real_pipeline(client):
@@ -89,8 +215,23 @@ def test_result_never_flattens_field_value_to_a_bare_value(client):
     """ADR-003/ADR-004: value and verification_status must travel together."""
     resp = _upload(client)
     record = resp.json()["records"][0]
-    assert set(record["asin"].keys()) == {"value", "status"}
+    assert {"value", "status", "provenance"}.issubset(record["asin"])
+    assert record["asin"]["provenance"]["source"]
     assert record["asin"]["status"] in {"VERIFIED", "NOT_FOUND", "INFERRED", "INVALID"}
+
+
+def test_single_record_endpoint_returns_canonical_snapshot_and_scopes_404s(client):
+    response = _upload(client, persist="true")
+    body = response.json()
+    expected = next(record for record in body["records"] if record["record_ref"].endswith("SUP-001"))
+    execution_id = body["execution_id"]
+
+    found = client.get(f"/api/v1/runs/{execution_id}/records/{expected['record_ref']}")
+    assert found.status_code == 200
+    assert found.json() == expected
+
+    assert client.get(f"/api/v1/runs/{execution_id}/records/not-present").status_code == 404
+    assert client.get("/api/v1/runs/not-present/records/row_1").status_code == 404
 
 
 def test_missing_data_record_never_invents_asin_or_price(client):
@@ -296,7 +437,8 @@ def test_records_include_title_brand_category_dimensions(client):
         ("width", "3"),
         ("length", "2"),
     ):
-        assert live_record[field_name] == {"value": expected, "status": "VERIFIED"}, field_name
+        assert live_record[field_name]["value"] == expected, field_name
+        assert live_record[field_name]["status"] == "VERIFIED", field_name
 
     records_resp = client.get(f"/api/v1/runs/{body['execution_id']}/records")
     reloaded_record = next(
@@ -346,9 +488,12 @@ def test_old_snapshot_missing_new_fields_still_loads(client, tmp_path):
 
     assert resp.status_code == 200
     record = resp.json()["records"][0]
-    assert record["asin"] == {"value": "B0OLDSHAPE1", "status": "VERIFIED"}
+    assert record["asin"]["value"] == "B0OLDSHAPE1"
+    assert record["asin"]["status"] == "VERIFIED"
+    assert record["asin"]["provenance"] is None
     for field_name in ("title", "brand", "category", "height", "width", "length"):
-        assert record[field_name] == {"value": None, "status": None}, field_name
+        assert record[field_name]["value"] is None, field_name
+        assert record[field_name]["status"] is None, field_name
 
 
 def test_get_run_records_for_run_with_no_persisted_records_returns_empty_list(client, tmp_path):

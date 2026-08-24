@@ -40,14 +40,16 @@ persistir es responsabilidad explícita del caller.
 [`DATA_ACQUISITION_MATRIX.md`](DATA_ACQUISITION_MATRIX.md) is the field-level
 source of truth, and [`architecture/DATA_SOURCES.md`](architecture/DATA_SOURCES.md)
 owns shared acquisition rules. No external enrichment adapter is implemented.
-Amazon SP-API Catalog is **DOC VERIFIED / DEVELOPER REGISTRATION UNDER
-REVIEW / LIVE VALIDATION BLOCKED**: JUVAl is registered as a **PRIVATE
-DEVELOPER** for internal use by its own organization and seller account, but
-Amazon has not yet approved it. No production application client,
-self-authorization or credentials exist. Keepa remains a **candidate, not
-approved**. Product Intelligence cannot proceed until Amazon approval, the
-documented authorization gates, matching-ambiguity and business decisions are
-reconciled.
+Amazon SP-API Catalog is **DOC VERIFIED / DEVELOPER REGISTRATION
+REJECTED_REMEDIATION_REQUIRED / LIVE VALIDATION BLOCKED**: Amazon's
+2026-08-17 decision is **NOT ELIGIBLE FOR SP-API ACCESS**. JUVAl remains a
+**PRIVATE DEVELOPER** for internal use by its own organization and seller
+account, but must remediate the documented findings, update the Developer
+Profile truthfully and submit a **new** case (not reopen the prior one). No
+production application client, self-authorization or credentials exist. Keepa
+remains a **candidate, not approved**. Product Intelligence cannot proceed
+until remediation, Amazon approval, the documented authorization gates,
+matching-ambiguity and business decisions are reconciled.
 
 ## Completed Phases
 

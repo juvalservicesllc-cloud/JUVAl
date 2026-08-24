@@ -14,11 +14,14 @@ One method only, justified by the one real caller
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Any, Literal, Protocol
 
 
-RecordSort = Literal["record_ref", "sku", "decision", "profit", "roi", "margin"]
+RecordSort = Literal["record_ref", "sku", "asin", "title", "price", "cog", "decision", "profit", "roi", "margin", "hazmat", "bulky"]
 SortDirection = Literal["asc", "desc"]
+ConfidenceMode = Literal["VERIFIED_ONLY", "INCLUDE_INFERRED"]
+ProvenanceField = Literal["asin", "selling_price", "profit", "roi", "margin"]
 
 
 @dataclass(frozen=True)
@@ -36,6 +39,14 @@ class RecordSnapshotQuery:
     decision: str | None = None
     sort: RecordSort = "record_ref"
     direction: SortDirection = "asc"
+    min_roi: Decimal | None = None
+    min_profit: Decimal | None = None
+    min_margin: Decimal | None = None
+    confidence: ConfidenceMode = "VERIFIED_ONLY"
+    hazmat: str | None = None
+    bulky: str | None = None
+    provenance_field: ProvenanceField | None = None
+    provenance_status: str | None = None
 
 
 @dataclass(frozen=True)
@@ -53,6 +64,15 @@ class RecordSnapshotStore(Protocol):
         those two is the caller's job via ExecutionRunStore.load_execution_run,
         not this port's (same "absence is not an exception" convention
         as ExecutionRunStore.load_execution_run).
+        """
+        ...
+
+    def load_record(self, execution_id: str, record_ref: str) -> dict[str, Any] | None:
+        """Return one immutable snapshot by its run-scoped composite identity.
+
+        ``None`` means the record is absent from that execution. The caller
+        checks run existence separately so the API can keep both cases as
+        honest, non-enumerating 404 responses.
         """
         ...
 

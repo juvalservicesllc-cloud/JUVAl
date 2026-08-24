@@ -1,4 +1,4 @@
-import type { RunRecordsQuery, RunRecordsResponse } from "../types"
+import type { RecordOut, RunRecordsQuery, RunRecordsResponse } from "../types"
 import { requestJson } from "./client"
 
 // GET /api/v1/runs/{execution_id}/records (ADR-019). RecordOut is the
@@ -21,6 +21,14 @@ function buildQuery(query?: RunRecordsQuery): string {
   if (query.decision) params.set("decision", query.decision)
   if (query.sort) params.set("sort", query.sort)
   if (query.direction) params.set("direction", query.direction)
+  if (query.min_roi) params.set("min_roi", query.min_roi)
+  if (query.min_profit) params.set("min_profit", query.min_profit)
+  if (query.min_margin) params.set("min_margin", query.min_margin)
+  if (query.confidence) params.set("confidence", query.confidence)
+  if (query.hazmat) params.set("hazmat", query.hazmat)
+  if (query.bulky) params.set("bulky", query.bulky)
+  if (query.provenance_field) params.set("provenance_field", query.provenance_field)
+  if (query.provenance_status) params.set("provenance_status", query.provenance_status)
   const serialized = params.toString()
   return serialized ? `?${serialized}` : ""
 }
@@ -41,4 +49,19 @@ export async function getRunRecords(
     throw new Error("Records API returned an invalid response")
   }
   return body as RunRecordsResponse
+}
+
+export async function getRunRecord(
+  executionId: string,
+  recordRef: string,
+  signal?: AbortSignal,
+): Promise<RecordOut> {
+  const body = await requestJson(
+    `/api/v1/runs/${encodeURIComponent(executionId)}/records/${encodeURIComponent(recordRef)}`,
+    { signal },
+  )
+  if (!body || typeof body !== "object" || typeof (body as Record<string, unknown>).record_ref !== "string") {
+    throw new Error("Record API returned an invalid response")
+  }
+  return body as RecordOut
 }

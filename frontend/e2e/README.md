@@ -10,6 +10,10 @@ provenance, profitability). `products.spec.ts` covers the responsive
 catalog shell plus a real server-side search/filter query against
 `GET /records`. `runs-persistence.spec.ts` covers the full
 Upload -> Runs -> Run Detail -> refresh -> download slice.
+`recovery.spec.ts` covers the Waves B-D capabilities: real CSV ingestion,
+percentage ROI semantics against the live query, a mixed CSV/XLSX batch with
+durable `/batches/:id` navigation and Run Detail batch context, the internal
+analytics panels, and the honest no-image media slot.
 
 These specs share one backend/database across parallel Playwright workers
 -- assertions must hold regardless of which run happens to be "latest" at
@@ -39,7 +43,14 @@ cd frontend && npm run dev -- --host 127.0.0.1 --port 5173
 cd frontend && npm run test:e2e
 ```
 
-Verified 2026-08-18 against the real stack (Opus 5 frontend finalization
-pass -- server-side catalog + analytics dashboard): 20/20 passing.
+Verified 2026-08-20 against the real stack on the isolated port
+`http://127.0.0.1:5180` (R4 independent parity verification, production
+`vite build` served by `npm run preview`, not the dev server): **27/27
+passing**. Use 5180 rather than 5173 so a stale demo server on the default
+port cannot be mistaken for production.
+Historical: verified 2026-08-19 (Waves B-D product-capability
+recovery): 27/27 passing. Historical: verified 2026-08-18 (Opus 5
+frontend finalization pass -- server-side catalog + analytics dashboard):
+20/20 passing.
 Historical: verified 2026-08-17 against the real stack (see
 `docs/PROJECT_STATUS.md` §Sesión 2026-08-17, bloque 4): 1/1 passing.

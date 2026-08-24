@@ -318,11 +318,11 @@ The sample XLSX in `tests/fixtures/sample_sourcing_TEST_DATA.xlsx` remains techn
 | Checkpoint | Status | Evidence |
 | --- | --- | --- |
 | SP-API Catalog documentation | **DOC VERIFIED** | Catalog Items `searchCatalogItems` accepts UPC/EAN/GTIN identifiers, up to 20 identifiers per request; Catalog Items requires Product Listing role. See A1/A2. |
-| Developer registration | **UNDER REVIEW** | JUVAl was submitted in Developer Central as a **PRIVATE DEVELOPER** for internal use by its own organization and own seller account. Amazon has not approved the registration. |
-| Production application client | **NOT CREATED** | Developer Central shows no application clients; Amazon prevents creating a production client while registration is under review. |
-| Self-authorization | **NOT PERFORMED** | It cannot occur until Amazon approves registration and a production client exists. |
+| Developer registration | **REJECTED_REMEDIATION_REQUIRED** | Amazon decision dated 2026-08-17: **NOT ELIGIBLE FOR SP-API ACCESS**. Reapplication requires an updated Developer Profile and a new case; do not reopen the prior case. JUVAl remains a **PRIVATE DEVELOPER** for internal use by its own organization and own seller account. |
+| Production application client | **NOT CREATED** | No production application client exists. Creation remains blocked until remediation, reapplication and Amazon approval. |
+| Self-authorization | **NOT PERFORMED** | It cannot occur until Amazon approves a reapplication and a production client exists. |
 | Credentials | **NOT AVAILABLE** | No LWA client ID, LWA client secret or refresh token exists for JUVAl. No credential was requested, read or used. |
-| Live Catalog call / rate-limit header | **LIVE CALL BLOCKED** | No authenticated call was attempted; `x-amzn-RateLimit-Limit` therefore has not been observed. |
+| Live Catalog call / rate-limit header | **LIVE CALL BLOCKED** | No authenticated call was attempted; `x-amzn-RateLimit-Limit` therefore has not been observed. The blocker is remediation, reapplication and Amazon approval. |
 | Adapter, provider port and tests | **NOT STARTED BY DESIGN** | This POC must not create a production adapter or mock authentication before real authorization exists. |
 
 ### Access model for the US Catalog POC
@@ -336,13 +336,14 @@ The sample XLSX in `tests/fixtures/sample_sourcing_TEST_DATA.xlsx` remains techn
 
 ### Onboarding gates — next external actions
 
-1. **GATE 1:** Amazon approves the developer registration. This is the immediate next gate; do not treat `UNDER REVIEW` as approved.
-2. **GATE 2:** Create the minimum-privilege JUVAl production application client.
-3. **GATE 3:** Verify the exact roles required against current official SP-API documentation before selecting them.
-4. **GATE 4:** Self-authorize against Juval Logistics' own US Seller account.
-5. **GATE 5:** Store `JUVAL_SP_API_LWA_CLIENT_ID`, `JUVAL_SP_API_LWA_CLIENT_SECRET` and `JUVAL_SP_API_REFRESH_TOKEN` only in a backend-only secret store; never use `VITE_*` names and never commit them to Git. Do not transmit their values in chat, source code or frontend configuration.
-6. **GATE 6:** Perform one minimal authenticated Catalog Items validation using a public/non-sensitive identifier and record only sanitized metadata: HTTP status, request ID, returned ASIN(s), marketplace, identifier type and `x-amzn-RateLimit-Limit` if supplied.
-7. **GATE 7:** Record the actual observed rate-limit metadata and reconcile it with this matrix.
+1. **GATE 1:** Remediate and evidence the Amazon registration findings, update the Developer Profile truthfully and submit a **new** case. Do not reopen the prior case or treat `REJECTED_REMEDIATION_REQUIRED` as approval. See `compliance/SP_API_REGISTRATION_REMEDIATION.md`.
+2. **GATE 1A:** Amazon approves the new developer-registration submission.
+3. **GATE 2:** Create the minimum-privilege JUVAl production application client.
+4. **GATE 3:** Verify the exact roles required against current official SP-API documentation before selecting them.
+5. **GATE 4:** Self-authorize against Juval Logistics' own US Seller account.
+6. **GATE 5:** Store `JUVAL_SP_API_LWA_CLIENT_ID`, `JUVAL_SP_API_LWA_CLIENT_SECRET` and `JUVAL_SP_API_REFRESH_TOKEN` only in a backend-only secret store; never use `VITE_*` names and never commit them to Git. Do not transmit their values in chat, source code or frontend configuration.
+7. **GATE 6:** Perform one minimal authenticated Catalog Items validation using a public/non-sensitive identifier and record only sanitized metadata: HTTP status, request ID, returned ASIN(s), marketplace, identifier type and `x-amzn-RateLimit-Limit` if supplied.
+8. **GATE 7:** Record the actual observed rate-limit metadata and reconcile it with this matrix.
 
 Amazon documents the token exchange at `https://api.amazon.com/auth/o2/token` using the refresh token, client ID and client secret; the returned access token is short-lived. See [Connect to SP-API](https://developer-docs.amazon.com/sp-api/lang-zh_CN/docs/connecting-to-the-selling-partner-api) and [authorization workflow](https://developer-docs.amazon.com/sp-api/lang-zh_CN/docs/onboarding-step-6-set-up-the-authorization-workflow).
 

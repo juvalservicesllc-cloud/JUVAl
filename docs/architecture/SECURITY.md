@@ -20,6 +20,7 @@ ya existiera.
 | Ejecución de contenido del usuario como código | **No aplica / no ocurre** | El importer solo lee valores de celda como datos (texto/número/booleano); no evalúa fórmulas de Excel como código ni ejecuta macros. `openpyxl.load_workbook(..., data_only=True)` lee el último valor calculado de una fórmula, no la fórmula misma, y no ejecuta macros VBA. |
 | Logging de datos sensibles | **PARTIAL / no suficiente para Amazon Information** | `interfaces/api/main.py` registra excepciones con método/ruta, pero no existe logging operacional centralizado, retención, redacción verificada, alerting ni revisión de seguridad. Ver `compliance/AMAZON_SP_API_COMPLIANCE.md` AC-11. |
 | PII | **Mínima exposición hoy** | El dominio no modela datos de personas (clientes, empleados) — modela productos. `top_seller_fba`/`top_seller_fbm` (`Competition`) podrían contener nombres de vendedores de terceros si una fuente externa los provee; hoy no hay ninguna fuente que los llene. |
+| Registro SP-API | **REJECTED_REMEDIATION_REQUIRED** | Amazon indicó el 2026-08-17 que JUVAl no es elegible para acceso SP-API hasta remediar hallazgos de seguridad, actualizar el Developer Profile y presentar un caso nuevo. El plan y la evidencia pendiente se registran en `compliance/SP_API_REGISTRATION_REMEDIATION.md`; este documento no afirma que los controles estén implementados. |
 
 ## 2. Reglas duras (`CLAUDE.md` §16) — aplican a todo trabajo futuro
 

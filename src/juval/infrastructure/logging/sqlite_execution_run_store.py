@@ -47,10 +47,11 @@ from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Mapping, Optional, Sequence
-from decimal import Decimal, InvalidOperation
 
 from juval.domain.execution_run import ExecutionRun, ExecutionStatus
+from juval.domain.batch import Batch, BatchFile, BatchFileStatus, BatchStatus
 from juval.application.record_snapshot_store import RecordSnapshotPage, RecordSnapshotQuery
+from juval.application.run_analytics import brand_distribution, issue_types, numeric_summary, price_spread
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS execution_runs (
@@ -83,6 +84,45 @@ _RECORDS_INDEX = """
 CREATE INDEX IF NOT EXISTS idx_execution_run_records_order
     ON execution_run_records (execution_id, ordinal)
 """
+
+_BATCH_SCHEMA = """
+CREATE TABLE IF NOT EXISTS batches (
+    batch_id TEXT PRIMARY KEY,
+    created_at TEXT NOT NULL,
+    status TEXT NOT NULL
+)
+"""
+
+_BATCH_FILES_SCHEMA = """
+CREATE TABLE IF NOT EXISTS batch_files (
+    batch_id TEXT NOT NULL REFERENCES batches(batch_id),
+    ordinal INTEGER NOT NULL,
+    filename TEXT NOT NULL,
+    content_type TEXT,
+    size_bytes INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    execution_id TEXT,
+    warnings TEXT NOT NULL,
+    errors TEXT NOT NULL,
+    records_total INTEGER NOT NULL DEFAULT 0,
+    records_processed INTEGER NOT NULL DEFAULT 0,
+    records_with_errors INTEGER NOT NULL DEFAULT 0,
+    warning_count INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (batch_id, ordinal)
+)
+"""
+
+# `execution_id` is the join Run Detail needs to answer "was this run part of
+# a batch"; without it that lookup is a full scan of batch_files.
+_BATCH_FILES_RUN_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_batch_files_execution
+    ON batch_files (execution_id)
+"""
+
+_BATCH_FILE_COLUMNS = (
+    "ordinal, filename, content_type, size_bytes, status, execution_id, warnings, errors, "
+    "records_total, records_processed, records_with_errors, warning_count"
+)
 
 _INSERT = """
 INSERT INTO execution_runs (
@@ -119,14 +159,49 @@ SELECT snapshot FROM execution_run_records
 WHERE execution_id = ? ORDER BY ordinal ASC
 """
 
+_SELECT_RECORD = """
+SELECT snapshot FROM execution_run_records
+WHERE execution_id = ? AND record_ref = ?
+"""
+
+_SELECT_BATCH = "SELECT batch_id, created_at, status FROM batches WHERE batch_id = ?"
+_SELECT_BATCH_ID_FOR_RUN = "SELECT batch_id FROM batch_files WHERE execution_id = ? LIMIT 1"
+_SELECT_BATCH_FILES = f"SELECT {_BATCH_FILE_COLUMNS} FROM batch_files WHERE batch_id = ? ORDER BY ordinal"
+
 _SORT_EXPRESSIONS = {
     "record_ref": "record_ref",
     "sku": "json_extract(snapshot, '$.supplier_sku')",
+    "asin": "json_extract(snapshot, '$.asin.value')",
+    "title": "json_extract(snapshot, '$.title.value')",
+    "price": "CAST(json_extract(snapshot, '$.selling_price.value') AS REAL)",
+    "cog": "CAST(json_extract(snapshot, '$.cog') AS REAL)",
     "decision": "json_extract(snapshot, '$.decision')",
     "profit": "CAST(json_extract(snapshot, '$.profit.value') AS REAL)",
     "roi": "CAST(json_extract(snapshot, '$.roi.value') AS REAL)",
     "margin": "CAST(json_extract(snapshot, '$.margin.value') AS REAL)",
+    "hazmat": "json_extract(snapshot, '$.hazmat_status')",
+    "bulky": "json_extract(snapshot, '$.bulky_status')",
 }
+
+
+# `CREATE TABLE IF NOT EXISTS` silently does nothing for a table that already
+# exists, so a database created before these columns were added would keep the
+# old shape and fail on the next INSERT. Adding them explicitly is the whole
+# migration story for this local, single-user store (same scope as ADR-013):
+# additive columns with a default, never a rewrite or a drop.
+_BATCH_FILE_COUNT_COLUMNS = (
+    ("records_total", "INTEGER NOT NULL DEFAULT 0"),
+    ("records_processed", "INTEGER NOT NULL DEFAULT 0"),
+    ("records_with_errors", "INTEGER NOT NULL DEFAULT 0"),
+    ("warning_count", "INTEGER NOT NULL DEFAULT 0"),
+)
+
+
+def _add_missing_columns(conn: sqlite3.Connection, table: str, columns: tuple[tuple[str, str], ...]) -> None:
+    existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+    for name, definition in columns:
+        if name not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {definition}")
 
 
 def _row_to_run(row: tuple) -> ExecutionRun:
@@ -177,6 +252,10 @@ class SqliteExecutionRunStore:
                 conn.execute(_SCHEMA)
                 conn.execute(_RECORDS_SCHEMA)
                 conn.execute(_RECORDS_INDEX)
+                conn.execute(_BATCH_SCHEMA)
+                conn.execute(_BATCH_FILES_SCHEMA)
+                conn.execute(_BATCH_FILES_RUN_INDEX)
+                _add_missing_columns(conn, "batch_files", _BATCH_FILE_COUNT_COLUMNS)
 
     def save_execution_run(self, run: ExecutionRun, records: Sequence[Mapping[str, Any]] = ()) -> None:
         with closing(sqlite3.connect(self._db_path)) as conn:
@@ -220,6 +299,39 @@ class SqliteExecutionRunStore:
             rows = conn.execute(_SELECT_RECORDS, (execution_id,)).fetchall()
         return [json.loads(snapshot) for (snapshot,) in rows]
 
+    def load_record(self, execution_id: str, record_ref: str) -> Optional[dict[str, Any]]:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            row = conn.execute(_SELECT_RECORD, (execution_id, record_ref)).fetchone()
+        return json.loads(row[0]) if row is not None else None
+
+    def save_batch(self, batch: Batch) -> None:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            with conn:
+                conn.execute("INSERT INTO batches (batch_id, created_at, status) VALUES (?, ?, ?)", (batch.batch_id, batch.created_at.isoformat(), batch.status.value))
+                for file in batch.files:
+                    conn.execute(
+                        f"INSERT INTO batch_files (batch_id, {_BATCH_FILE_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (batch.batch_id, file.ordinal, file.filename, file.content_type, file.size_bytes, file.status.value, file.execution_id, json.dumps(list(file.warnings)), json.dumps(list(file.errors)), file.records_total, file.records_processed, file.records_with_errors, file.warning_count),
+                    )
+
+    def load_batch(self, batch_id: str) -> Optional[Batch]:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            row = conn.execute(_SELECT_BATCH, (batch_id,)).fetchone()
+            if row is None:
+                return None
+            files = conn.execute(_SELECT_BATCH_FILES, (batch_id,)).fetchall()
+        batch_files = tuple(
+            BatchFile(ordinal, filename, content_type, size_bytes, BatchFileStatus(status), execution_id, tuple(json.loads(warnings)), tuple(json.loads(errors)), records_total, records_processed, records_with_errors, warning_count)
+            for ordinal, filename, content_type, size_bytes, status, execution_id, warnings, errors, records_total, records_processed, records_with_errors, warning_count in files
+        )
+        return Batch(batch_id=row[0], created_at=datetime.fromisoformat(row[1]), status=BatchStatus(row[2]), files=batch_files)
+
+    def load_batch_for_run(self, execution_id: str) -> Optional[Batch]:
+        """The batch a child run belongs to, or None when it ran on its own."""
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            row = conn.execute(_SELECT_BATCH_ID_FOR_RUN, (execution_id,)).fetchone()
+        return self.load_batch(row[0]) if row is not None else None
+
     def list_records(self, execution_id: str, query: RecordSnapshotQuery) -> RecordSnapshotPage:
         """Query JSON snapshots in SQLite; never load a whole run for a page."""
         clauses = ["execution_id = ?"]
@@ -230,6 +342,21 @@ class SqliteExecutionRunStore:
         if query.search:
             clauses.append("(record_ref LIKE ? OR json_extract(snapshot, '$.supplier_sku') LIKE ? OR json_extract(snapshot, '$.title.value') LIKE ? OR json_extract(snapshot, '$.brand.value') LIKE ? OR json_extract(snapshot, '$.asin.value') LIKE ?)")
             params.extend([f"%{query.search}%"] * 5)
+        for field, minimum in (("roi", query.min_roi), ("profit", query.min_profit), ("margin", query.min_margin)):
+            if minimum is not None:
+                statuses = ("VERIFIED",) if query.confidence == "VERIFIED_ONLY" else ("VERIFIED", "INFERRED")
+                placeholders = ",".join("?" for _ in statuses)
+                clauses.append(f"json_extract(snapshot, '$.{field}.status') IN ({placeholders}) AND CAST(json_extract(snapshot, '$.{field}.value') AS REAL) >= ?")
+                params.extend([*statuses, float(minimum)])
+        if query.hazmat is not None:
+            clauses.append("json_extract(snapshot, '$.hazmat_status') = ?")
+            params.append(query.hazmat)
+        if query.bulky is not None:
+            clauses.append("json_extract(snapshot, '$.bulky_status') = ?")
+            params.append(query.bulky)
+        if query.provenance_field is not None and query.provenance_status is not None:
+            clauses.append(f"json_extract(snapshot, '$.{query.provenance_field}.status') = ?")
+            params.append(query.provenance_status)
         where = " AND ".join(clauses)
         expression = _SORT_EXPRESSIONS[query.sort]
         order = query.direction.upper()
@@ -251,12 +378,14 @@ class SqliteExecutionRunStore:
             risks = {name: {"status": grouped(f"json_extract(snapshot, '$.{name}_status')"), "severity": grouped(f"json_extract(snapshot, '$.{name}_severity')")} for name in ("hazmat", "bulky")}
             provenance = {field: grouped(f"json_extract(snapshot, '$.{field}.status')") for field in fields}
             quality = conn.execute("SELECT COALESCE(SUM(CASE WHEN CAST(json_extract(snapshot, '$.issue_count') AS INTEGER)>0 THEN 1 ELSE 0 END),0), COALESCE(SUM(CAST(json_extract(snapshot, '$.issue_count') AS INTEGER)),0) FROM execution_run_records WHERE execution_id=?", (execution_id,)).fetchone()
-            profitability = {}
-            for field in ("profit", "roi", "margin"):
-                rows = conn.execute(f"SELECT json_extract(snapshot, '$.{field}.value') FROM execution_run_records WHERE execution_id=? AND json_extract(snapshot, '$.{field}.status')='VERIFIED'", (execution_id,)).fetchall()
-                values = []
-                for (raw,) in rows:
-                    try: values.append(Decimal(str(raw)))
-                    except (InvalidOperation, TypeError): pass
-                profitability[field] = {"count": len(values), "sum": str(sum(values)) if values else None, "average": str(sum(values) / len(values)) if values else None, "minimum": str(min(values)) if values else None, "maximum": str(max(values)) if values else None}
-        return {"records": {"total_records": total}, "decisions": decisions, "risks": risks, "provenance": provenance, "data_quality": {"records_with_issues": quality[0], "total_issue_count": quality[1]}, "profitability": profitability}
+            profitability = {
+                field: numeric_summary(raw for (raw,) in conn.execute(f"SELECT json_extract(snapshot, '$.{field}.value') FROM execution_run_records WHERE execution_id=? AND json_extract(snapshot, '$.{field}.status')='VERIFIED'", (execution_id,)))
+                for field in ("profit", "roi", "margin")
+            }
+            brands = brand_distribution(conn.execute("SELECT json_extract(snapshot, '$.brand.value'), COUNT(*) FROM execution_run_records WHERE execution_id=? GROUP BY 1", (execution_id,)).fetchall())
+            # json_each yields nothing for a snapshot without `issue_codes`
+            # (written before that field existed) -- a legacy record simply
+            # does not contribute, it is never guessed at.
+            codes = issue_types(conn.execute("SELECT code.value, COUNT(*) FROM execution_run_records r, json_each(r.snapshot, '$.issue_codes') code WHERE r.execution_id=? GROUP BY 1", (execution_id,)).fetchall())
+            spread = price_spread(conn.execute("SELECT record_ref, json_extract(snapshot, '$.title.value'), json_extract(snapshot, '$.selling_price.value'), json_extract(snapshot, '$.cog') FROM execution_run_records WHERE execution_id=? AND json_extract(snapshot, '$.selling_price.status')='VERIFIED' AND json_extract(snapshot, '$.cog') IS NOT NULL", (execution_id,)).fetchall())
+        return {"records": {"total_records": total}, "decisions": decisions, "risks": risks, "provenance": provenance, "data_quality": {"records_with_issues": quality[0], "total_issue_count": quality[1]}, "profitability": profitability, "brands": brands, "issue_types": codes, "price_spread": spread}

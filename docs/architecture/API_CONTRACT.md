@@ -13,7 +13,7 @@ Versionado: prefijo `/api/v1/` desde el primer endpoint.
 
 | Campo | Tipo | Obligatorio | Descripción |
 |---|---|---|---|
-| `file` | archivo | Sí | El `.xlsx` de entrada |
+| `file` | archivo | Sí | El archivo de entrada: `.xlsx` o `.csv` (ADR-026) |
 | `thresholds` | string (JSON) | Sí | Serializa `ThresholdsIn` — ver §3 |
 | `fees` | string (JSON) | Sí | Serializa `FeesIn` — ver §3 |
 | `persist` | bool (`"true"`/`"false"`) | No, default `false` | Si `true`, persiste el `ExecutionRun` vía `JUVAL_EXECUTION_DB_PATH` (ver §5) |
@@ -58,7 +58,15 @@ provenance por diseño, igual que en `exporter.py`): `record_ref`,
 `marketplace`, `supplier_sku`, `cog`, `shipping_per_unit`,
 `hazmat_status`/`hazmat_severity`, `bulky_status`/`bulky_severity`,
 `decision`, `decision_reasons` (lista de `"CODE: message"`),
-`issue_count`, `issues` (lista de `"[LEVEL] CODE: message"`).
+`issue_count`, `issues` (lista de `"[LEVEL] CODE: message"`),
+`issue_codes` (los `ProcessingIssue.code` canónicos, para agrupar por tipo
+sin re-parsear la cadena de presentación), y los términos intermedios del
+Profitability Engine `total_fees`, `seller_proceeds`, `total_cost`.
+
+`total_fees`/`seller_proceeds`/`total_cost` e `issue_codes` son **aditivos**:
+un snapshot escrito antes de que existieran los devuelve como `null`/`[]`.
+`null` ahí significa «no almacenado», nunca `0` — no se reconstruyen en
+lectura (misma regla que `provenance: null`, §2d).
 
 Valores `Decimal` viajan como **string** en el JSON (no como `float`),
 para no perder precisión — decisión de serialización, no de negocio.
@@ -167,6 +175,59 @@ Requiere que el run se haya guardado con `persist=true` (ver §5) — un
 run nunca persistido no tiene records que recuperar, indistinguible de
 un `execution_id` desconocido solo por la ausencia total del row en
 `execution_runs` (404 en ambos casos).
+
+### Query avanzada y export equivalente (M2R)
+
+El endpoint acepta `min_roi`, `min_profit` y `min_margin` sobre los valores
+canónicos; `confidence=VERIFIED_ONLY` (por defecto) o `INCLUDE_INFERRED`
+controla qué estados pueden satisfacer esos umbrales. También acepta
+`hazmat`, `bulky`, `provenance_field` + `provenance_status`, y sorts
+allow-listed (`asin`, `title`, `price`, `cog`, `hazmat`, `bulky`, además de
+los existentes). Todo se aplica en persistencia, nunca sobre la página.
+
+`GET /api/v1/runs/{execution_id}/records/export` usa los mismos parámetros y
+devuelve un XLSX filtrado/ordenado con metadatos (`execution_id`, timestamp
+UTC, filtros, sort y direction). El download completo del run permanece
+separado. Las imágenes no forman parte de `RecordOut`; no se copian URLs del
+demo.
+
+## 2d. `GET /api/v1/runs/{execution_id}/records/{record_ref}` (F1)
+
+Returns exactly one immutable persisted snapshot using the composite identity
+`(execution_id, record_ref)`. `record_ref` is unique only within its run; it is
+not an ASIN, SKU, UPC, or global product identity. Both persistence adapters
+query the composite key directly. The endpoint never loads a page, scans a
+run in Python, or recalculates economics, risk, provenance, or decision.
+
+- `200`: `RecordOut` with the same projection used by Catalog.
+- `404`: unknown run or record not belonging to that run, using the same
+  non-enumerating detail: `unknown record for execution`.
+- `500`: store unavailable or not configured.
+
+### Additive provenance payload
+
+Each `FieldValueOut` may now include `unit`, `raw_value`, and the serialized
+domain provenance object:
+
+```json
+{
+  "source": "supplier.xlsx",
+  "source_type": "SUPPLIER_FILE",
+  "verification_status": "VERIFIED",
+  "retrieved_at": "2026-08-19T20:59:03+00:00",
+  "method": "direct_read",
+  "confidence": null,
+  "evidence": null,
+  "source_reference": "row=2"
+}
+```
+
+These values come from the existing domain `Provenance`; F1 does not invent
+sources, methods, evidence, or confidence. The input workbook name remains
+`ExecutionRun.input_filename`; row/source references remain per-field
+provenance metadata. Historical snapshots without these keys return
+`provenance: null`, `unit: null`, and `raw_value: null`; they are never
+reconstructed at read time.
 
 ## 3. Modelos de request (`models.py`)
 
@@ -338,4 +399,75 @@ issue counts; and verified-only profit/ROI/margin summaries. `NOT_FOUND`,
 averages rather than presented as equivalent to verified data. Unknown runs
 return the existing 404 `unknown execution_id`; empty runs return zero counts
 and null numeric summaries. No Decision Score, quality score, or AI output is
-included.
+ included.
+
+## 12. Multi-file batches (Wave A, ADR-025)
+
+`POST /api/v1/batches` accepts repeated multipart `files` parts plus the same
+`thresholds`, `fees` and `persist` fields as the single-file endpoint. The
+server rejects an empty request or more than ten files with `422`. Production
+accepts `.xlsx` and `.csv` (ADR-026); any other extension is returned as an
+explicit per-file `REJECTED` result and does not create a child execution. A
+file with an accepted extension whose bytes are unreadable becomes a `FAILED`
+child run, not a rejection -- the distinction is real: one was never opened,
+the other was opened and could not be understood.
+
+Each processable file creates one independent `ExecutionRun`. The response
+contains an ordered `files` array with `ordinal`, basename-only `filename`,
+content type, byte size, `status`, optional child `execution_id`, warnings and
+errors. Aggregate status is `SUCCESS`, `PARTIAL_SUCCESS` or `FAILED` and is
+computed from those child outcomes. Successful siblings persist even when
+another file is invalid. `persist=true` also stores the batch in the
+`batches`/`batch_files` tables; `GET /api/v1/batches/{batch_id}` returns that
+summary, and `GET /api/v1/runs/{execution_id}/batch` returns the batch a child
+run belongs to (`404` when the run was submitted on its own -- a normal
+outcome, not an error). Existing run-scoped record, download and Catalog
+endpoints remain per child execution; batch export is not introduced.
+
+Each `files` entry also carries its child run's own `records_total`,
+`records_processed`, `records_with_errors` and `warning_count`, and the batch
+carries their sums. A `REJECTED` file never ran, so its counts stay `0`; that
+means "never processed", and the UI renders it as an em dash rather than a
+number that would read as a measurement.
+
+### Filenames and file types
+
+An uploaded filename is reduced to a safe basename before use: every directory
+component is dropped (no traversal survives) and the remaining characters are
+restricted to `A-Z a-z 0-9 . _ -` and space. The sanitized name becomes
+`ExecutionRun.input_filename`, so a run records which supplier file produced
+it instead of a placeholder. The extension only selects the reader and is
+never taken as proof of content -- the reader then validates the bytes and an
+unreadable file is a `422` (caller's input), never a `500`.
+
+## 13. Internal analytics projections
+
+`GET /api/v1/runs/{execution_id}/analytics` additionally returns three
+projections aggregated from canonical persisted fields. None of them require
+an external provider:
+
+- `brands`: `items` (top brands by record count), `distinct`, and
+  `not_recorded`. A record with no brand is counted in `not_recorded`, never
+  folded into a named brand.
+- `issue_types`: `[{code, count}]` grouped by canonical `ProcessingIssue`
+  code. A snapshot written before `issue_codes` existed contributes nothing
+  rather than being back-filled.
+- `price_spread`: selling price minus COG across records that have **both** a
+  `VERIFIED` selling price and a recorded COG -- `count`, `average_amount`,
+  `at_or_below_cog`, and the five `largest` entries with `amount` and
+  `percent`. `percent` is `null` when the price is not greater than zero.
+  Records missing either input are excluded, never given an assumed value.
+
+This is the canonical production equivalent of the previous experience's
+"supplier price discount": there is no supplier *suggested retail* column in
+the production column mapping, so the spread is measured against the selling
+price the Profitability Engine actually used.
+
+### Filtered export query metadata
+
+`GET /api/v1/runs/{execution_id}/records/export` writes a `query_metadata`
+sheet containing the exact filters, sort and direction, plus an explicit
+`units` row: `min_roi` and `min_margin` are canonical **ratios** (`0.30` =
+30%), while `min_profit` and prices are absolute currency amounts. The
+frontend accepts percentages and converts them at the boundary, so an export
+of a "ROI >= 30%" view records `min_roi: 0.3`.

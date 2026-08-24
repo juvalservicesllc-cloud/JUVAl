@@ -13,8 +13,8 @@ for (const [name, width] of [["desktop", 1280], ["tablet", 768], ["mobile", 390]
     await expect(page.getByRole("heading", { name: "Dashboard", level: 1 })).toBeVisible()
     await expect(page.getByText("DEMO MODE")).not.toBeVisible()
     await expect(page.getByText(/loading runs/i)).not.toBeVisible({ timeout: 10_000 })
-    await expect(page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: /upload catalog/i })).toBeVisible()
-    await page.getByRole("link", { name: /products/i }).click()
+    await expect(page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "Upload" })).toBeVisible()
+    await page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "Catalog" }).click()
     await expect(page).toHaveURL(/\/products$/)
   })
 
@@ -23,8 +23,8 @@ for (const [name, width] of [["desktop", 1280], ["tablet", 768], ["mobile", 390]
     await page.goto("/upload")
 
     if (width > 600) await expect(page.getByText("Live processing")).toBeVisible()
-    await expect(page.getByText(/one upload creates one processing run/i)).toBeVisible()
-    await expect(page.getByLabel(/catalog workbook/i)).toBeVisible()
+    await expect(page.getByText(/queue up to 10 files/i)).toBeVisible()
+    await expect(page.getByLabel(/catalog files/i)).toBeVisible()
     await expect(page.getByText("DEMO MODE")).not.toBeVisible()
   })
 }

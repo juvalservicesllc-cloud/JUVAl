@@ -12,7 +12,7 @@ for (const [name, width] of [["desktop", 1280], ["tablet", 768], ["mobile", 390]
     await page.setViewportSize({ width, height: 800 })
     await page.goto("/products")
 
-    await expect(page.getByRole("heading", { name: "Products", level: 2 })).toBeVisible()
+    await expect(page.getByRole("heading", { name: "Catalog", level: 2 })).toBeVisible()
     await expect(page.getByText("DEMO MODE")).not.toBeVisible()
     await expect(page.getByText(/no persisted runs yet/i).or(page.getByRole("table"))).toBeVisible({ timeout: 10_000 })
   })
@@ -21,7 +21,7 @@ for (const [name, width] of [["desktop", 1280], ["tablet", 768], ["mobile", 390]
 // Requires JUVAL_EXECUTION_STORE -- see e2e/README.md.
 test("catalog searches, filters and paginates real persisted records server-side", async ({ page }) => {
   await page.goto("/upload")
-  await page.getByLabel(/catalog workbook/i).setInputFiles(FIXTURE)
+  await page.getByLabel(/catalog files/i).setInputFiles(FIXTURE)
   await page.getByLabel(/target profit/i).fill("5")
   await page.getByLabel(/target roi/i).fill("0.3")
   await page.getByLabel(/minimum estimated monthly sales/i).fill("0")
