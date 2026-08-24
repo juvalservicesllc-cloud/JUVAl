@@ -43,7 +43,14 @@ cd frontend && npm run dev -- --host 127.0.0.1 --port 5173
 cd frontend && npm run test:e2e
 ```
 
-Verified 2026-08-20 against the real stack on the isolated port
+Verified 2026-08-24 against the real stack on the isolated port
+`http://127.0.0.1:5180` (production `vite build` served by `npm run
+preview`, real FastAPI, real SQLite -- no mocks): **27/27 passing**, on the
+consolidated baseline that includes multi-file batches, CSV ingestion and
+the locale-pinned formatting fix. Run on Windows: Chromium cannot start on
+`juval-server` yet, see `docs/DEVELOPMENT_ENVIRONMENT.md` §4 for the exact
+one-time sudo command that unblocks it.
+Historical: verified 2026-08-20 against the real stack on the isolated port
 `http://127.0.0.1:5180` (R4 independent parity verification, production
 `vite build` served by `npm run preview`, not the dev server): **27/27
 passing**. Use 5180 rather than 5173 so a stale demo server on the default

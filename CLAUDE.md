@@ -7,14 +7,18 @@ viven en `docs/` (arquitectura) y `docs/adr/` (decisiones). Si algo aquí
 parece contradecir `docs/`, **`docs/` y el código ganan** — reportar la
 discrepancia y corregir este archivo, no al revés.
 
-Última verificación contra el repositorio: **2026-08-18**. Git **está
+Última verificación contra el repositorio: **2026-08-24**. Git **está
 inicializado, con historial y remoto** (`origin`, GitHub) — el bloqueo
 histórico de `git config user.name`/`user.email` ya no aplica. Backend:
-**347 tests pasando, 7 skipped** (`SKIPPED_EXPECTED`: Supabase contra
-base real), más **107 de frontend** (`npx vitest run`) y **27 E2E
+**352 tests pasando, 7 skipped** (`SKIPPED_EXPECTED`: Supabase contra
+base real), más **112 de frontend** (`npm test`) y **27 E2E
 Playwright contra el stack real** (FastAPI + SQLite + PWA) — los tres
-verificados 2026-08-19 tras la recuperación de capacidades Waves B-D
-(ver `docs/architecture/PRODUCT_BEHAVIORAL_PARITY.md`). **26 ADRs** en
+verificados 2026-08-24 sobre la baseline consolidada (Windows, Linux y
+GitHub Actions en el mismo commit; ver `docs/DEVELOPMENT_ENVIRONMENT.md`
+§2 para la tabla por nodo y `docs/architecture/PRODUCT_BEHAVIORAL_PARITY.md`
+para las capacidades Waves B-D). **CI verde** desde 2026-08-24: el job de
+backend ya no rompía por `psycopg` en la colección, y hay un segundo job
+que corre lint, tests y build del frontend. **26 ADRs** en
 `docs/adr/` —
 ADR-009 (Propuesta), ADR-021 (Propuesta, superada por ADR-022 en cuanto
 a proveedor) y **ADR-022 (Propuesta — Okta como IdP, pendiente de
@@ -404,7 +408,8 @@ upload. `.gitignore` actual ya excluye `.venv/`, `__pycache__/`, `*.pyc`,
 
 ## 17. Testing
 
-Estado real (2026-08-19): **347 tests pasando, 7 skipped**. El bloque
+Estado real (2026-08-24): **352 tests pasando, 7 skipped**; frontend
+**112** (`npm test`) y **27 E2E** contra el stack real. El bloque
 siguiente describe el desglose histórico de Fase 4A y ya no coincide con
 el conteo actual; se conserva como contexto de aquella fase, no como
 estado vigente.
