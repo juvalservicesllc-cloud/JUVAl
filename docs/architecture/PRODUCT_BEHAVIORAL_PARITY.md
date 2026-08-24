@@ -363,3 +363,51 @@ keep only `ORDER BY ... LIMIT 5` in Python. Not done now: no measured problem
 exists, and guessing at the threshold would be speculative optimization.
 
 The denominator remains 64, and the implementable denominator remains 58.
+
+## R5 re-verification on the consolidated baseline — 2026-08-24
+
+The Waves B-D work audited above was uncommitted when this document was
+written. It is now committed, pushed, and running identically on all three
+nodes, so the matrix above rests on a baseline that exists in Git rather
+than in one working tree. Nothing in the matrix changed status; this
+records the evidence being re-run, not a new claim.
+
+Executable evidence, all re-run on `master` at this baseline:
+
+| Capability group | Evidence | Result |
+|---|---|---|
+| Domain, processing, provenance, decision | `pytest` (352 tests) | PASS on Windows, Linux and CI |
+| Multi-file batch, per-file isolation, CSV, analytics, records | included in the above; `tests/unit/test_batch.py`, `tests/integration/test_csv_importer.py`, `test_run_analytics_projections.py`, `test_api.py` | PASS |
+| Frontend units, catalog/detail/dashboard/upload/theme | `npm test` (112 tests) | PASS on Windows, Linux and CI |
+| Typecheck + production build | `npm run build` (`tsc -b && vite build`) | PASS |
+| Upload → real pipeline → result → download | `e2e/smoke.spec.ts` | PASS |
+| Mixed CSV/XLSX batch, rejection without hiding valid files, durable `/batches/:id` | `e2e/batches.spec.ts`, `e2e/recovery.spec.ts` | PASS |
+| ROI filtered as a percentage, not a ratio | `e2e/recovery.spec.ts` | PASS |
+| Server-side catalog search / filter / pagination | `e2e/products.spec.ts` | PASS |
+| Analytics dashboard from canonical fields only | `e2e/dashboard-analytics.spec.ts`, `e2e/recovery.spec.ts` | PASS |
+| Persistence across refresh; unknown id shows not-found, never demo data | `e2e/runs-persistence.spec.ts` | PASS |
+| Theme/appearance persistence; desktop/tablet/mobile | `e2e/appearance.spec.ts`, `e2e/shell.spec.ts` | PASS |
+| Media slot without inventing an image | `e2e/recovery.spec.ts` | PASS |
+
+E2E total: **27/27** against the production build served by `preview`, real
+FastAPI and real SQLite. Run on Windows only — Chromium cannot start on
+`juval-server` (`docs/DEVELOPMENT_ENVIRONMENT.md` §4).
+
+Re-confirmed as **absent from production**, unchanged and not silently
+implemented:
+
+- **Favorites** and **Compare** exist only in `demo/`. Production has no
+  route and no component; the only `compare` match in `frontend/src` is
+  `localeCompare` in a sort helper. Still `BLOCKED_ADR` — they need
+  ownership and comparable identity decided first.
+- **Product imagery**: no image field exists anywhere in the API contract.
+  `ProductThumbnail` renders an honest empty slot, asserted by E2E as
+  "without inventing a picture". Still `BLOCKED_DATA`.
+
+One correctness defect found and fixed during this verification: money and
+percentage rendering followed the host locale, so the same run displayed
+"$5.00" on Windows and "5,00 $" on the es_ES server, where six tests failed
+while passing everywhere else. Formatting is now pinned in
+`frontend/src/format.ts`. This is a parity-relevant fix: the percentage
+semantics this document requires were correct in the numbers and wrong in
+the rendering on one machine.
