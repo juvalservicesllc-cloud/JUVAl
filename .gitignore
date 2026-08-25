@@ -39,6 +39,16 @@ supabase/.temp/
 # a source artifact.
 e2e_runs.db
 
+# Local execution-run SQLite store: the conventional filename used when
+# running the backend or CLI locally with JUVAL_EXECUTION_DB_PATH=./juval_runs.db
+# (API) or --persist-db (CLI). Neither entrypoint ever creates it implicitly --
+# both require the path to be given -- but that name is what the local docs use,
+# so it is ignored like e2e_runs.db above. Generated runtime state (tables:
+# execution_runs, execution_run_records, batches, batch_files), never a source
+# artifact. Deliberately a single filename, not a *.db pattern, so a legitimate
+# committed database artifact could never be hidden by this rule.
+juval_runs.db
+
 # Claude Code agent skill packs and scheduler state -- machine-local tooling,
 # not JUVAl project configuration. CLAUDE.md at the repo root is the tracked
 # contract.
