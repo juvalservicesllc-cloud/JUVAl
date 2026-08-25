@@ -218,6 +218,26 @@ describe("ProductsPage", () => {
     expect(screen.getByRole("button", { name: /previous/i })).not.toBeDisabled()
   })
 
+  it("stays on the current page when the search debounce settles without a search", async () => {
+    const fetchMock = stubFetch(() => ({ records, total: 120 }))
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText("Alpha")
+
+    await user.click(screen.getByRole("button", { name: /next/i }))
+    await screen.findByText(/showing 51–100 of 120/i)
+
+    // Regression: the search debounce used to arm a timer on mount as well as
+    // on a keystroke, and that timer called setOffset(0) unconditionally. A
+    // user who opened Catalog and paged within 300 ms was silently returned to
+    // page 1. Waiting past the debounce window is deterministic -- the timer
+    // either fires and resets the page, or it was never armed.
+    await new Promise((resolve) => setTimeout(resolve, 450))
+
+    expect(screen.getByText(/showing 51–100 of 120/i)).toBeInTheDocument()
+    expect(lastRequestUrl(fetchMock).searchParams.get("offset")).toBe("50")
+  })
+
   it("shows a 422 (invalid query) as a retryable error, not a crash", async () => {
     vi.stubGlobal(
       "fetch",

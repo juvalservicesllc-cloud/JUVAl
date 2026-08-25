@@ -92,13 +92,22 @@ export function ProductsPage() {
   // Server-side search only, lightly debounced so normal typing doesn't
   // issue one request per keystroke. `search` (not `searchInput`) is what
   // reaches the API and what resets the page.
+  //
+  // The equality guard is load-bearing, not a micro-optimisation: without it
+  // the effect also runs on mount, where the cleanup never fires (its only
+  // dependency, `searchInput`, does not change), so a timer scheduled at mount
+  // always lands 300 ms later and calls `setOffset(0)`. Anyone who opened
+  // Catalog and paged within that window was silently returned to page 1.
+  // Settling is only meaningful when the typed value and the applied value
+  // actually differ, so that is exactly when the timer is armed.
   useEffect(() => {
+    if (searchInput === search) return
     const id = setTimeout(() => {
       setSearch(searchInput)
       setOffset(0)
     }, 300)
     return () => clearTimeout(id)
-  }, [searchInput])
+  }, [searchInput, search])
 
   useEffect(() => {
     const controller = new AbortController()
