@@ -11,7 +11,7 @@ discrepancia y corregir este archivo, no al revés.
 inicializado, con historial y remoto** (`origin`, GitHub) — el bloqueo
 histórico de `git config user.name`/`user.email` ya no aplica. Backend:
 **352 tests pasando, 7 skipped** (`SKIPPED_EXPECTED`: Supabase contra
-base real), más **112 de frontend** (`npm test`) y **27 E2E
+base real), más **113 de frontend** (`npm test`) y **27 E2E
 Playwright contra el stack real** (FastAPI + SQLite + PWA) — los tres
 verificados 2026-08-24 sobre la baseline consolidada (Windows, Linux y
 GitHub Actions en el mismo commit; ver `docs/DEVELOPMENT_ENVIRONMENT.md`
@@ -414,7 +414,7 @@ upload. `.gitignore` actual ya excluye `.venv/`, `__pycache__/`, `*.pyc`,
 ## 17. Testing
 
 Estado real (2026-08-24): **352 tests pasando, 7 skipped**; frontend
-**112** (`npm test`) y **27 E2E** contra el stack real. El bloque
+**113** (`npm test`) y **27 E2E** contra el stack real. El bloque
 siguiente describe el desglose histórico de Fase 4A y ya no coincide con
 el conteo actual; se conserva como contexto de aquella fase, no como
 estado vigente.
