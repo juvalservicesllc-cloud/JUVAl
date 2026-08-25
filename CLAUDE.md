@@ -18,11 +18,16 @@ GitHub Actions en el mismo commit; ver `docs/DEVELOPMENT_ENVIRONMENT.md`
 §2 para la tabla por nodo y `docs/architecture/PRODUCT_BEHAVIORAL_PARITY.md`
 para las capacidades Waves B-D). **CI verde** desde 2026-08-24: el job de
 backend ya no rompía por `psycopg` en la colección, y hay un segundo job
-que corre lint, tests y build del frontend. **26 ADRs** en
+que corre lint, tests y build del frontend. **28 ADRs** en
 `docs/adr/` —
-ADR-009 (Propuesta), ADR-021 (Propuesta, superada por ADR-022 en cuanto
-a proveedor) y **ADR-022 (Propuesta — Okta como IdP, pendiente de
-aprobación comercial)**; el resto Aceptadas, incluida **ADR-023
+ADR-009 (Propuesta), ADR-021 (Propuesta — investigación de proveedores;
+su ranking por evidencia queda **superado en cuanto a selección** por
+ADR-028, sin que su contenido se altere) y **ADR-022
+(RECHAZADA/SUPERSEDED 2026-08-19 — Okta descartado por decisión explícita
+del usuario; no reabrir)**; el resto Aceptadas, incluidas **ADR-027**
+(rol permanente de `juval-server`) y **ADR-028** (FusionAuth como
+dirección aprobada de proveedor de identidad — selección, **no**
+implementación), y **ADR-023
 (Aceptada — gobernanza del Product Experience/Design System del
 frontend, 2026-08-19, inicio del rediseño UI/UX Premium)**. **Cumplimiento
 Amazon:
@@ -359,9 +364,9 @@ Estado por componente:
 | React + Vite (frontend) | **APPROVED** (elección de framework), `interfaces/` frontend **NOT STARTED** — bloqueado por Node.js/npm ausentes, no por decisión pendiente | `docs/PROJECT_STATUS.md` §Sesión 2026-08-17 (bloque 3) |
 | Vercel (deployment) | **APPROVED** como plataforma objetivo, restricciones técnicas reales sin investigar (sin Vercel CLI) | `docs/PROJECT_STATUS.md` §Sesión 2026-08-17 (bloque 3) |
 | Supabase/PostgreSQL | **APPROVED** como persistencia de producción; adapter preparado, **NO verificado contra una base real** — no tratar como equivalente en confianza a SQLite/ADR-013 | ADR-017 (`Estado: Aceptada`, 2026-08-17), `docs/architecture/SUPABASE.md` §1 |
-| **Identidad humana / IdP** | **Okta Workforce Identity RECOMENDADO** — único candidato que satisface nativamente los 11 requisitos HARD (incluidos edad mínima de contraseña y exclusión de nombre, que descartaron a Cognito). **PENDING aprobación comercial** (mínimo 1.500 USD/año). Cognito **RECHAZADO**; Entra External ID y Entra ID workforce **ELIMINADOS**; Clerk sin resolver | ADR-022 (`Propuesta`), ADR-021 (matriz de ownership) |
+| **Identidad humana / IdP** | **FusionAuth = SELECTED / APPROVED DIRECTION** (decisión explícita del usuario, 2026-08-24, **ADR-028**). Es una **dirección de proveedor, no una implementación**: `IMPLEMENTATION = NOT_IMPLEMENTED` (sin tenant, sin despliegue, sin configuración), `RUNTIME = INACTIVE` (`JUVAL_AUTH_MODE` sin definir) y `AMAZON RF-03/RF-04 = NOT_VERIFIED` — seleccionar no es cumplir. Gap abierto heredado de ADR-021: control 6 (exclusión del nombre) `B — PARTIALLY_SATISFIED`; `MINIMUM_FUSIONAUTH_VERSION = 1.63.0`. **Okta RECHAZADO** (2026-08-19, ADR-022) — no reabrir. Cognito, Entra External ID/workforce, Auth0, Supabase Auth, federación Google/Microsoft, passwordless-only, JumpCloud y ZITADEL **RECHAZADOS/ELIMINADOS** (ADR-021); FreeIPA + Keycloak quedó `12/12` documental y mejor clasificado, **no elegido** — ADR-028 explica por qué. No alojar en `juval-server` (ADR-027) | **ADR-028** (decisión vigente), ADR-022 (`RECHAZADA/SUPERSEDED`), ADR-021 (evidencia medida), `docs/compliance/SP_API_REGISTRATION_REMEDIATION.md` §30 |
 | **AuthN/AuthZ backend** | **IMPLEMENTED + TESTED** — `interfaces/api/auth.py`: validación OIDC/JWT (emisor, firma JWKS, audiencia, expiración) y RBAC por capacidades (`viewer`/`operator`/`admin`) aplicado server-side en los 5 endpoints; 33 tests negativos. **Inactivo hasta que `JUVAL_AUTH_MODE=oidc`** y exista tenant | ADR-022, `docs/compliance/ACCESS_CONTROL.md` |
-| Clerk | **DESCARTADO como candidato por defecto** — no seleccionado; ver ADR-022 | ADR-022 |
+| Clerk | **DESCARTADO** — no seleccionado; ver ADR-021 (falla ≥4 de 11 requisitos HARD) y ADR-028 (proveedor elegido) | ADR-021, ADR-028 |
 | Recomendación técnica de backend (Python 3.11+, `pytest`, `openpyxl`) | Ya en uso (`pyproject.toml`) | `ARCHITECTURE.md` §15 (recomendación, no ADR) |
 
 Cada tecnología de esta lista necesita una razón concreta antes de

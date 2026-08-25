@@ -645,7 +645,7 @@ Documentation alone is never `COMPLIANT`.
 |---|---|---|---|---|---|---|
 | **RF-01** | `NOT_IMPLEMENTED` | **PARTIAL** | Yes — [`INCIDENT_RESPONSE_PLAN.md`](INCIDENT_RESPONSE_PLAN.md) §5 defines the 24-hour `security@amazon.com` procedure, the detection clock, the Amazon Information determination and evidence preservation | Structure verified mechanically by `tools/compliance_check.py` (15 tests); **now also exercised** — `JUVAL-TT-20260818` | **PARTIAL** — §12 A-1…A-5 all `DONE` (checklist-complete, `USER_CONFIRMED_CONTROL`); one real exercise filed (`CONTROL_EXERCISED`, partially — see §26) | **Checklist closed 2026-08-18** (A-2 custody confirmed — external hard drive, outside Git, restricted access, `USER-CONFIRMED OPERATIONAL CUSTODY`, no device details recorded). **Not `COMPLIANT`**: the one exercise never reached §5 (resolved `RULED_OUT` before drafting a notification), and one exercise is not `RECURRING_OPERATIONAL_EVIDENCE`. `CA-01` remediation made testable, `CA-01` still `OPEN`; TABLETOP-002 prepared (not run) to specifically reach §5. See §26, §28 |
 | **RF-02** | `NOT_IMPLEMENTED` | **PARTIAL** | Workstation controls verified; **both cloud services now deployed and verified** — [`NETWORK_SECURITY.md`](NETWORK_SECURITY.md) §3 | Workstation measured 2026-08-18; **cloud re-verified live 2026-08-18** (TLS, CORS, RLS all `VERIFIED_CONFIGURATION` via direct probes, not provider claims) | Workstation + cloud (real HTTP/DB evidence) | **Finding F-01 alone** (host still 9 months unpatched, re-measured unchanged) — this is now the *only* blocking gap for RF-02 |
-| **RF-03** | `NOT_IMPLEMENTED` | **PARTIAL** | Backend half implemented (OIDC validation, `interfaces/api/auth.py`) and **deployed**; IdP half designed and provider identified (ADR-022) | Yes — 33 negative security tests (unit-level; not re-run against production since no IdP exists to test against) | Backend code only — **not `OPERATIONALLY_VERIFIED_IDENTITY_CONTROL`**: `JUVAL_AUTH_MODE` is deliberately unset in production, so the control is dormant, not enforcing | No IdP tenant. Okta requires a $1,500/year contract (**commercial approval**), itself blocked on Amazon's pending response to the identity clarification |
+| **RF-03** | `NOT_IMPLEMENTED` | **PARTIAL** | Backend half implemented (OIDC validation, `interfaces/api/auth.py`) and **deployed**; IdP half has an **approved provider direction but no implementation** — FusionAuth selected 2026-08-24 (user decision, ADR-028); Okta rejected 2026-08-19 (ADR-022). Selection is not deployment: no tenant, no configuration, no policy evidence (§30 below) | Yes — 33 negative security tests (unit-level; not re-run against production since no IdP exists to test against) | Backend code only — **not `OPERATIONALLY_VERIFIED_IDENTITY_CONTROL`**: `JUVAL_AUTH_MODE` is deliberately unset in production, so the control is dormant, not enforcing | No IdP tenant. A provider direction now exists (FusionAuth, ADR-028) but **nothing is deployed**, and FusionAuth still carries one open HARD gap — control 6, name exclusion, `B — PARTIALLY_SATISFIED` (ADR-021). Selecting a provider changed no compliance state (see §30) |
 | **RF-04** | `NOT_IMPLEMENTED` | **PARTIAL** | Yes — least-privilege RBAC enforced server-side on every endpoint (code); [`ACCESS_CONTROL.md`](ACCESS_CONTROL.md) | Yes — positive, negative, and direct-API-bypass tests (unit-level) | Technical half only, and **dormant in production for the same reason as RF-03** — no requests are actually authenticated/authorized today (`JUVAL_AUTH_MODE` unset) | No users exist to govern; quarterly review never run |
 | **RF-05** | `NOT_IMPLEMENTED` | **PARTIAL** | Yes — roles, six-month review cadence, tabletop process and templates; **automation implemented and confirmed recurring**: `pip-audit` + `compliance_check.py` run in CI on every push and weekly by schedule (`.github/workflows/ci.yml`); GitHub secret scanning/push protection **and now Dependabot security updates** confirmed `enabled` | Review currency checked mechanically; secret scanning and Dependabot confirmed via live GitHub API query, before and after; CI schedule confirmed by reading the workflow file; **plan itself now exercised** — `JUVAL-TT-20260818` | **PARTIAL** — scanning is `RECURRING_OPERATIONAL_EVIDENCE`; the incident-response half is `CONTROL_EXERCISED` once, not recurring; Dependabot is `CONTROL_ENABLED`, not yet `CONTROL_EXERCISED` (no PR has ever been generated, because no vulnerability has ever existed to fix) | **Checklist closed 2026-08-18** (§12 A-1…A-5 all `DONE`); **Dependabot enabled and verified 2026-08-18** (§27). **Not `COMPLIANT`**: one tabletop isn't a proven six-month cadence yet (next required by 2027-02-18); Dependabot has never actually fired a remediation PR, so that specific workflow is untested. `CA-01`/`CA-02` remediation made testable this pass, both still `OPEN`. See §26, §27, §28 |
 
@@ -671,6 +671,12 @@ requiring a live database). `pip-audit`: no known vulnerabilities.
 
 ### 20.3 The identity blocker is resolved, technically
 
+**This section is superseded by §30 ("Okta rejection and IdP search
+closure reconciliation") — preserved below as the historical record of
+the 2026-08-18 conclusion, which the user's 2026-08-19 decision (ADR-022)
+and the subsequent seven-candidate search (ADR-021) overturned. Do not
+read `RECOMMENDED IdP = OKTA WORKFORCE IDENTITY` below as current.**
+
 ADR-021 concluded `RECOMMENDED IdP = NONE`. That conclusion stood on a survey
 of three **CIAM** products (Cognito, Entra External ID, Clerk), none of which
 offers minimum password age or name-exclusion — controls that are standard in
@@ -693,6 +699,10 @@ scheduled job, or plaintext-password inspection is required — unlike the
 
 ### 20.4 Gates
 
+**The "opens when" clause below names ADR-022/Okta specifically — that path
+is closed per §30; the gate itself (`BLOCKED`) is unchanged and still
+correct.**
+
 `IDENTITY SECURITY GATE = BLOCKED`
 — technical design complete and the backend half implemented and tested, but
 no tenant exists, no policy is applied, and no configuration evidence has been
@@ -714,7 +724,7 @@ The remaining path is gated on user actions, in dependency order:
 
 | # | Action | Unblocks | Cost |
 |---|---|---|---|
-| **E-1** | Approve ADR-022 and purchase Okta Workforce Identity | RF-03, RF-04 | $1,500/yr minimum |
+| **E-1** | ~~Approve ADR-022 and purchase Okta Workforce Identity~~ — **superseded, see §30**: Okta is rejected (user decision, 2026-08-19). The provider direction is now **FusionAuth (ADR-028, 2026-08-24)**. E-1 is therefore no longer a purchase decision but a **deployment** action: stand up a FusionAuth ≥1.63.0 instance (not on `juval-server`, ADR-027), configure the tenant policy, and resolve the open control-6 gap | RF-03, RF-04 | `LICENSE_COST = $0` (Community); self-hosted infrastructure and operations **not priced** (ADR-021) |
 | **E-2** | Configure the tenant to Amazon's values (12 chars, all four character classes, name exclusion, history 10, min age 1 day, max age 365 days, MFA all accounts, lockout ≤10) and export the policy as evidence | RF-03 | — |
 | **E-3** | Name the Incident Commander, Security Owner, IMPOC and Deputy; approve the incident response plan | RF-01, RF-05 | **DONE 2026-08-18** — user named IC/Security Owner/IMPOC/Technical Responder = Daniel E. Liendo, Deputy = Jocsimar C. Gonzalez, and approved the plan (`INCIDENT_RESPONSE_PLAN.md` §2/§12 A-1/A-3/A-5). §12 A-2 (contact-detail custody outside this repository) is a separate, still-open action — see §24 |
 | **E-4** | Run the first tabletop exercise and file the record (**never send a test mail to `security@amazon.com`**) | RF-05 | **DONE 2026-08-18** — `JUVAL-TT-20260818`, run as a facilitated conversation with Daniel E. Liendo; filed at `TABLETOP_RECORD_JUVAL-TT-20260818.md`. Found 2 real gaps, no message sent to Amazon. See §25 |
@@ -1359,3 +1369,98 @@ RF-03 = NOT_COMPLIANT (unchanged)
 IDENTITY SECURITY GATE = BLOCKED (unchanged)
 REAPPLICATION GATE = BLOCKED (unchanged)
 ```
+
+## 30. Identity provider reconciliation: Okta closed, FusionAuth selected (2026-08-24)
+
+Housekeeping, not new research: §20 (2026-08-18) and §29 (2026-08-19) were
+both written the same week Okta went from "recommended, pending commercial
+approval" to explicitly **rejected by the user** (ADR-022, 2026-08-19), and
+a further candidate search (Auth0, Supabase Auth, Google/Microsoft
+federation, a passwordless/passkey-only architecture, JumpCloud, ZITADEL,
+FusionAuth and a FreeIPA + Keycloak architecture, on top of the
+already-rejected Cognito and Entra External ID) ran through ADR-021.
+§20.3–§20.5's E-1 row and the RF-03 table row in §20.1 still read as if an
+Okta purchase were the next step.
+
+**Updated 2026-08-24**: the user has since selected **FusionAuth as the
+approved provider direction (ADR-028)**. This section reconciles the
+dependent rows to that decision. Two things it deliberately does **not** do:
+it does not reopen or change any underlying compliance finding, and it does
+not claim any implementation. ADR-021's own evidence ranking placed
+FreeIPA + Keycloak (`12/12` documentary) above FusionAuth (`10/11 + 1
+PARTIAL`); ADR-028 records the user's decision to take the FusionAuth path
+anyway, with that fact stated rather than hidden. ADR-021 is unmodified.
+
+### 30.1 Current identity state
+
+```
+FusionAuth:        SELECTED / APPROVED DIRECTION — explicit user decision, 2026-08-24 (ADR-028)
+                   10/11 PASS + 1 PARTIAL (ADR-021). Control 6 (name exclusion) = B, PARTIALLY_SATISFIED.
+                   MINIMUM_FUSIONAUTH_VERSION = 1.63.0. NOT deployed, NOT configured, NOT verified.
+Okta:              REJECTED / SUPERSEDED — explicit user decision, 2026-08-19 (ADR-022)
+FreeIPA+Keycloak:  12/12 documentary (ADR-021), empirically unverified (PoC ENVIRONMENT_BLOCKED).
+                   Ranked highest on evidence, NOT selected — see ADR-028 for the reasoning.
+Amazon Cognito:    REJECTED — GAP A + GAP B decisive (ADR-021)
+Entra External ID: ELIMINATED — native length/history ceilings (ADR-021)
+Auth0:             REJECTED — GAP A decisive, same structural flaw as Cognito (ADR-021)
+Supabase Auth:     REJECTED — no password-policy controls documented (ADR-021)
+Google/Microsoft federation: REJECTED — inherits a failing upstream policy (ADR-021)
+Passwordless-only: NOT a valid exemption — mutually exclusive with mandatory MFA on Cognito (ADR-021)
+JumpCloud:         REJECTED — GAP A, documentation-decisive, not tenant-verified (ADR-021)
+ZITADEL:           REJECTED — no minimum-password-age field in its own API schema (ADR-021)
+Clerk:             REJECTED — fails >=4 of 11 HARD requirements (ADR-021)
+
+PROVIDER DECISION      = FusionAuth (SELECTED / APPROVED DIRECTION, ADR-028)
+IMPLEMENTATION         = NOT_IMPLEMENTED
+RUNTIME                = INACTIVE (JUVAL_AUTH_MODE unset)
+AMAZON RF-03 / RF-04   = NOT_VERIFIED
+```
+
+**Selecting a provider satisfied no Amazon control.** RF-03 and RF-04 hold the
+exact status they held before ADR-028. Nothing in this section may be cited as
+evidence of an implemented or verified identity control.
+
+This mission's instructions ("no reabras la evaluación de Okta"; "NO
+implementar otro IdP en esta misión salvo que sea estrictamente necesario
+para analizar gaps") are respected here: no provider is investigated,
+priced, or implemented in this pass. This section only updates which
+downstream document rows point at Okta as if it were still the plan.
+
+### 30.2 What actually changes for compliance
+
+Nothing about *whether* RF-03/RF-04 are compliant changes — they were
+already `PARTIAL`/`NOT_COMPLIANT` with `IDENTITY SECURITY GATE = BLOCKED`,
+and remain exactly that. What changes is **why** the gate is blocked and
+**what the next external action is**:
+
+| | Was (§20, 2026-08-18) | Now |
+|---|---|---|
+| Blocking reason | No Okta tenant yet; blocked on $1,500/yr commercial approval | A provider direction exists (FusionAuth, ADR-028) but **nothing is deployed**: no tenant, no policy, no exported evidence. Plus one open HARD gap — control 6, name exclusion, `B — PARTIALLY_SATISFIED` |
+| Next external action (was E-1) | Approve ADR-022, purchase Okta | **Deploy**, not decide: stand up FusionAuth ≥1.63.0 (not on `juval-server`, ADR-027), configure the tenant to Amazon's values (E-2), export the policy as evidence, and resolve control 6 by either accepting disclosed residual risk with a compensating organizational control or obtaining Amazon's answer to the §21 clarification |
+| Cost estimate | $1,500/yr (Okta minimum) | `LICENSE_COST = $0` (FusionAuth Community). Self-hosted infrastructure and operations — patching, PostgreSQL backups, TLS, monitoring, upgrades — are real and **not priced** (ADR-021) |
+
+### 30.3 Rows updated in this pass
+
+- §20.1 RF-03 table row (evidence and blocking-gap columns).
+- §20.3, §20.4, §20.5 E-1 (superseded notes added; original text preserved
+  per this mission's "no borrar evidencia histórica" instruction).
+- `CLAUDE.md` §14 identity table, the Clerk row, and the ADR count summary.
+- `docs/PROJECT_PLAN.md` §4 identity-provider row.
+- **New: `docs/adr/ADR-028-fusionauth-provider-direction.md`** — records the
+  provider decision under the existing ADR convention rather than asserting
+  it only in downstream documents.
+
+`docs/adr/ADR-022` was already correctly marked `RECHAZADA (SUPERSEDED)`
+before this pass. `docs/adr/ADR-021` is deliberately **not** edited: it is
+the measured evidence, and ADR-028 supersedes its *selection*, not its
+findings.
+
+`IDENTITY SECURITY GATE = BLOCKED` (unchanged)
+`REAPPLICATION GATE = BLOCKED` (unchanged)
+`IDP_SELECTION = FUSIONAUTH_SELECTED` (ADR-028, 2026-08-24 — supersedes
+`PENDING_USER_ARCHITECTURAL_DECISION`)
+`IDP_IMPLEMENTATION = NOT_IMPLEMENTED` (no tenant, no deployment, no config)
+`IDP_RUNTIME = INACTIVE` (`JUVAL_AUTH_MODE` unset)
+`RF-03 / RF-04 = NOT_VERIFIED` (unchanged — selecting a provider verifies
+nothing; Amazon's response to the identity-scope clarification, §21, also
+remains independently pending)
