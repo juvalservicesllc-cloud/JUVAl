@@ -7,7 +7,7 @@
 | Method | Read-only inspection of the developer workstation; official provider documentation for capability claims. No configuration was changed. |
 | Amazon finding | **RF-02** — firewall, IDS/IPS, anti-virus/anti-malware, network segmentation |
 | Related control | `AC-06` (DPP §1.1), `AC-05` (TLS, DPP §1.5) |
-| Scope note | This audit covers the **workstation** and the **cloud services**. A third node exists -- the Linux development/validation server `juval-server` -- audited separately in [`HOST_CONTROLS_JUVAL_SERVER.md`](HOST_CONTROLS_JUVAL_SERVER.md) (measured 2026-08-24; host-control phase closed 2026-08-26 pending only a user-executed reboot). It runs no JUVAl service and holds no production data, but it does hold a working copy of the repository. As of 2026-08-26, SSH password authentication is disabled there (H-5 **VERIFIED**, USER-EXECUTED evidence). App-level network exposure (H-3) is a **decided, scoped risk acceptance**, not an open item: dev servers stay bound to `0.0.0.0` for cross-device LAN testing, constrained to `192.168.0.0/24` by UFW, explicitly limited to the current development phase and to be revisited before any public/production exposure. |
+| Scope note | This audit covers the **workstation** and the **cloud services**. A third node exists -- the Linux development/validation server `juval-server` -- audited separately in [`HOST_CONTROLS_JUVAL_SERVER.md`](HOST_CONTROLS_JUVAL_SERVER.md) (measured 2026-08-24; host-control phase closed 2026-08-26 pending only a user-executed reboot). It runs no JUVAl service and holds no production data, but it does hold a working copy of the repository. As of 2026-08-26, SSH password authentication is disabled there (H-5 **VERIFIED**, USER-EXECUTED evidence). App-level network exposure (H-3) is a **decided, scoped risk acceptance**, not an open item: dev servers stay bound to `0.0.0.0` for cross-device LAN testing, constrained to `192.168.0.0/24` by UFW, explicitly limited to the current development phase and to be revisited before any public/production exposure. **Role change, 2026-08-26 (ADR-031 `Aceptada`, ADR-027 amended):** that host will additionally run JUVAl's self-hosted identity provider — see §6. Nothing is installed and no network boundary has moved yet; the section states the designed boundary, not a measured one. |
 
 Three states are kept strictly distinct throughout, because collapsing them is
 exactly how a compliance answer becomes untrue:
@@ -195,6 +195,58 @@ answer must say so plainly. Claiming a firewall JUVAl does not operate is
 precisely the kind of unevidenced "YES" that caused the original rejection.
 
 ---
+
+---
+
+## 6. Identity provider on `juval-server` — DESIGNED, NOT DEPLOYED (2026-08-26)
+
+**State: nothing installed, nothing exposed, no firewall or router change
+made.** This section documents a *designed* boundary so that the eventual
+deployment has a declared bar to be measured against. It is **not**
+`VERIFIED_CONFIGURATION` and must not be cited as evidence of anything.
+
+ADR-031 (`Aceptada`, Option A) places FusionAuth Community self-hosted on
+`juval-server`; ADR-027 was formally amended in the same operation. Full
+architecture and runbook: `deploy/fusionauth/README.md`.
+
+### 6.1 Designed trust boundaries
+
+| Zone | Members | Control |
+|---|---|---|
+| **PUBLIC** | `GET /.well-known/openid-configuration`, `GET /.well-known/jwks.json` only | nginx allow-list; every other path 404. Reached via an **outbound** tunnel — no inbound port, no port-forwarding, no public IP |
+| **LAN-ONLY** | `:22` SSH (key-only, H-5); `:5173`/`:8000` dev servers (H-3, unchanged acceptance) | Existing UFW rules |
+| **LOCALHOST / INTERNAL** | PostgreSQL `:5432`; nginx `:8080`; FusionAuth `:9011`; FusionAuth `/admin` and `/api` | Loopback bind where the software offers one; UFW default-deny where it does not |
+
+**No new UFW rule is added by this deployment.** FusionAuth has no
+bind-address setting, so `:9011` listens on all interfaces; H-1's already-
+`VERIFIED` `DEFAULT_INPUT_POLICY="DROP"`, with no matching `allow`, is what
+makes it unreachable — including from the LAN. Administration therefore runs
+over `ssh -L 9011:127.0.0.1:9011`.
+
+### 6.2 How this changes the RF-02 picture
+
+It does not, yet — no row in §4 moves and **F-01 remains the sole blocker**.
+
+Two things will change when it is deployed, and both are worth naming before
+they arrive rather than after:
+
+1. **JUVAl will operate a public HTTPS surface of its own** for the first
+   time — two read-only endpoints. Firewall/IDS/IPS for that surface will be
+   the tunnel provider's, exactly as it is Railway's and Vercel's today, and
+   the Developer Profile answer must keep saying so.
+2. **A new data category appears on a host that had none**: identity data,
+   which is not regenerable from Git. `HOST_CONTROLS_JUVAL_SERVER.md` H-17/H-18
+   track backup and the open off-host-destination decision.
+
+### 6.3 Verification owed before any of this is called configured
+
+- From the workstation: `curl http://192.168.0.26:9011/` must fail.
+- From the internet, once Phase 2 exists: JWKS returns a key set; `/admin` and
+  `/api/status` both return 404.
+- `python tools/verify_oidc.py --issuer <url>` exits zero.
+
+Until those three run and are recorded with a date, every identity row in this
+document stays `NOT_VERIFIED`.
 
 ## 4. Control-by-control status
 

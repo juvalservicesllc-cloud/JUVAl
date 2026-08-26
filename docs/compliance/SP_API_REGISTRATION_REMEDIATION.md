@@ -1550,3 +1550,133 @@ AMAZON_COMPLIANCE_READINESS = NOT_READY
 **No finding changed state.** What changed is that the identity blocker is now
 a single named decision (ADR-031) with templates and a verification tool
 waiting behind it, rather than an undefined amount of work.
+
+
+---
+
+## 32. Identity hosting decided; deployment prepared, not executed (2026-08-26)
+
+Architecture and preparation pass. No provider was re-evaluated, no control was
+re-classified, and **no finding changed state**. What changed is that the single
+blocker named in §31.3 stopped being a decision.
+
+### 32.1 The decision
+
+The user chose **Option A of ADR-031: FusionAuth Community self-hosted on
+`juval-server`** — explicitly, against the agent's recommendation of the managed
+service, on the grounds that the host was acquired and hardened for exactly this
+purpose and that Option B's recurring cost is unbudgeted for a capability the
+existing hardware covers. `ADR-031` is now `Aceptada`.
+
+The conflict with ADR-027 was **not** resolved by reinterpretation. ADR-027 was
+formally amended in the same operation, scoped to two named clauses (its
+§"Enmienda 2026-08-26"): the "identity server" exclusion is derogated, and the
+network-boundary clause is *satisfied* — it required "a decision nueva", and
+ADR-031 is that decision. Every other exclusion in ADR-027 stands: no JUVAl
+production data on that host, no Supabase self-hosting, no replacing
+Railway/Vercel, no service as root.
+
+### 32.2 The objection that turned out to be wrong
+
+§31.3 argued Option A was untenable because *"for the backend to validate
+tokens the issuer must be reachable from the internet — which breaks ADR-027's
+LAN-only network boundary."*
+
+That assumed an **inbound** port. It does not need one. An **outbound** tunnel
+publishes a managed HTTPS endpoint with no listening port opened, no
+port-forwarding, no public IP and — the point that matters for ADR-027 — **no
+new `ufw allow` rule anywhere in the deployment**. FusionAuth (`:9011`) and
+PostgreSQL (`:5432`) are kept unreachable by the already-`VERIFIED`
+`DEFAULT_INPUT_POLICY="DROP"` plus the absence of any rule admitting them. The
+admin UI is consequently unreachable *even from the LAN*; administration runs
+over the existing key-only SSH channel.
+
+Recording this because the prior pass stated the objection as decisive, and it
+was not.
+
+### 32.3 Public surface, stated exactly
+
+Two read-only endpoints, and nothing else:
+
+```
+GET  /.well-known/openid-configuration
+GET  /.well-known/jwks.json
+```
+
+`interfaces/api/auth.py` resolves signing keys from
+`<issuer>/.well-known/jwks.json` and validates issuer, audience, signature and
+expiry locally — it makes no other call to the IdP. `/admin` and `/api` are
+never public. A browser login flow would need `/oauth2/*`, which does not exist
+in the PWA today and must not be exposed pre-emptively.
+
+### 32.4 Two defects found by reading the real artifacts
+
+Both were found by inspecting what will actually be deployed, not by reviewing
+documents:
+
+1. **The tenant template enabled a licensed feature.**
+   `deploy/fusionauth/tenant-password-policy.template.json` set
+   `breachDetection.enabled = true`. Breached-password detection is a **paid**
+   FusionAuth feature. On a Community instance it would fail or be silently
+   ignored — appearing to add a control that is not there, and quietly
+   contradicting `LICENSE_COST = $0`. **Removed.** Re-verified the same pass
+   that every control Amazon requires *is* in Community: password rules,
+   history, min/max age, lockout, TOTP MFA, OIDC/JWT issuance. Email and SMS
+   MFA are paid and stay disabled.
+
+2. **The package downloads an unverified JVM at service-start time.** The
+   FusionAuth `.deb` ships no JVM; its `start.sh` fetches a Temurin JDK from
+   GitHub on first start, as the service user, with no checksum or signature.
+   That is both a silent runtime dependency on GitHub and an unverified
+   download into a service account. `deploy/fusionauth/install.sh` stages the
+   JDK beforehand — reading the expected version out of `start.sh` so it cannot
+   drift, verifying the vendor-published `.sha256.txt`, extracting to the exact
+   path `start.sh` looks for — so that branch never runs. Precisely: the
+   checksum shares an origin with the tarball, so this evidences transfer
+   integrity rather than provenance independent of Adoptium; what it removes is
+   the start-time network dependency and the unverified fetch.
+
+### 32.5 What was produced
+
+| Artifact | Purpose |
+|---|---|
+| `docs/adr/ADR-031-…` (now `Aceptada`) | The hosting decision, with the pre-decision recommendation preserved verbatim and labelled |
+| `docs/adr/ADR-027-…` (amended) | Two clauses derogated/satisfied; everything else explicitly restated as still in force |
+| `deploy/fusionauth/install.sh` | Idempotent Phase-1 install: PostgreSQL, checksum-verified package, pre-staged JDK, production config, loopback database. Generates the database password internally — never typed, echoed, or passed as an argument |
+| `deploy/fusionauth/backup.sh` | `pg_dump` verified with `pg_restore --list` before reporting success, 14-day retention |
+| `deploy/fusionauth/nginx-fusionauth-public.conf` | Phase-2 path allow-list; default 404 |
+| `deploy/fusionauth/fusionauth.env.example` | Names and placeholders only |
+| `deploy/fusionauth/README.md` | Network architecture, trust-boundary table, install/verify/backup/restore/update/rollback, and the one open Phase-2 decision |
+
+### 32.6 What is still blocked, and on whom
+
+| Item | Blocked on |
+|---|---|
+| Phase 1 execution (install, tenant, controls 1-9/11 evidence) | **User `sudo`.** The agent has never had `sudo` on `juval-server`; this is the same constraint as every prior host session, not a new one |
+| Phase 2 (public issuer) | **User decision**: which outbound tunnel. Cloudflare Tunnel (needs a domain, gives a self-owned issuer hostname — recommended) or Tailscale Funnel (no domain, borrowed hostname) |
+| Off-host encrypted backup destination | **User decision.** Backups are on-host only; they do not survive loss of the machine. ADR-027 forbids improvising an insecure destination |
+| Control 6 | **Unchanged.** Self-hosting adds no mechanism that inspects a plaintext password against the user's name, and building one would be custom authentication. R-1 or R-2 only |
+| MFA-for-every-account evidence | Downstream: enabling TOTP is not every user enrolling. Needs a per-user enrolment report |
+
+### 32.7 Status after this pass
+
+```
+RF-01  PARTIAL          (unchanged)
+RF-02  PARTIAL          (unchanged) — F-01 workstation patching still the sole blocker
+RF-03  PARTIAL          (unchanged) — hosting decided; IdP still NOT_IMPLEMENTED
+RF-04  PARTIAL          (unchanged)
+RF-05  PARTIAL          (unchanged)
+
+IDP_SELECTION          = FUSIONAUTH_SELECTED (ADR-028)
+IDP_HOSTING            = SELF_HOSTED_JUVAL_SERVER (ADR-031 Aceptada)  <-- was UNDECIDED
+IDP_IMPLEMENTATION     = NOT_IMPLEMENTED
+IDP_RUNTIME            = INACTIVE (JUVAL_AUTH_MODE unset)
+RF-03 / RF-04          = NOT_VERIFIED
+CONTROL_6              = B - PARTIALLY_SATISFIED (unchanged)
+IDENTITY SECURITY GATE = BLOCKED
+REAPPLICATION GATE     = BLOCKED
+AMAZON_COMPLIANCE_READINESS = NOT_READY
+```
+
+**Deciding is not deploying, and deploying will not be verifying.** The three
+states stay separate. `IDP_HOSTING` is the only line that moved.

@@ -14,12 +14,20 @@ host-hardening phase — see §9.
 **Scope.** This host's permanent role is formalized in
 [`ADR-027`](../adr/ADR-027-juval-server-role.md): development / CI-like
 validation / backend-worker (when needed) / automation / operational
-tooling — never production primary database, Supabase self-host, identity
-server, or a Vercel/Railway replacement. It runs **no persistent** JUVAl
+tooling — never production primary database, Supabase self-host, ~~identity
+server~~, or a Vercel/Railway replacement. **Amended 2026-08-26 (§11):** the
+identity-server exclusion was derogated by
+[`ADR-031`](../adr/ADR-031-fusionauth-hosting-location.md) (`Aceptada`,
+Option A) — this host will run FusionAuth self-hosted. Every other exclusion
+stands. Nothing is installed yet; §11 records the role change and the controls
+it creates, all of them currently `NOT_IMPLEMENTED`. It runs **no persistent** JUVAl
 service (`systemctl list-units | grep -i juval` returns only login
 sessions; see H-3 for a note on *transient* dev-server processes), holds
 **no** production database, and is **not** the deployment target —
-production is Railway (backend, ADR-018) and Vercel (PWA). Nothing here
+production is Railway (backend, ADR-018) and Vercel (PWA). That first clause
+**will stop being true** once ADR-031 is executed: `fusionauth-app.service` and
+`postgresql.service` will be the first persistent services here, and §11 states
+what that changes. Nothing here
 should be read as evidence about the production environment; for that see
 [`NETWORK_SECURITY.md`](NETWORK_SECURITY.md) §3.
 
@@ -756,6 +764,97 @@ phase of work, not the project: FusionAuth deployment, AI Analyst,
 enrichment, and production deployment (Railway/Vercel/Supabase
 verification) remain separate, future workstreams, entirely unaffected
 by this closure and not started here.
+
+## 11. 2026-08-26 (session 5) — role amended: this host becomes the identity server
+
+**Nothing was installed, started, downloaded to a permanent location, or
+exposed in this session.** The FusionAuth `.deb` was fetched to `/tmp`, read
+with `dpkg-deb`, and deleted. No `ufw`, `sshd`, router or DNS setting was
+touched. `sudo` remains unavailable to the agent, as in every prior session.
+
+### 11.1 What changed, and what did not
+
+The user decided FusionAuth is **self-hosted on this host** (ADR-031,
+`Aceptada`, Option A). ADR-027's "identity server" exclusion was formally
+amended rather than reinterpreted. §"Scope" above is updated to match.
+
+Every other boundary this document has measured stays exactly as it was:
+
+| Boundary | Before | After |
+|---|---|---|
+| SSH key-only (H-5) | `VERIFIED` | unchanged — and it becomes the **only** path to the FusionAuth admin UI |
+| UFW rules (H-1) | `22/tcp`; `5173`+`8000` from `192.168.0.0/24` | **unchanged — no rule is added.** See 11.2 |
+| Dev servers `:5173`/`:8000` (H-3) | `PARTIAL — ACCEPTED LAN RISK` | unchanged; the identity work neither widens nor narrows it |
+| Repository permissions (H-9) | `DEFERRED / ACCEPTED_RISK` | unchanged |
+| Production data on this host | none | still none. FusionAuth's PostgreSQL holds **identity** data only — no `SourcingRecord`, no `ExecutionRun` (ADR-017 unaffected) |
+| Services running as root | none | still none — the package's `fusionauth-app.service` runs `User=fusionauth`, a `-r` account with `/usr/sbin/nologin` (read from the package's `postinst`, not assumed) |
+
+### 11.2 Why no firewall rule is needed — the load-bearing detail
+
+FusionAuth exposes no bind-address setting; `:9011` will listen on all
+interfaces. What keeps it unreachable is H-1's already-`VERIFIED`
+`DEFAULT_INPUT_POLICY="DROP"` **plus the absence of any `allow` rule for it**.
+PostgreSQL binds `127.0.0.1` by default and `install.sh` asserts that rather
+than assuming it.
+
+The consequence is deliberate and worth stating: **the FusionAuth admin UI will
+not be reachable from the LAN either.** Administration goes over
+`ssh -L 9011:127.0.0.1:9011`, reusing the one authenticated channel already
+verified as key-only. This is a stricter posture than H-3's dev servers, not a
+looser one.
+
+The public reachability that Railway eventually needs is an **outbound** tunnel
+— no listening port, no port-forwarding, no public IP. That is Phase 2 and it
+is not started.
+
+### 11.3 New controls this role creates
+
+All `NOT_IMPLEMENTED` — listed now so the work has a declared bar to meet, not
+because any of it is done.
+
+| # | Requirement | Why it exists | Status |
+|---|---|---|---|
+| H-17 | Identity data backup with a tested restore | Users, hashed credentials and JWT signing keys are the first data on this host **not** regenerable from Git. `deploy/fusionauth/backup.sh` dumps and verifies with `pg_restore --list`; restore is a documented manual procedure | `NOT_IMPLEMENTED` — nothing to back up yet |
+| H-18 | Off-host encrypted backup destination | H-17 is **on-host only**. It survives database corruption and bad upgrades; it does **not** survive loss of this machine. ADR-027 §"Expectativas de backup" forbids copying secrets somewhere less secure than this host, and no destination has been chosen | `BLOCKED_EXTERNAL` — **open user decision.** Until it is made, the honest disaster-recovery answer for identity data is "reprovision and re-enrol every user" |
+| H-19 | Capacity alerting covers the new services | H-11's thresholds were sized for a host running no persistent service. A JVM plus PostgreSQL on 2 cores changes the baseline; `tools/host_monitor.sh` must be re-checked against it | `NOT_IMPLEMENTED` |
+| H-20 | Patch process for FusionAuth | `unattended-upgrades` does not know about a `.deb` installed out-of-band — correctly so, since a FusionAuth upgrade migrates its own schema. Pinned, deliberate, backup-first: `deploy/fusionauth/README.md` §7 | `NOT_IMPLEMENTED` |
+
+H-14 ("Production service hardening — host runs no JUVAl service by design",
+`NOT_APPLICABLE`) becomes **applicable** the moment `fusionauth-app.service`
+starts. It is left `NOT_APPLICABLE` today because that is still true today; it
+must be reopened as part of the deployment, not silently inherited.
+
+### 11.4 Measured host state, 2026-08-26 (agent-executed, read-only)
+
+| Fact | Value | Relevance |
+|---|---|---|
+| Listeners | `:22` (all interfaces), `:5173` (all interfaces), `:53` (loopback) | `:8000` is **absent** — the uvicorn dev server did not survive the session-4 reboot. Not a fault; H-3's UFW rule for it remains and its acceptance is unchanged |
+| PostgreSQL | not installed (`no /etc/postgresql`) | clean slate |
+| Java | not installed (`java: command not found`) | matters — see the JDK-staging note in `IDENTITY_DEPLOYMENT_FUSIONAUTH.md` §3.3 |
+| nginx / caddy / apache2 / haproxy / certbot | none installed | clean slate; nginx is Phase 2 only |
+| FusionAuth | no directory, no systemd unit | clean slate |
+| Capacity | 13 GiB RAM (11 GiB available), 98 G volume (83 G free, 11% used), 4 GiB swap | fits the ~1.5-2 GiB / 3-5 GB estimate with headroom |
+| OS / systemd | Ubuntu 24.04.4 LTS, systemd 255 | supported |
+| Available packages | `postgresql-16` 16.15, `nginx` 1.24.0, both from `noble-updates/main` | distro-patched, no third-party apt repository needed |
+
+### 11.5 Package facts, read without installing
+
+Verified with `dpkg-deb` against `fusionauth-app_1.69.0-1_all.deb` (checksum
+matched the vendor's published `.sha256`), then deleted:
+
+- `postinst` creates `fusionauth` via
+  `useradd -M -r -s /usr/sbin/nologin -d /usr/local/fusionauth`, enables
+  `fusionauth-app`, and applies `chown -R fusionauth:root` + `chmod -R o-rwx`.
+- The unit is `Type=simple`, `Restart=always`, `RestartSec=10`,
+  `User=fusionauth`, `Group=fusionauth`, `After=…postgresql.service…`.
+- **The package ships no JVM.** `start.sh` downloads a Temurin JDK from GitHub
+  at first start, as the service user, with no checksum. `install.sh` stages it
+  beforehand with verification so that branch never executes.
+- Config template defaults `database.username`/`database.password` to
+  `fusionauth`/`fusionauth` and `runtime-mode` to `development` — both are
+  replaced at install time.
+- There is no `fusionauth-app` bind-address property; `fusionauth-app.url` in
+  the template is for node-to-node clustering, not the public issuer.
 
 ## 10. Related
 

@@ -18,8 +18,8 @@ GitHub Actions en el mismo commit; ver `docs/DEVELOPMENT_ENVIRONMENT.md`
 §2 para la tabla por nodo y `docs/architecture/PRODUCT_BEHAVIORAL_PARITY.md`
 para las capacidades Waves B-D). **CI verde** desde 2026-08-24: el job de
 backend ya no rompía por `psycopg` en la colección, y hay un segundo job
-que corre lint, tests y build del frontend. **28 ADRs** en
-`docs/adr/` —
+que corre lint, tests y build del frontend. **31 ADRs** en
+`docs/adr/` (ADR-001 a ADR-031) —
 ADR-009 (Propuesta), ADR-021 (Propuesta — investigación de proveedores;
 su ranking por evidencia queda **superado en cuanto a selección** por
 ADR-028, sin que su contenido se altere) y **ADR-022
@@ -29,7 +29,12 @@ del usuario; no reabrir)**; el resto Aceptadas, incluidas **ADR-027**
 dirección aprobada de proveedor de identidad — selección, **no**
 implementación), y **ADR-023
 (Aceptada — gobernanza del Product Experience/Design System del
-frontend, 2026-08-19, inicio del rediseño UI/UX Premium)**. **Cumplimiento
+frontend, 2026-08-19, inicio del rediseño UI/UX Premium)**. **ADR-031
+(Aceptada 2026-08-26)** fija el alojamiento del IdP: FusionAuth
+self-hosted en `juval-server`, y **enmienda ADR-027** (que pasa a
+`Aceptada — ENMENDADA`) exclusivamente en su exclusión "identity server"
+y en su cláusula de frontera de red; el resto de ADR-027 sigue vigente y
+no queda superseded. **Cumplimiento
 Amazon:
 `SP_API_DEVELOPER_REGISTRATION = REJECTED_REMEDIATION_REQUIRED`; los
 cinco hallazgos RF-01…RF-05 están en `PARTIAL`, ninguno `COMPLIANT`;
@@ -364,7 +369,7 @@ Estado por componente:
 | React + Vite (frontend) | **APPROVED** (elección de framework), `interfaces/` frontend **NOT STARTED** — bloqueado por Node.js/npm ausentes, no por decisión pendiente | `docs/PROJECT_STATUS.md` §Sesión 2026-08-17 (bloque 3) |
 | Vercel (deployment) | **APPROVED** como plataforma objetivo, restricciones técnicas reales sin investigar (sin Vercel CLI) | `docs/PROJECT_STATUS.md` §Sesión 2026-08-17 (bloque 3) |
 | Supabase/PostgreSQL | **APPROVED** como persistencia de producción; adapter preparado, **NO verificado contra una base real** — no tratar como equivalente en confianza a SQLite/ADR-013 | ADR-017 (`Estado: Aceptada`, 2026-08-17), `docs/architecture/SUPABASE.md` §1 |
-| **Identidad humana / IdP** | **FusionAuth = SELECTED / APPROVED DIRECTION** (decisión explícita del usuario, 2026-08-24, **ADR-028**). Es una **dirección de proveedor, no una implementación**: `IMPLEMENTATION = NOT_IMPLEMENTED` (sin tenant, sin despliegue, sin configuración), `RUNTIME = INACTIVE` (`JUVAL_AUTH_MODE` sin definir) y `AMAZON RF-03/RF-04 = NOT_VERIFIED` — seleccionar no es cumplir. Gap abierto heredado de ADR-021: control 6 (exclusión del nombre) `B — PARTIALLY_SATISFIED`; `MINIMUM_FUSIONAUTH_VERSION = 1.63.0`. **Okta RECHAZADO** (2026-08-19, ADR-022) — no reabrir. Cognito, Entra External ID/workforce, Auth0, Supabase Auth, federación Google/Microsoft, passwordless-only, JumpCloud y ZITADEL **RECHAZADOS/ELIMINADOS** (ADR-021); FreeIPA + Keycloak quedó `12/12` documental y mejor clasificado, **no elegido** — ADR-028 explica por qué. No alojar en `juval-server` (ADR-027) | **ADR-028** (decisión vigente), ADR-022 (`RECHAZADA/SUPERSEDED`), ADR-021 (evidencia medida), `docs/compliance/SP_API_REGISTRATION_REMEDIATION.md` §30 |
+| **Identidad humana / IdP** | **FusionAuth = SELECTED / APPROVED DIRECTION** (ADR-028) y **HOSTING = SELF-HOSTED EN `juval-server`** (decisión explícita del usuario, 2026-08-26, **ADR-031 `Aceptada`, Opción A**; obligó a **enmendar ADR-027** en dos cláusulas — la exclusión "identity server" queda derogada, el resto de ADR-027 sigue vigente). Sigue siendo una **dirección + un plan, no una implementación**: `IMPLEMENTATION = NOT_IMPLEMENTED` (sin tenant, sin despliegue, sin configuración), `RUNTIME = INACTIVE` (`JUVAL_AUTH_MODE` sin definir) y `AMAZON RF-03/RF-04 = NOT_VERIFIED` — decidir no es desplegar, y desplegar no será verificar. Runbook ejecutable en `deploy/fusionauth/README.md`; **Fase 1 lista para ejecutar** (requiere `sudo` del usuario), **Fase 2 (emisor público vía túnel de salida) bloqueada en una decisión del usuario**. Cero reglas `ufw` nuevas en todo el despliegue. Gap abierto heredado de ADR-021: control 6 (exclusión del nombre) `B — PARTIALLY_SATISFIED`; `MINIMUM_FUSIONAUTH_VERSION = 1.63.0`. **Okta RECHAZADO** (2026-08-19, ADR-022) — no reabrir. Cognito, Entra External ID/workforce, Auth0, Supabase Auth, federación Google/Microsoft, passwordless-only, JumpCloud y ZITADEL **RECHAZADOS/ELIMINADOS** (ADR-021); FreeIPA + Keycloak quedó `12/12` documental y mejor clasificado, **no elegido** — ADR-028 explica por qué. No alojar en `juval-server` (ADR-027) | **ADR-028** (decisión vigente), ADR-022 (`RECHAZADA/SUPERSEDED`), ADR-021 (evidencia medida), `docs/compliance/SP_API_REGISTRATION_REMEDIATION.md` §30 y §32 |
 | **AuthN/AuthZ backend** | **IMPLEMENTED + TESTED** — `interfaces/api/auth.py`: validación OIDC/JWT (emisor, firma JWKS, audiencia, expiración) y RBAC por capacidades (`viewer`/`operator`/`admin`) aplicado server-side en los 5 endpoints; 33 tests negativos. **Inactivo hasta que `JUVAL_AUTH_MODE=oidc`** y exista tenant | ADR-022, `docs/compliance/ACCESS_CONTROL.md` |
 | Clerk | **DESCARTADO** — no seleccionado; ver ADR-021 (falla ≥4 de 11 requisitos HARD) y ADR-028 (proveedor elegido) | ADR-021, ADR-028 |
 | Recomendación técnica de backend (Python 3.11+, `pytest`, `openpyxl`) | Ya en uso (`pyproject.toml`) | `ARCHITECTURE.md` §15 (recomendación, no ADR) |

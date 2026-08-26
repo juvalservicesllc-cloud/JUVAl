@@ -1,7 +1,7 @@
 # ADR-027 — `juval-server` role: development / validation / backend-worker / automation node
 
-**Estado: Aceptada**
-**Fecha: 2026-08-24**
+**Estado: Aceptada — ENMENDADA 2026-08-26 por ADR-031**
+**Fecha: 2026-08-24** (enmienda: 2026-08-26, ver §"Enmienda 2026-08-26")
 **Relacionada con:** ADR-016 (FastAPI backend), ADR-017 (Supabase persistencia
 remota), ADR-018 (Railway hosting del backend), ADR-021/ADR-022 (identidad —
 sin relación operativa, mencionada solo porque este host nunca sirve
@@ -53,10 +53,14 @@ Y **no** es, ni se convierte automáticamente en, ninguno de:
   Supabase/PostgreSQL (ADR-017), no SQLite ni Postgres local en este host.
 - **Supabase self-host** — Supabase es un servicio gestionado externo
   (ADR-017); este host no aloja una instancia propia.
-- **Identity server** — ningún IdP se despliega aquí; la identidad humana
+- **Identity server** — ~~ningún IdP se despliega aquí; la identidad humana
   sigue `PENDING` (ADR-021/022) y, si algún día se resuelve, seguirá siendo
-  un servicio gestionado externo, nunca construido en este host (CLAUDE.md
-  §12/§16 prohíbe autenticación propia).
+  un servicio gestionado externo, nunca construido en este host~~ —
+  **ENMENDADO 2026-08-26 por ADR-031 (Aceptada, Opción A)**: este host **sí**
+  aloja FusionAuth Community self-hosted como IdP de JUVAl. Lo que **no**
+  cambia: JUVAl no construye autenticación propia (CLAUDE.md §12/§16 sigue
+  vigente — se despliega un producto de identidad de terceros, no se escribe
+  uno). Alcance exacto de la enmienda en §"Enmienda 2026-08-26".
 - **Único servidor de producción pública** — la producción es Railway
   (backend, ADR-018) + Vercel (PWA, ADR-014 más el ADR de deployment
   pendiente); `juval-server` no está expuesto fuera de la LAN (§3, evidencia
@@ -122,6 +126,15 @@ general para crecer el rol por conveniencia.
   requiriera (p. ej. servir el frontend localmente para probarlo desde otro
   dispositivo de la LAN), es una decisión puntual y temporal, no un cambio de
   rol, y no debe exponerse fuera de la LAN sin una decisión nueva.
+  **ENMENDADO 2026-08-26 (ADR-031)**: "una decisión nueva" es exactamente lo
+  que ADR-031 registra. La frontera se mueve **sin abrir ningún puerto de
+  escucha**: FusionAuth (`:9011`), su proxy (`127.0.0.1`) y PostgreSQL
+  (`127.0.0.1`) **no reciben regla `ufw allow` alguna**, de modo que la
+  política `DEFAULT_INPUT_POLICY="DROP"` ya verificada (H-1) los mantiene
+  inalcanzables incluso desde la LAN. La alcanzabilidad pública se resuelve
+  con un túnel **de salida** hacia un extremo HTTPS gestionado, no con un
+  puerto entrante — ver ADR-031 §"Frontera de red (Opción A)" y
+  `deploy/fusionauth/README.md`.
 - UFW y fail2ban están activos (`systemctl is-active`); el ruleset exacto
   sigue sin verificarse por falta de sudo — ver Gate 4 de la auditoría de
   hardening en curso (`HOST_CONTROLS_JUVAL_SERVER.md` H-1/H-2).
@@ -224,6 +237,68 @@ actual. El único costo es el mantenimiento del documento si el rol cambia.
 un servicio persistente o datos de producción, ese es un ADR nuevo que
 sustituye a este, no una reinterpretación de este documento.
 
+## Enmienda 2026-08-26 (ADR-031, Opción A)
+
+El usuario decidió que **FusionAuth Community self-hosted es el IdP de JUVAl y
+reside en `juval-server`** (ADR-031, `Aceptada`). Esa decisión es incompatible
+con dos frases de este documento. La enmienda es deliberadamente **estrecha**:
+se mueven dos fronteras nombradas y **todo lo demás sigue vigente sin cambio**.
+
+### Qué cambia (exactamente dos cosas)
+
+| # | Cláusula original | Estado tras la enmienda |
+|---|---|---|
+| 1 | §Decisión → "**Identity server** — ningún IdP se despliega aquí … seguirá siendo un servicio gestionado externo" | **Derogada.** `juval-server` aloja FusionAuth. La razón que la originaba (no construir autenticación propia) se preserva íntegra: se despliega software de identidad de terceros, no se escribe. |
+| 2 | §Fronteras de red → "no debe abrir puertos de aplicación … no debe exponerse fuera de la LAN sin una decisión nueva" | **Satisfecha, no derogada.** ADR-031 *es* la decisión nueva que la cláusula exigía. Y el mecanismo elegido no abre ningún puerto entrante: túnel de salida, cero reglas `ufw allow` nuevas. |
+
+### Qué NO cambia (sigue vigente y verificable)
+
+- **Production primary database** — sigue siendo Supabase (ADR-017). La
+  PostgreSQL que se instala aquí es **exclusivamente el almacén interno de
+  FusionAuth**; no contiene `SourcingRecord`s, `ExecutionRun`s ni ningún dato
+  de negocio de JUVAl, y no la consulta ningún otro sistema.
+- **Supabase self-host** — sigue excluido.
+- **Único servidor de producción pública** — sigue excluido. Railway (backend)
+  y Vercel (PWA) no se mueven. Este host pasa a alojar **un** servicio del que
+  la producción depende (el emisor OIDC), lo que es un cambio real de riesgo y
+  se registra como tal en ADR-031 §"Consecuencias", no se minimiza.
+- **Reemplazo automático de Vercel/Railway** — sigue excluido.
+- **Sin sudo sin contraseña; ningún servicio JUVAl como root** — se mantiene y
+  se refuerza: el paquete `.deb` de FusionAuth crea la cuenta de sistema
+  `fusionauth` (`useradd -M -r -s /usr/sbin/nologin -d /usr/local/fusionauth`)
+  y la unit `fusionauth-app.service` corre `User=fusionauth Group=fusionauth`
+  — verificado leyendo `postinst` y la unit del paquete 1.69.0 con
+  `dpkg-deb`, 2026-08-26, sin instalar nada.
+- **Secretos nunca en Git** — se mantiene. La contraseña de PostgreSQL y la API
+  key de FusionAuth viven en ficheros del host con permisos restringidos, nunca
+  en el repositorio (`deploy/fusionauth/fusionauth.env.example` sólo lleva
+  nombres y marcadores).
+- **Fronteras de datos** — este host sigue sin almacenar datos de producción de
+  JUVAl. Almacena **datos de identidad**, que son una categoría nueva y por eso
+  §"Expectativas de backup" cambia: ver abajo.
+- **Toda §Fronteras de seguridad, §Limitaciones de producción,
+  §Expectativas de recuperación y §Expectativas de observabilidad** — vigentes.
+
+### Consecuencia sobre §"Expectativas de backup"
+
+La línea *"**Datos/base de datos**: no aplica — este host no tiene datos de
+producción que respaldar … Si eso cambia, este ADR debe revisarse antes de
+asumir que el mecanismo de backup existente basta"* **se activa ahora**. Los
+datos de identidad (usuarios, credenciales hasheadas, claves de firma) **no son
+regenerables desde Git**, a diferencia de todo lo demás en este host. El plan
+de backup/restore concreto vive en `deploy/fusionauth/README.md` y su script
+`deploy/fusionauth/backup.sh`; es un requisito de despliegue, no un extra.
+
+### Lo que esta enmienda NO autoriza
+
+- No autoriza alojar aquí datos de negocio de JUVAl.
+- No autoriza abrir puertos entrantes en UFW ni port-forwarding en el router.
+- No autoriza exponer la UI de administración de FusionAuth (`/admin`) ni su
+  API REST (`/api`) fuera del host.
+- No autoriza activar `JUVAL_AUTH_MODE=oidc` antes de la verificación runtime.
+
+Cualquiera de esas cuatro cosas requiere, otra vez, una decisión nueva.
+
 ## Estado
 
 **Aceptada, 2026-08-24.** Deriva directamente de la instrucción explícita del
@@ -234,3 +309,9 @@ Supabase self-host; identity server; único public production server;
 reemplazo automático de Vercel/Railway") — este ADR formaliza esa decisión
 según la convención existente en `docs/adr/`, sin añadir alcance no
 autorizado.
+
+**Enmendada, 2026-08-26**, por decisión explícita del usuario registrada en
+ADR-031 (`Aceptada`, Opción A): la exclusión "identity server" queda derogada
+y la frontera de red queda satisfecha por esa misma decisión. La enmienda es
+acotada a esas dos cláusulas — ver §"Enmienda 2026-08-26". El resto de este
+ADR sigue Aceptado y sin cambios; este documento **no** queda superseded.
