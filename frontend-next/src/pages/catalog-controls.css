@@ -1,0 +1,8 @@
+.decision-thresholds { align-items: center; display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; }
+.decision-thresholds h2, .decision-thresholds p { margin: 0; }
+.decision-bands { display: flex; flex-wrap: wrap; gap: 8px; }
+.decision-bands strong { border-radius: 999px; font-size: 12px; padding: 5px 8px; }
+.decision-bands .BUY { background: #16835d1a; }
+.decision-bands .REVIEW { background: #a365081a; }
+.decision-bands .PASS { background: #bd3c521a; }
+.secondary { background: transparent; color: var(--accent); }

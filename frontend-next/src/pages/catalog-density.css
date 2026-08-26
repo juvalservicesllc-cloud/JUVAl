@@ -1,0 +1,18 @@
+table:has(.catalog-table-image) th,
+table:has(.catalog-table-image) td { padding: 8px 10px; }
+
+table:has(.catalog-table-image) td:first-child { padding-block: 6px; }
+
+.catalog-table-image {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  font-size: 10px;
+  height: 44px;
+  justify-content: center;
+  overflow: hidden;
+  text-align: center;
+  width: 44px;
+}
+
+.catalog-table-image img { display: block; height: 100%; object-fit: contain; width: 100%; }
