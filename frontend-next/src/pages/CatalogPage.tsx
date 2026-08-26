@@ -54,9 +54,9 @@ function Cell({ value, format }: { value: FieldValueOut; format: (v: string | nu
   return <span className="fv">{format(value.value)} <ProvenanceBadge status={value.status} /></span>
 }
 
-export function CatalogPage() {
+export function CatalogPage({ initialRunId = "" }: { initialRunId?: string } = {}) {
   const [runs, setRuns] = useState<RunsState>({ kind: "loading" })
-  const [runId, setRunId] = useState("")
+  const [runId, setRunId] = useState(initialRunId)
   const [records, setRecords] = useState<RecordsState>({ kind: "loading" })
   const [query, setQuery] = useState<CatalogQuery>(DEFAULT_QUERY)
   const [favorites, setFavorites] = useState<string[]>(loadFavorites)
@@ -71,6 +71,8 @@ export function CatalogPage() {
       .then((response) => {
         if (!response.items.length) return setRuns({ kind: "empty" })
         setRuns({ kind: "ready", runs: response.items })
+        // A run id from the URL wins when it exists, so Run Detail can hand off
+        // straight into that run rather than whichever run happens to be newest.
         setRunId((current) => (current && response.items.some((r) => r.execution_id === current) ? current : response.items[0].execution_id))
       })
       .catch((error: unknown) => { if (!controller.signal.aborted) setRuns({ kind: "error", message: apiErrorMessage(error) }) })

@@ -50,6 +50,7 @@ export interface RunSummaryOut {
   finished_at: string | null
   status: string
   input_filename: string
+  input_hash: string
   records_total: number
   records_processed: number
   records_successful: number
@@ -76,4 +77,53 @@ export interface CatalogQuery {
   bulky: string
   provenanceField: string
   provenanceStatus: string
+}
+
+export interface ThresholdsIn {
+  target_profit: string
+  target_roi: string
+  minimum_estimated_monthly_sales: number
+  maximum_risk_severity: string
+  allow_restricted: boolean
+  allow_approval_required: boolean
+  allow_unknown_risk: boolean
+}
+
+export interface FeesIn {
+  referral_fee: string
+  referral_fee_rate: string
+  fulfillment_fee: string
+  other_selling_fees: string
+}
+
+/** One file's own outcome inside a batch. A REJECTED file never ran, so its
+ *  counts stay 0 — "never processed", not a measured zero. */
+export interface BatchFileOut {
+  ordinal: number
+  filename: string
+  content_type: string | null
+  size_bytes: number
+  status: "SUCCESS" | "PARTIAL_SUCCESS" | "FAILED" | "REJECTED"
+  execution_id: string | null
+  warnings: string[]
+  errors: string[]
+  records_total: number
+  records_processed: number
+  records_with_errors: number
+  warning_count: number
+}
+
+export interface BatchResponse {
+  batch_id: string
+  created_at: string
+  status: "SUCCESS" | "PARTIAL_SUCCESS" | "FAILED"
+  total_files: number
+  succeeded_files: number
+  failed_files: number
+  persisted: boolean
+  records_total: number
+  records_processed: number
+  records_with_errors: number
+  warning_count: number
+  files: BatchFileOut[]
 }
