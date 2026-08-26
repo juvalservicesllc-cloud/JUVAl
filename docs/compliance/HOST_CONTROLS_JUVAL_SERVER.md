@@ -6,7 +6,10 @@ repository. Every row was produced by running the stated command on
 were re-measured on 2026-08-26 — see §5. H-5 and H-11 were closed, and
 H-3/H-7/H-9 were reinvestigated, later the same day — see §6. The user
 then resolved the three pending decisions (H-3, H-7, H-9) and approved a
-final reboot as the H-16 verification gate — see §7.
+final reboot as the H-16 verification gate — see §7. The user then
+applied the H-7 journald policy and executed the real reboot; H-7 and
+H-16 were verified against direct post-reboot evidence, closing the
+host-hardening phase — see §9.
 
 **Scope.** This host's permanent role is formalized in
 [`ADR-027`](../adr/ADR-027-juval-server-role.md): development / CI-like
@@ -35,22 +38,22 @@ step, after which the row can be upgraded).
 
 | # | Requirement | Source | Implementation | Verification command | Evidence (2026-08-24) | Gap | Owner | Status |
 |---|---|---|---|---|---|---|---|---|
-| H-1 | Host firewall enabled | RF-02 | UFW | `systemctl is-active ufw`; `/etc/default/ufw`, `/etc/ufw/ufw.conf` (world-readable); `sudo ufw status verbose` | `active`; default policy read directly 2026-08-24: `DEFAULT_INPUT_POLICY="DROP"`, `DEFAULT_OUTPUT_POLICY="ACCEPT"`, `DEFAULT_FORWARD_POLICY="DROP"`, `IPV6=yes`; **rule allow-list reported by the user 2026-08-26 (`sudo ufw status verbose`)**: logging low, default deny incoming, default allow outgoing, routed disabled, `22/tcp` (OpenSSH) allowed, `5173/tcp` allowed **only from `192.168.0.0/24`**, `8000/tcp` allowed **only from `192.168.0.0/24`**, OpenSSH IPv6 allowed | None — allow-list now enumerated, closing the prior sudo gap. The agent independently re-confirmed 2026-08-26 it still has no sudo (`sudo -n true` → `a password is required`), so this row's evidence is user-reported, not agent-executed | User (ran the sudo command and reported output) | **VERIFIED** (2026-08-26 — upgraded from `PARTIAL`; allow-list matches the intended LAN-only exposure for 5173/8000, see H-3) |
-| H-2 | Brute-force protection | RF-02 | fail2ban | `systemctl is-active fail2ban`; `/etc/fail2ban/jail.conf`, `/etc/fail2ban/jail.d/*.conf` (world-readable); `sudo fail2ban-client status sshd` | `active`; effective `sshd` jail policy read directly 2026-08-24: `bantime=10m`, `findtime=10m`, `maxretry=5`; **live state reported by the user 2026-08-26 (`sudo fail2ban-client status sshd`)**: jail active, currently failed 0, total failed 0, currently banned 0, total banned 0, journal filter active | None — live ban state now confirmed, closing the prior sudo gap. Agent-side sudo access independently re-checked 2026-08-26 (still unavailable), so this row's evidence is user-reported | User (ran the sudo command and reported output) | **VERIFIED** (2026-08-26 — upgraded from `PARTIAL`; jail is live and the host has no ongoing brute-force activity) |
+| H-1 | Host firewall enabled | RF-02 | UFW | `systemctl is-active ufw`; `/etc/default/ufw`, `/etc/ufw/ufw.conf` (world-readable); `sudo ufw status verbose` | `active`; default policy read directly 2026-08-24: `DEFAULT_INPUT_POLICY="DROP"`, `DEFAULT_OUTPUT_POLICY="ACCEPT"`, `DEFAULT_FORWARD_POLICY="DROP"`, `IPV6=yes`; **rule allow-list reported by the user 2026-08-26 (`sudo ufw status verbose`)**: logging low, default deny incoming, default allow outgoing, routed disabled, `22/tcp` (OpenSSH) allowed, `5173/tcp` allowed **only from `192.168.0.0/24`**, `8000/tcp` allowed **only from `192.168.0.0/24`**, OpenSSH IPv6 allowed | None — allow-list now enumerated, closing the prior sudo gap. The agent independently re-confirmed 2026-08-26 it still has no sudo (`sudo -n true` → `a password is required`), so this row's evidence is user-reported, not agent-executed | User (ran the sudo command and reported output) | **VERIFIED** (2026-08-26 — upgraded from `PARTIAL`; allow-list matches the intended LAN-only exposure for 5173/8000, see H-3; user-reported unchanged post-reboot 2026-08-26 session 4, see §9) |
+| H-2 | Brute-force protection | RF-02 | fail2ban | `systemctl is-active fail2ban`; `/etc/fail2ban/jail.conf`, `/etc/fail2ban/jail.d/*.conf` (world-readable); `sudo fail2ban-client status sshd` | `active`; effective `sshd` jail policy read directly 2026-08-24: `bantime=10m`, `findtime=10m`, `maxretry=5`; **live state reported by the user 2026-08-26 (`sudo fail2ban-client status sshd`)**: jail active, currently failed 0, total failed 0, currently banned 0, total banned 0, journal filter active | None — live ban state now confirmed, closing the prior sudo gap. Agent-side sudo access independently re-checked 2026-08-26 (still unavailable), so this row's evidence is user-reported | User (ran the sudo command and reported output) | **VERIFIED** (2026-08-26 — upgraded from `PARTIAL`; jail is live and the host has no ongoing brute-force activity; user-reported unchanged post-reboot 2026-08-26 session 4, see §9) |
 | H-3 | Network exposure minimised | RF-02 | Default install | `ss -tulnp \| grep LISTEN` | **Re-measured 2026-08-24 22:34**: `:22` (SSH, all interfaces) and DNS `:53` (loopback only) as before, **plus `:5173` (Vite dev server) and `:8000` (FastAPI/uvicorn) bound to `0.0.0.0`** — two user-started foreground processes, LAN-exposed rather than localhost-only. **2026-08-26**: same two processes still listening on `0.0.0.0:5173`/`0.0.0.0:8000` (`ps -o lstart` confirms unchanged since 2026-08-24 22:31/22:32) — the *application* bind is still all-interfaces and unauthenticated at the app layer. What is new is the perimeter control: H-1's user-reported UFW rule enumeration confirms `5173/tcp` and `8000/tcp` are allowed **only from `192.168.0.0/24`**, so reachability is firewall-constrained to the LAN subnet, not open to the internet | The app itself still binds `0.0.0.0` with no application-layer auth (`JUVAL_AUTH_MODE=disabled`). **USER DECISION recorded 2026-08-26 (§7)**: keep `0.0.0.0` — cross-device LAN development/testing is a real current need — with UFW's LAN-only allow-list (`5173/tcp`, `8000/tcp` restricted to `192.168.0.0/24`, default-deny incoming) as the compensating control. This is a scoped, time-boxed acceptance for the **current development/server phase**, explicitly to be revisited before any public/production exposure — it does not satisfy the control's own definition (loopback binding or application-layer auth), so it is **not** `VERIFIED` | The app itself still has no application-layer authentication and binds all interfaces; the LAN-only firewall constraint (H-1) is the entire compensating control. Nothing left for the agent to do here — the decision is made and recorded, not a technical gap | User (decision made 2026-08-26) | **PARTIAL — ACCEPTED DEVELOPMENT-LAN RISK / COMPENSATING CONTROL** (2026-08-26; not `VERIFIED` by design — see §7) |
 | H-4 | SSH key authentication works | RF-04 | `~/.ssh/authorized_keys` | `ssh -o BatchMode=yes juval@…` | Historical verification (2026-08-24, from the Windows workstation): non-interactive key auth succeeds. **Could not be re-tested from `juval-server` itself this session** — this host holds only the public key in `authorized_keys` (`stat`: `600 juval:juval`), no private key material, by design (a server does not need to SSH into itself) | Re-verification must happen from the client side, as it did originally — do not treat the absence of a private key on this host as a finding | Agent | **VERIFIED** (2026-08-24, workstation-side; not independently re-testable from this host) |
-| H-5 | SSH password authentication disabled | RF-04 | `/etc/ssh/sshd_config.d/50-cloud-init.conf` (`PasswordAuthentication no`) | `sudo sshd -T \| grep -E 'passwordauthentication\|pubkeyauthentication\|permitrootlogin'`; external client test forcing each auth method in turn | **USER-EXECUTED, 2026-08-26**: user edited the cloud-init drop-in (backing up the original first, see §2), `sudo sshd -t` passed, `sudo sshd -T` shows `permitrootlogin without-password`, `pubkeyauthentication yes`, `passwordauthentication no`; `sudo systemctl reload ssh` → `is-active` = `active`. **External Windows client tests (USER-EXECUTED)**: (1) `ssh -o PasswordAuthentication=no juval@192.168.0.26` → succeeded, normal shell — key-only auth works; (2) `ssh -o PubkeyAuthentication=no -o PreferredAuthentications=password -o NumberOfPasswordPrompts=1 juval@192.168.0.26` → `Permission denied (publickey)` — password-only auth is rejected by the server. Test (2) is the direct external proof of the H-5 requirement, mirroring how H-4 was verified client-side. **AGENT-EXECUTED, same session**: confirmed via `sshd`'s actual `Include /etc/ssh/sshd_config.d/*.conf` glob semantics (read from `/etc/ssh/sshd_config` and tested against real glob/`fnmatch` behavior) that the backup file `50-cloud-init.conf.backup-20260826` does **not** match `*.conf` and is therefore never read by `sshd` — see §2 | None. The evidence chain (local sudo config check + reload + two independent external auth-method tests) is sufficient and self-consistent | User (change + validation + external tests), Agent (backup-file glob safety check) | **VERIFIED** (2026-08-26 — upgraded from `NOT_IMPLEMENTED`; USER-EXECUTED evidence, agent-verified backup-file safety) |
+| H-5 | SSH password authentication disabled | RF-04 | `/etc/ssh/sshd_config.d/50-cloud-init.conf` (`PasswordAuthentication no`) | `sudo sshd -T \| grep -E 'passwordauthentication\|pubkeyauthentication\|permitrootlogin'`; external client test forcing each auth method in turn | **USER-EXECUTED, 2026-08-26**: user edited the cloud-init drop-in (backing up the original first, see §2), `sudo sshd -t` passed, `sudo sshd -T` shows `permitrootlogin without-password`, `pubkeyauthentication yes`, `passwordauthentication no`; `sudo systemctl reload ssh` → `is-active` = `active`. **External Windows client tests (USER-EXECUTED)**: (1) `ssh -o PasswordAuthentication=no juval@192.168.0.26` → succeeded, normal shell — key-only auth works; (2) `ssh -o PubkeyAuthentication=no -o PreferredAuthentications=password -o NumberOfPasswordPrompts=1 juval@192.168.0.26` → `Permission denied (publickey)` — password-only auth is rejected by the server. Test (2) is the direct external proof of the H-5 requirement, mirroring how H-4 was verified client-side. **AGENT-EXECUTED, same session**: confirmed via `sshd`'s actual `Include /etc/ssh/sshd_config.d/*.conf` glob semantics (read from `/etc/ssh/sshd_config` and tested against real glob/`fnmatch` behavior) that the backup file `50-cloud-init.conf.backup-20260826` does **not** match `*.conf` and is therefore never read by `sshd` — see §2 | None. The evidence chain (local sudo config check + reload + two independent external auth-method tests) is sufficient and self-consistent | User (change + validation + external tests), Agent (backup-file glob safety check) | **VERIFIED** (2026-08-26 — upgraded from `NOT_IMPLEMENTED`; USER-EXECUTED evidence, agent-verified backup-file safety; persisted through the real reboot in session 4, `sshd -T` reported unchanged and `ssh -o PasswordAuthentication=no` reconnect succeeded externally, see §9) |
 | H-6 | OS security patches current | RF-02 (F-01) | `unattended-upgrades` | `apt list --upgradable`; `systemctl is-enabled unattended-upgrades` | 1 upgradable package, **0 security**; unattended-upgrades `enabled`; apt metadata refreshed 2026-08-24 21:22; no `/var/run/reboot-required`; kernel 6.8.0-138 | None currently | Agent | **VERIFIED** |
-| H-7 | Persistent audit logging | RF-05 | systemd-journald + rsyslog | `ls -d /var/log/journal`; `ls -l /var/log/auth.log`; `cat /etc/logrotate.d/rsyslog`; `cat /etc/systemd/journald.conf` | **Re-checked 2026-08-26**: `/var/log/journal` present (persistent, survives reboot), 44.2M current usage; `auth.log` present, mode `0640 syslog:adm`, 242 KB. `/etc/logrotate.d/rsyslog` (world-readable) shows `auth.log` **is** on an explicit bounded retention: `rotate 4` + `weekly` + `compress` ≈ 4 weeks of syslog/auth history. `/etc/systemd/journald.conf` has `SystemMaxUse`/`MaxRetentionSec`/`MaxFileSec` all commented out — journald retention relies on upstream defaults (auto-vacuum, not an explicit pinned policy) rather than a value chosen and recorded for this host | **USER DECISION recorded 2026-08-26 (§7)**: explicit 30-day journald retention, for determinism/reproducibility rather than implicit defaults. Design confirmed against this host: no existing `journald.conf.d/` drop-ins (directory absent), `journald.conf` itself has every retention knob commented out, `systemd 255` supports `MaxRetentionSec` natively. Smallest config that satisfies the decision: a single-line `[Journal]\nMaxRetentionSec=30day` drop-in. The agent has no sudo on this host (`sudo -n true` → `a password is required`, re-confirmed) and cannot write `/etc/systemd/journald.conf.d/` or restart `systemd-journald` itself — **STOPPED per Gate 3**, exact consolidated sudo block given in §7 for the user to run | Config designed, not yet applied — auth.log retention is real and bounded (~4 weeks, unaffected by this change); journald's explicit 30-day policy needs the user to run the §7 block, then report `systemd-analyze cat-config` output back so this row can be upgraded to `VERIFIED` | User (must run §7 block) | **READY_FOR_USER_SUDO** (2026-08-26 — decision recorded, config designed and evidenced as correct for this host, execution pending; not yet `VERIFIED` — no effective-configuration evidence exists until the user runs it) |
+| H-7 | Persistent audit logging | RF-05 | systemd-journald + rsyslog | `ls -d /var/log/journal`; `ls -l /var/log/auth.log`; `cat /etc/logrotate.d/rsyslog`; `cat /etc/systemd/journald.conf`; `systemd-analyze cat-config systemd/journald.conf` | **Applied (USER-EXECUTED) and verified post-reboot (AGENT-EXECUTED), 2026-08-26 — see §9**: `/etc/systemd/journald.conf.d/99-juval-retention.conf` created (`[Journal]\nMaxRetentionSec=30day`), `systemd-analyze cat-config` showed it merged pre-reboot, `systemctl restart systemd-journald` → `active`, `journalctl --disk-usage` 44.2M pre-reboot. After the real reboot the agent independently re-read the drop-in directly (world-readable, content unchanged), re-ran `systemd-analyze cat-config systemd/journald.conf \| grep -B2 -A1 MaxRetentionSec` (no sudo needed) and confirmed the effective, merged value is still `MaxRetentionSec=30day` sourced from `99-juval-retention.conf`; `systemctl is-active systemd-journald` → `active`; `journalctl --disk-usage` → 60.4M. The host monitor's own `log.growth` check (H-11/H-15) independently reported `60.4M` in its first post-reboot run, a third confirming source | None — effective configuration is confirmed post-reboot by direct agent read of the drop-in and by `systemd-analyze`'s own merge resolution, not only by user report. As noted at design time, no log on this host is yet 30 days old, so *actual pruning* still cannot be demonstrated — "effective configuration persisted across reboot" is what is verified here, matching the standard used at design time | User (applied pre-reboot), Agent (post-reboot re-verification) | **VERIFIED** (2026-08-26, session 4 — upgraded from `READY_FOR_USER_SUDO`; effective config confirmed both pre- and post-reboot) |
 | H-8 | Log rotation | RF-05 | logrotate.timer | `systemctl is-enabled logrotate.timer` | `enabled` | None | Agent | **VERIFIED** |
 | H-9 | Repository file permissions | RF-04 | Filesystem | `stat -c "%A %U:%G"`; `umask`; `git config core.sharedRepository` | **Re-checked 2026-08-26**: `/home/juval` is `drwxr-x---` (no world access); `~/JUVAl` and `~/JUVAl/APP` are `drwxrwxr-x juval:juval` (group-writable); default `umask 0002` explains the group-write bit — it is not a one-off misconfiguration, every new file/dir inherits it; `core.sharedRepository` unset (git's own default, not a shared-repo setup) | **USER DECISION recorded 2026-08-26 (§7)**: explicitly **do not** perform a repository-wide recursive `chmod` — single-user host, current measured risk is low (no second local account exists to abuse group-write access), and the blast radius (`.venv/`, `node_modules/`, tens of thousands of files, some possibly open in an active dev session) exceeds the security benefit. This closes the investigation, not the control: the underlying permissions are unchanged and group-write access remains technically present | Repo dirs remain group-writable (`umask 0002`, applied consistently, not a one-off). Accepted by explicit user decision, not by agent default. If future hardening is warranted (e.g. before this host stops being single-user), the targeted alternative is tightening specific sensitive paths only (e.g. `.env`, any local secret material) rather than the whole tree — not attempted here, no such path currently holds anything sensitive beyond what H-10 already confirms is git-ignored | User (decision made 2026-08-26) | **DEFERRED / ACCEPTED_RISK** (2026-08-26 — reclassified from `PARTIAL` to record that this is now a deliberate, explicit user decision rather than an unresolved gap; never `VERIFIED`) |
 | H-10 | Secrets absent from the working copy | RF-02 | `.gitignore` + scanner | `python tools/compliance_check.py` | `secret_scan`: no secret-shaped strings in 312 files; `.env` and `frontend/.env.local` present but git-ignored and never staged | None | Agent | **VERIFIED** |
-| H-11 | Capacity headroom | Ops | `tools/host_monitor.sh` (H-15) | `df -h /`; `free -h`; read `tools/host_monitor.sh` disk/memory threshold logic; `journalctl --user -u juval-host-monitor.service` | **Re-checked 2026-08-26**: 98 G volume, 11% used (83 G free); 13 GiB RAM, 4 GiB swap, 11 GiB available. `tools/host_monitor.sh` (verified by reading the script, lines 20-38) has real coded thresholds, not just informational output: disk WARN at ≥80%, FAIL at ≥90%; memory WARN at <10% available, FAIL at <5% available. This runs automatically every ~30 min via the H-15 timer (confirmed live in Gate 4: consecutive journal entries 12:49/13:20/13:51/14:22/14:53/15:23 UTC, all with real PASS/WARN results) | None for disk/RAM — thresholds exist, are coded (not just displayed), and run unattended on a verified cadence. The `log.growth` check in the same script is informational-only (no threshold, always PASS) — that gap belongs to H-7's retention question, not to this capacity control | Agent | **VERIFIED** (2026-08-26 — upgraded from `PARTIAL`; the "no alerting on thresholds" gap was already closed by H-15's `host_monitor.sh`, just not previously cross-referenced here) |
+| H-11 | Capacity headroom | Ops | `tools/host_monitor.sh` (H-15) | `df -h /`; `free -h`; read `tools/host_monitor.sh` disk/memory threshold logic; `journalctl --user -u juval-host-monitor.service` | **Re-checked 2026-08-26**: 98 G volume, 11% used (83 G free); 13 GiB RAM, 4 GiB swap, 11 GiB available. `tools/host_monitor.sh` (verified by reading the script, lines 20-38) has real coded thresholds, not just informational output: disk WARN at ≥80%, FAIL at ≥90%; memory WARN at <10% available, FAIL at <5% available. This runs automatically every ~30 min via the H-15 timer (confirmed live in Gate 4: consecutive journal entries 12:49/13:20/13:51/14:22/14:53/15:23 UTC, all with real PASS/WARN results) | None for disk/RAM — thresholds exist, are coded (not just displayed), and run unattended on a verified cadence. The `log.growth` check in the same script is informational-only (no threshold, always PASS) — that gap belongs to H-7's retention question, not to this capacity control | Agent | **VERIFIED** (2026-08-26 — upgraded from `PARTIAL`; the "no alerting on thresholds" gap was already closed by H-15's `host_monitor.sh`, just not previously cross-referenced here; reboot persistence confirmed agent-side in session 4 — timer active immediately post-boot and its first unattended run at 16:21:41 UTC returned `ALL CHECKS PASS`, see §9) |
 | H-12 | Backup and restore of source code | Ops / RF-05 | GitHub (`origin`) | fresh `git clone` + `diff -r` against the working tree | **Restore-tested 2026-08-24**: cloned `origin/master` into a scratch directory; `diff -r` against the working tree showed zero differences beyond this session's own not-yet-committed edits and known git-ignored artifacts (`.env.local`, `frontend/dist`, `juval_runs.db`, `*.egg-info`) | None for source code specifically. **Secrets and local-only config remain `NOT_IMPLEMENTED` by design** — no destination exists that is both off-host and as secure as this host, and copying a secret to an insecure destination is explicitly worse than no backup (ADR-027 §"Expectativas de backup") | Agent | **VERIFIED** (source code only) |
 | H-13 | Browser E2E dependencies | Gate 8 | Playwright | `ldd chrome-headless-shell \| grep "not found"`; `E2E_BASE_URL=... npx playwright test` | **Resolved 2026-08-26**: `/var/log/apt/history.log` shows `Start-Date: 2026-08-26 13:12:37`, `Commandline: apt-get install -y --no-install-recommends libasound2t64 libatk-bridge2.0-0t64 libatk1.0-0t64 libatspi2.0-0t64 ... xvfb ...`, `Requested-By: juval (1000)` (sudo, with the user-scoped nvm `npx` exposed on `PATH`); all 9 previously-missing libraries confirmed present by direct `find` (`libatk-1.0.so.0`, `libatk-bridge-2.0.so.0`, `libXcomposite.so.1`, `libXdamage.so.1`, `libXfixes.so.3`, `libXrandr.so.2`, `libgbm.so.1`, `libasound.so.2`, `libatspi.so.0` all under `/usr/lib/x86_64-linux-gnu/`); `ldd` on both `chrome-headless-shell` and `chrome` (`~/.cache/ms-playwright/chromium{,_headless_shell}-1234/...`) shows **zero** `not found` lines, both binaries answer `--version` (`Google Chrome for Testing 151.0.7922.34`); **full E2E suite executed for real** on isolated ports (backend `127.0.0.1:8001`, fresh SQLite db; frontend `vite build` + `npm run preview --host 127.0.0.1 --port 5180`, avoiding the pre-existing LAN-bound 5173/8000 dev servers) — **27/27 passing**, same count as the historical Windows baseline | None | Agent (deps install by User via sudo; E2E execution and verification by Agent) | **VERIFIED** (2026-08-26 — upgraded from `BLOCKED_EXTERNAL`; the Linux E2E blocker is closed) |
 | H-14 | Production service hardening | ADR-018 | — | — | Host runs no JUVAl service by design | — | — | **NOT_APPLICABLE** |
 | H-15 | Host monitoring (disk/RAM/load/temp/failed units/log growth/backup status) | Ops, Gate 6 | `tools/host_monitor.sh` + `systemd --user` timer | `systemctl --user status juval-host-monitor.timer`; `journalctl --user -u juval-host-monitor.service` | **Implemented and verified 2026-08-24**; **re-verified live 2026-08-26**: `systemctl --user show` reports `ActiveState=active`, `Result=success`, `LastTriggerUSec` = 2026-08-26 15:23:39 UTC; six consecutive real runs inspected in the journal (12:49→15:23 UTC, ~30 min apart), all `PASS`/`PASS WITH WARNINGS` with correct per-check reasoning (e.g. flagged 1 unpushed commit mid-session, cleared once pushed). Disk/memory checks are real coded thresholds (80/90%, 10/5%) — see H-11. **2026-08-26**: the two systemd unit files (`juval-host-monitor.timer`/`.service`) were copied byte-for-byte from `~/.config/systemd/user/` into `tools/systemd/` (git-tracked, `diff` confirmed identical) with an install `README.md` — closing the prior "not reproducible from Git" gap; the live host's copy in `~/.config/systemd/user/` was not modified | Only this host's own state; no alert delivery channel configured (no email/webhook) — a human must check `journalctl --user` or the timer status, there is no push notification. `log.growth` check is informational only (no threshold) | Agent | **VERIFIED** (re-confirmed 2026-08-26; unit files now git-tracked under `tools/systemd/`) |
-| H-16 | Reboot persistence for user-level automation | Ops, Gate 7 | `loginctl enable-linger juval` | `loginctl show-user juval \| grep Linger`; full PRECHECK/POSTCHECK procedure in §7 | **Enabled 2026-08-24 without sudo** (`Linger=yes`), re-confirmed 2026-08-26. All non-reboot host-control work is now complete (H-1/H-2/H-3/H-5/H-9/H-11/H-13/H-15 closed or explicitly decided; H-7 config designed and staged). **Approved by the user 2026-08-26 as the final verification gate** — a real controlled reboot, not performed by the agent. Full procedure with concrete PRECHECK baseline values (boot ID, uptime, listening ports, running dev-server PIDs, git HEAD) written into §7 | Not reboot-tested — reboot itself requires the user (`sudo reboot`), out of scope for agent execution regardless of approval. "The mechanism is enabled and the procedure is ready" is reported here, not "reboot was tested and the timer fired" | User (must execute §7) | **READY_FOR_USER_REBOOT** (2026-08-26 — mechanism enabled, all prerequisite work closed, exact procedure staged in §7; still not `VERIFIED` until the user runs it and postchecks pass) |
+| H-16 | Reboot persistence for user-level automation | Ops, Gate 7 | `loginctl enable-linger juval` | `loginctl show-user juval \| grep Linger`; full PRECHECK/POSTCHECK procedure in §7; post-reboot re-verification in §9 | **Real reboot executed (USER-EXECUTED) and postchecked (AGENT-EXECUTED + USER-EXECUTED external), 2026-08-26 — see §9**: new boot ID `a97e9f80ac1c47ec940e46b152b48606` (agent-confirmed via `journalctl --list-boots`, prior boot ended 16:16:00 UTC, new boot started 16:16:12 UTC); external Windows key-only SSH reconnect succeeded (USER-EXECUTED); `Linger=yes` persisted (agent-confirmed); `juval-host-monitor.timer` `enabled`/`active (waiting)` immediately after boot (agent-confirmed), and its first post-reboot run at 16:21:41 UTC executed unattended with `RESULT: ALL CHECKS PASS` (agent-captured live from the journal, not user-reported); toolchain (Node v24.19.0, npm 11.17.0, system + venv Python 3.12.3) confirmed post-reboot (agent-executed); repository clean at `ddb7a66`, matching the pre-reboot hash (agent-executed); UFW and fail2ban reported by the user as active with unchanged rules/jail state (agent has no sudo to re-verify, consistent with every prior session); expected absence of `:5173`/`:8000` listeners confirmed (agent-executed, `ss -lntp`) | None against the acceptance criteria enumerated for this gate. Sudo-gated checks (`ufw status`, `fail2ban-client status`, `sshd -T`) remain user-reported rather than agent-re-executed post-reboot — an unchanged limitation carried from every earlier session, not new to this pass | User (reboot, external SSH test, UFW/fail2ban reporting), Agent (boot-ID/timer/monitor-run/toolchain/repo/listener verification) | **VERIFIED** (2026-08-26, session 4 — upgraded from `READY_FOR_USER_REBOOT`; all enumerated H-16 acceptance criteria satisfied) |
 
 ## 2. H-5 — SSH password authentication is disabled (closed 2026-08-26)
 
@@ -592,7 +595,169 @@ closing evidence for H-1/H-2/H-5/H-15's persistence claims as well
 (currently `VERIFIED` on pre-reboot evidence; a clean POSTCHECK is
 confirmation, not a prerequisite for their current status).
 
-## 8. Related
+## 9. 2026-08-26 (session 4) — real reboot executed; H-7 and H-16 verified; host hardening closed
+
+Baseline for this pass: `ddb7a66`, clean tree. `git fetch origin` then
+`git rev-list --left-right --count HEAD...origin/master` read `0 0` —
+`origin/master` already carries `ddb7a66` (the prior session's commit
+that could not be pushed from this host for lack of Linux-side GitHub
+credentials has since reached GitHub via the established Linux →
+Windows → GitHub bridge). This is reported plainly because the mission
+brief anticipated origin possibly lagging for that exact reason — it did
+not, this pass.
+
+### 9.1 H-7 — journald 30-day retention applied and verified across reboot
+
+**USER-EXECUTED, pre-reboot**: created
+`/etc/systemd/journald.conf.d/99-juval-retention.conf`
+(`[Journal]\nMaxRetentionSec=30day`), confirmed with
+`systemd-analyze cat-config systemd/journald.conf` that it merged
+correctly, `systemctl restart systemd-journald` → `active`,
+`journalctl --disk-usage` → 44.2M.
+
+**Real reboot executed (USER-EXECUTED)**, then reconnected externally via
+key-only SSH from Windows.
+
+**AGENT-EXECUTED, post-reboot, this session**: independently re-read
+`/etc/systemd/journald.conf.d/99-juval-retention.conf` directly
+(world-readable, content unchanged: `[Journal]` / `MaxRetentionSec=30day`);
+re-ran `systemd-analyze cat-config systemd/journald.conf` (no sudo
+required — this command merges and displays config, it does not need
+root) and confirmed the effective value is still sourced from
+`99-juval-retention.conf`; confirmed `systemctl is-active
+systemd-journald` → `active`; confirmed `journalctl --disk-usage` →
+60.4M. A third, independent confirmation of the same 60.4M figure came
+from the host monitor's own `log.growth` check in its first post-reboot
+run (§9.3) — three separately-derived reads of the same effective state
+agree. This is stronger evidence than the design-time report (which was
+necessarily pre-application) and closes the gap the prior session left
+open. **Matrix row upgraded `READY_FOR_USER_SUDO → VERIFIED`.**
+
+As at design time: no journal entry on this host is yet 30 days old, so
+actual pruning cannot be demonstrated today. What is verified is that the
+explicit policy is the effective, active configuration, and that it
+survived a real reboot — not that pruning has fired.
+
+### 9.2 Real reboot — evidence
+
+- New boot ID `a97e9f80ac1c47ec940e46b152b48606`, confirmed AGENT-EXECUTED
+  via `journalctl --list-boots`: previous boot
+  (`d4e7004164f345c29cc33c467fae1e3b`) ended 2026-08-26 16:16:00 UTC, new
+  boot started 16:16:12 UTC. `uptime` at first agent check showed ~2
+  minutes — a genuinely fresh boot, not a stale/cached value.
+- External reconnect from the Windows workstation via
+  `ssh -o PasswordAuthentication=no juval@192.168.0.26` succeeded
+  (USER-EXECUTED, external evidence, same evidentiary standard as H-4/H-5).
+- `sudo sshd -T` reported `permitrootlogin without-password` /
+  `pubkeyauthentication yes` / `passwordauthentication no`
+  (USER-EXECUTED — the agent still has no sudo on this host,
+  `sudo -n true` → `a password is required`, re-confirmed this session;
+  `systemctl is-active ssh` → `active` is the one piece the agent could
+  confirm directly). Values are unchanged from the pre-reboot baseline.
+  **H-5 remains `VERIFIED`**, now with reboot persistence confirmed.
+
+### 9.3 H-16 — final decision: VERIFIED
+
+All acceptance criteria enumerated for this gate were checked, mixing
+AGENT-EXECUTED and USER-EXECUTED evidence honestly rather than treating
+either alone as sufficient:
+
+- New boot ID and fresh uptime — **AGENT-EXECUTED** (§9.2).
+- External key-only SSH reconnect succeeded — **USER-EXECUTED**.
+- `PasswordAuthentication no` persisted — **USER-EXECUTED** (`sshd -T`
+  needs sudo the agent doesn't have).
+- UFW active, same allow-list (LAN-only `5173`/`8000`, open `22`,
+  default-deny incoming) — **USER-EXECUTED** (`ufw status` also needs
+  sudo; agent re-confirmed it still cannot run it: `ERROR: You need to
+  be root to run this script`).
+- fail2ban active, `sshd` jail live, 0/0/0/0 — **USER-EXECUTED**
+  (`fail2ban-client status` also needs sudo; agent re-confirmed:
+  `Permission denied to socket`).
+- journald 30-day policy persisted, effective config confirmed —
+  **AGENT-EXECUTED** (§9.1).
+- `juval-host-monitor.timer` survived reboot without a manual
+  re-enable — **AGENT-EXECUTED**: `systemctl --user is-enabled` →
+  `enabled`, `is-active` → `active (waiting)` since 16:16:21 UTC, next
+  trigger 16:21:09 UTC, all read directly, no sudo needed (user-level
+  systemd instance kept alive by linger).
+- `loginctl show-user juval -p Linger` → `Linger=yes` — **AGENT-EXECUTED**.
+- The monitor's first unattended post-reboot run actually fired and
+  passed — **AGENT-EXECUTED, captured live**: the agent set up a
+  bounded background watch on
+  `journalctl --user -u juval-host-monitor.service` before the
+  scheduled 16:21:09 UTC trigger and captured the real run at
+  16:21:41 UTC:
+
+  ```
+  [PASS] disk./                 11% used
+  [PASS] memory                 93% available
+  [PASS] load                   1-min load 0.21 / 4 cores = 0.05x
+  [PASS] temperature             46C
+  [PASS] systemd.failed          0 failed units (system + user)
+  [PASS] git.backup              working tree clean, in sync with upstream (behind: 0)
+  [PASS] log.growth              journal disk usage: 60.4M
+  RESULT: ALL CHECKS PASS
+  ```
+
+  This is a real, unattended, unscripted-by-the-agent execution — not a
+  fabrication and not user-reported. It also independently corroborates
+  the repository state (§9.4) and the journald figure (§9.1) from a
+  third source.
+- Node/npm and Python/venv usable post-reboot — **AGENT-EXECUTED**:
+  `node --version` → `v24.19.0`, `npm --version` → `11.17.0`,
+  `python3 --version` → `Python 3.12.3`, `.venv/bin/python --version` →
+  `Python 3.12.3` — all unchanged from pre-reboot.
+- Repository intact at the expected commit — **AGENT-EXECUTED**:
+  `git status --short` empty, `git rev-parse --short HEAD` → `ddb7a66`,
+  matching the pre-reboot hash exactly (§9.4).
+- Expected absence of dev-server listeners — **AGENT-EXECUTED**:
+  `ss -lntp` shows only `0.0.0.0:22` / `[::]:22`; no `:5173`/`:8000`
+  listener. This is the expected outcome per ADR-027 (no persistent
+  JUVAl service on this host) — **not** treated as a failure.
+- Host resources healthy — **AGENT-EXECUTED**: `df -h /` → 98G volume,
+  10G used, 83G available, 11% used; `free -h` → 13Gi total, ~838Mi
+  used, ~12Gi available, swap unused.
+
+Every enumerated acceptance criterion is satisfied by real evidence.
+**Matrix row upgraded `READY_FOR_USER_REBOOT → VERIFIED`.** The one
+honest limitation, unchanged from every earlier session, is that the
+three sudo-gated checks (UFW, fail2ban, `sshd -T`) remain user-reported
+rather than agent-re-executed — the agent has never had sudo on this
+host at any point in this project, and that has not changed this
+session.
+
+### 9.4 Repository state, this session
+
+`git status --short` was empty and `git rev-parse --short HEAD` read
+`ddb7a66` both before and after the reboot-evidence review in this
+session — no functional or product code was touched, only this
+documentation file. `git fetch origin` plus `git rev-list --left-right
+--count HEAD...origin/master` → `0 0`: this repository is not behind
+origin, and is not blocked on the Linux-credential caveat the mission
+brief anticipated.
+
+### 9.5 Not touched this session, by mission constraint
+
+FusionAuth, enrichment, AI Analyst, product code, tests were not
+started or modified — this was a documentation/evidence-closure pass
+only. H-3 and H-9 were **not** reinterpreted: H-3 remains `PARTIAL —
+ACCEPTED DEVELOPMENT-LAN RISK / COMPENSATING CONTROL`, H-9 remains
+`DEFERRED / ACCEPTED_RISK`, per explicit instruction. No repository-wide
+`chmod` was performed. No persistent frontend/backend systemd services
+were created — the absence of `:5173`/`:8000` listeners is expected,
+not a gap to close.
+
+### 9.6 Architectural closure
+
+With H-7 and H-16 both verified against real post-reboot evidence, and
+no new material blocker discovered, the host-hardening phase for
+`juval-server` is declared **`HOST_HARDENING_COMPLETE`**. This closes a
+phase of work, not the project: FusionAuth deployment, AI Analyst,
+enrichment, and production deployment (Railway/Vercel/Supabase
+verification) remain separate, future workstreams, entirely unaffected
+by this closure and not started here.
+
+## 10. Related
 
 [`ADR-027`](../adr/ADR-027-juval-server-role.md) (host role, security/
 network/data boundaries, backup/recovery/observability expectations),
