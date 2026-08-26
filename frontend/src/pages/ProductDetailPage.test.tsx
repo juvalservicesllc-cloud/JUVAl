@@ -162,3 +162,65 @@ describe("ProductDetailPage evidence precision", () => {
     expect(evidence.getByText("1.498333333333333333333333333")).toBeInTheDocument()
   })
 })
+
+// C1.4 / C1.5 -- metric explanations and provenance-grouped confidence,
+// recovered from the Golden Product Experience (ADR-029).
+describe("ProductDetailPage explanations and confidence grouping (C1)", () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  function renderDetail() {
+    return render(
+      <MemoryRouter initialEntries={[{ pathname: "/runs/run-1/records/row-1", state: { record } }]}>
+        <Routes><Route path="/runs/:executionId/records/:recordRef" element={<ProductDetailPage />} /></Routes>
+      </MemoryRouter>,
+    )
+  }
+
+  it("explains each economic metric without recommending or recomputing", async () => {
+    renderDetail()
+    const user = userEvent.setup()
+
+    const triggers = screen.getAllByRole("group").filter((el) => el.className.includes("metric-explainer"))
+    expect(triggers.length).toBeGreaterThanOrEqual(6)
+
+    await user.click(screen.getByLabelText("What does ROI mean?"))
+    const roiText = screen.getByText(/profit divided by the cost of goods/i)
+    expect(roiText).toBeInTheDocument()
+    // Definition only: never a buy/avoid recommendation.
+    expect(roiText.textContent).not.toMatch(/should|recommend|good deal|avoid/i)
+  })
+
+  it("uses a native disclosure so the explanation works without hover", () => {
+    renderDetail()
+
+    const summary = screen.getByLabelText("What does Margin mean?")
+    expect(summary.tagName).toBe("SUMMARY")
+    expect(summary.closest("details")).toBeInTheDocument()
+  })
+
+  it("states that the decision comes from the backend engine, not the browser", () => {
+    renderDetail()
+    expect(screen.getByText(/never recalculated in the browser/i)).toBeInTheDocument()
+  })
+
+  it("groups the record's own fields by verification status", () => {
+    renderDetail()
+
+    expect(screen.getByText(/fields by confidence/i)).toBeInTheDocument()
+    const verified = screen.getByText("Verified").closest("section") as HTMLElement
+    expect(within(verified).getByText("ASIN")).toBeInTheDocument()
+    const inferred = screen.getByText("Inferred").closest("section") as HTMLElement
+    expect(within(inferred).getByText("Profit")).toBeInTheDocument()
+    const notFound = screen.getByText("Not found").closest("section") as HTMLElement
+    expect(within(notFound).getByText("UPC")).toBeInTheDocument()
+  })
+
+  it("never promotes a fixture or an inferred value into VERIFIED", () => {
+    renderDetail()
+
+    const verified = screen.getByText("Verified").closest("section") as HTMLElement
+    // selling_price/profit/roi/margin are INFERRED on this record.
+    expect(within(verified).queryByText("Selling price")).not.toBeInTheDocument()
+    expect(within(verified).queryByText("Profit")).not.toBeInTheDocument()
+  })
+})

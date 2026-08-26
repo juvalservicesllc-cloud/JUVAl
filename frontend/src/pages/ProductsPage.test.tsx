@@ -49,7 +49,7 @@ function lastRequestUrl(fetchMock: ReturnType<typeof vi.fn>): URL {
 }
 
 describe("ProductsPage", () => {
-  afterEach(() => { vi.unstubAllGlobals(); localStorage.clear() })
+  afterEach(() => { vi.unstubAllGlobals(); localStorage.clear(); sessionStorage.clear() })
 
   it("shows a loading state while the persisted-run selector is being fetched", () => {
     vi.stubGlobal("fetch", vi.fn().mockReturnValue(new Promise(() => {})))
@@ -291,7 +291,7 @@ describe("ProductsPage", () => {
 })
 
 describe("ProductsPage filtered export", () => {
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => { vi.unstubAllGlobals(); localStorage.clear(); sessionStorage.clear() })
 
   it("exports the exact canonical query the table is showing, percentages converted", async () => {
     stubFetch()
@@ -335,7 +335,7 @@ describe("ProductsPage filtered export", () => {
 // assert the *contract* behind each migrated visual, not its styling: a
 // screenshot can drift, a query parameter cannot.
 describe("ProductsPage golden-UX catalog", () => {
-  afterEach(() => { vi.unstubAllGlobals(); localStorage.clear() })
+  afterEach(() => { vi.unstubAllGlobals(); localStorage.clear(); sessionStorage.clear() })
 
   it("sends the HazMat filter server-side", async () => {
     const fetchMock = stubFetch()
@@ -412,7 +412,7 @@ describe("ProductsPage golden-UX catalog", () => {
 // the two properties that make the recovery honest: run-scoped identity, and
 // no server call.
 describe("ProductsPage favorites (recovered from Golden)", () => {
-  afterEach(() => { vi.unstubAllGlobals(); localStorage.clear() })
+  afterEach(() => { vi.unstubAllGlobals(); localStorage.clear(); sessionStorage.clear() })
 
   it("stars a record against the run, persisting locally and issuing no request", async () => {
     const fetchMock = stubFetch()
@@ -465,7 +465,7 @@ describe("ProductsPage favorites (recovered from Golden)", () => {
 // Wave B3: the final catalog pass -- default ordering, provenance legibility,
 // column hierarchy and the honesty of the favourites disclosure.
 describe("ProductsPage catalog final pass (Wave B3)", () => {
-  afterEach(() => { vi.unstubAllGlobals(); localStorage.clear() })
+  afterEach(() => { vi.unstubAllGlobals(); localStorage.clear(); sessionStorage.clear() })
 
   it("opens on profit descending and lets the operator override it", async () => {
     const fetchMock = stubFetch()
@@ -540,5 +540,90 @@ describe("ProductsPage catalog final pass (Wave B3)", () => {
 
     const table = document.querySelector(".catalog-table") as HTMLElement
     expect(within(table).getByText(/favorite \(local\)/i)).toBeInTheDocument()
+  })
+})
+
+// C1.3 -- catalog filters remembered as a local preference.
+describe("ProductsPage remembered filters (C1)", () => {
+  afterEach(() => { vi.unstubAllGlobals(); localStorage.clear(); sessionStorage.clear() })
+
+  it("restores a remembered query through the canonical server request", async () => {
+    sessionStorage.setItem("juval.catalog.query.v1", JSON.stringify({
+      search: "anchor", decision: "BUY", sort: "roi", direction: "asc", limit: 25,
+      minRoi: "30", minProfit: "", minMargin: "", confidence: "INCLUDE_INFERRED",
+      hazmat: "ABSENT", bulky: "", provenanceField: "", provenanceStatus: "",
+    }))
+    const fetchMock = stubFetch()
+    renderPage()
+    await screen.findByText("Alpha")
+
+    const params = lastRequestUrl(fetchMock).searchParams
+    expect(params.get("search")).toBe("anchor")
+    expect(params.get("decision")).toBe("BUY")
+    expect(params.get("sort")).toBe("roi")
+    expect(params.get("direction")).toBe("asc")
+    expect(params.get("limit")).toBe("25")
+    expect(params.get("confidence")).toBe("INCLUDE_INFERRED")
+    expect(params.get("hazmat")).toBe("ABSENT")
+    // Percentages still convert to canonical ratios on restore.
+    expect(params.get("min_roi")).toBe("0.3")
+  })
+
+  it("persists the canonical query as the operator filters", async () => {
+    stubFetch()
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText("Alpha")
+
+    await user.selectOptions(screen.getByLabelText(/filter by decision/i), "PASS")
+
+    await waitFor(() => {
+      const stored = JSON.parse(sessionStorage.getItem("juval.catalog.query.v1")!)
+      expect(stored.decision).toBe("PASS")
+    })
+  })
+
+  it("clears the remembered query on reset, so it does not come back", async () => {
+    stubFetch()
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText("Alpha")
+
+    await user.selectOptions(screen.getByLabelText(/filter by decision/i), "BUY")
+    await waitFor(() => expect(screen.getByRole("button", { name: /reset search & filters/i })).toBeInTheDocument())
+    await user.click(screen.getByRole("button", { name: /reset search & filters/i }))
+
+    await waitFor(() => {
+      const raw = sessionStorage.getItem("juval.catalog.query.v1")
+      expect(raw === null || JSON.parse(raw).decision === "ALL").toBe(true)
+    })
+  })
+
+  it("ignores a corrupt remembered query instead of failing the catalog", async () => {
+    sessionStorage.setItem("juval.catalog.query.v1", "{ not json")
+    const fetchMock = stubFetch()
+    renderPage()
+
+    expect(await screen.findByText("Alpha")).toBeInTheDocument()
+    expect(lastRequestUrl(fetchMock).searchParams.get("sort")).toBe("profit")
+  })
+
+  it("drops out-of-contract stored values rather than sending them to the API", async () => {
+    sessionStorage.setItem("juval.catalog.query.v1", JSON.stringify({
+      sort: "definitely_not_a_sort_key", direction: "sideways", limit: 9999,
+      decision: "MAYBE", confidence: "GUESS", hazmat: "SOMETIMES",
+    }))
+    const fetchMock = stubFetch()
+    renderPage()
+    await screen.findByText("Alpha")
+
+    const params = lastRequestUrl(fetchMock).searchParams
+    // Every invalid field falls back to its default; none reaches the server.
+    expect(params.get("sort")).toBe("profit")
+    expect(params.get("direction")).toBe("desc")
+    expect(params.get("limit")).toBe("50")
+    expect(params.get("confidence")).toBe("VERIFIED_ONLY")
+    expect(params.has("decision")).toBe(false)
+    expect(params.has("hazmat")).toBe(false)
   })
 })

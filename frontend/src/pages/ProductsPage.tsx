@@ -5,6 +5,7 @@ import { ApiError, apiErrorMessage, apiUrl } from "../api/client"
 import { getRunRecords } from "../api/records"
 import { getRuns } from "../api/runs"
 import { percentInputToRatio } from "../contract"
+import { clearCatalogQuery, loadCatalogQuery, saveCatalogQuery, type CatalogQuery } from "../catalogQuery"
 import { favoriteKey, loadFavorites, saveFavorites, toggleFavorite } from "../favorites"
 import { ProductThumbnail } from "../components/ProductThumbnail"
 import { StatusBadge } from "../components/StatusBadge"
@@ -26,6 +27,11 @@ const LIMIT_OPTIONS = [25, 50, 100]
 // presentation order only -- no value, decision or stored record is touched.
 const DEFAULT_SORT: RecordSort = "profit"
 const DEFAULT_SORT_DIRECTION: SortDirection = "desc"
+const DEFAULT_QUERY: CatalogQuery = {
+  search: "", decision: "ALL", sort: DEFAULT_SORT, direction: DEFAULT_SORT_DIRECTION, limit: 50,
+  minRoi: "", minProfit: "", minMargin: "", confidence: "VERIFIED_ONLY",
+  hazmat: "", bulky: "", provenanceField: "", provenanceStatus: "",
+}
 const SORT_LABEL: Record<RecordSort, string> = { record_ref: "Record", sku: "Product / SKU", asin: "ASIN", title: "Product", price: "Price", cog: "COG", decision: "Decision", profit: "Profit", roi: "ROI", margin: "Margin", hazmat: "HazMat", bulky: "Bulky" }
 // record_ref/sku/decision are naturally read ascending; profit/roi/margin are
 // interesting largest-first -- matches the prior client-side sort behavior.
@@ -92,21 +98,25 @@ export function ProductsPage() {
   const [runsRetry, setRunsRetry] = useState(0)
   const [recordsRetry, setRecordsRetry] = useState(0)
 
-  const [searchInput, setSearchInput] = useState("")
-  const [search, setSearch] = useState("")
-  const [decision, setDecision] = useState<"ALL" | Decision>("ALL")
-  const [sort, setSort] = useState<RecordSort>(DEFAULT_SORT)
-  const [direction, setDirection] = useState<SortDirection>(DEFAULT_SORT_DIRECTION)
-  const [limit, setLimit] = useState(50)
+  // Restored once, on mount. `offset` is deliberately not restored: a stored
+  // page number against a run whose contents may have changed would open the
+  // catalog on a page that no longer means the same thing.
+  const [restored] = useState(() => loadCatalogQuery(DEFAULT_QUERY))
+  const [searchInput, setSearchInput] = useState(restored.search)
+  const [search, setSearch] = useState(restored.search)
+  const [decision, setDecision] = useState<"ALL" | Decision>(restored.decision as "ALL" | Decision)
+  const [sort, setSort] = useState<RecordSort>(restored.sort)
+  const [direction, setDirection] = useState<SortDirection>(restored.direction)
+  const [limit, setLimit] = useState(restored.limit)
   const [offset, setOffset] = useState(0)
-  const [minRoi, setMinRoi] = useState("")
-  const [minProfit, setMinProfit] = useState("")
-  const [minMargin, setMinMargin] = useState("")
-  const [confidence, setConfidence] = useState<"VERIFIED_ONLY" | "INCLUDE_INFERRED">("VERIFIED_ONLY")
-  const [hazmat, setHazmat] = useState("")
-  const [bulky, setBulky] = useState("")
-  const [provenanceField, setProvenanceField] = useState("")
-  const [provenanceStatus, setProvenanceStatus] = useState("")
+  const [minRoi, setMinRoi] = useState(restored.minRoi)
+  const [minProfit, setMinProfit] = useState(restored.minProfit)
+  const [minMargin, setMinMargin] = useState(restored.minMargin)
+  const [confidence, setConfidence] = useState<"VERIFIED_ONLY" | "INCLUDE_INFERRED">(restored.confidence as "VERIFIED_ONLY" | "INCLUDE_INFERRED")
+  const [hazmat, setHazmat] = useState(restored.hazmat)
+  const [bulky, setBulky] = useState(restored.bulky)
+  const [provenanceField, setProvenanceField] = useState(restored.provenanceField)
+  const [provenanceStatus, setProvenanceStatus] = useState(restored.provenanceStatus)
   const [favorites, setFavorites] = useState<string[]>(loadFavorites)
   const [columns, setColumns] = useState<ColumnKey[]>(() => {
     try {
@@ -134,6 +144,12 @@ export function ProductsPage() {
     }, 300)
     return () => clearTimeout(id)
   }, [searchInput, search])
+
+  // Persist the canonical query, not the raw input: what is remembered is
+  // exactly what was sent to the server.
+  useEffect(() => {
+    saveCatalogQuery({ search, decision, sort, direction, limit, minRoi, minProfit, minMargin, confidence, hazmat, bulky, provenanceField, provenanceStatus })
+  }, [search, decision, sort, direction, limit, minRoi, minProfit, minMargin, confidence, hazmat, bulky, provenanceField, provenanceStatus])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -218,6 +234,7 @@ export function ProductsPage() {
     setLimit(50)
     setOffset(0)
     setMinRoi(""); setMinProfit(""); setMinMargin(""); setConfidence("VERIFIED_ONLY"); setHazmat(""); setBulky(""); setProvenanceField(""); setProvenanceStatus("")
+    clearCatalogQuery()
   }
 
   // Starring marks a run-scoped snapshot in this browser only -- it writes no

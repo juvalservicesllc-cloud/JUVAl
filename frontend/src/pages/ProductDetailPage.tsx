@@ -3,6 +3,9 @@ import { Link, useLocation, useParams } from "react-router-dom"
 import { ApiError, apiErrorMessage } from "../api/client"
 import { getRunRecord } from "../api/records"
 import { AnalyticsChart, type ChartType } from "../components/AnalyticsChart"
+import { FieldConfidenceGroups } from "../components/FieldConfidenceGroups"
+import { MetricExplainer } from "../components/MetricExplainer"
+import { METRIC_EXPLANATIONS } from "../metricExplanations"
 import { ProvenanceValue } from "../components/ProvenanceValue"
 import { StatusBadge } from "../components/StatusBadge"
 import type { FieldValueOut, RecordOut } from "../types"
@@ -45,11 +48,14 @@ function Field({ label, value }: { label: string; value: FieldValueOut }) {
   )
 }
 
-function FormattedField({ label, value, formatter }: { label: string; value: FieldValueOut; formatter: (value: FieldValueOut) => string }) {
+function FormattedField({ label, value, formatter, explain }: { label: string; value: FieldValueOut; formatter: (value: FieldValueOut) => string; explain?: string }) {
   return (
     <>
       <dt>{label}</dt>
-      <dd><span className="provenance-value"><span>{value.status === null ? "—" : formatter(value)}</span>{value.status !== null && <StatusBadge value={value.status} />}</span></dd>
+      <dd>
+        <span className="provenance-value"><span>{value.status === null ? "—" : formatter(value)}</span>{value.status !== null && <StatusBadge value={value.status} />}</span>
+        {explain && <MetricExplainer label={label} description={explain} />}
+      </dd>
     </>
   )
 }
@@ -281,8 +287,8 @@ export function ProductDetailPage() {
             <section className="panel">
               <div className="panel-heading"><div><p className="eyebrow">ECONOMICS</p><h2>Profitability</h2><p>Backend-computed only; never recalculated in the browser (ADR-006).</p></div></div>
               <dl className="run-summary">
-                <FormattedField label="Selling price" value={record.selling_price} formatter={formatMoneyField} />
-                <dt>COG</dt><dd>{formatCurrency(record.cog)}</dd>
+                <FormattedField label="Selling price" value={record.selling_price} formatter={formatMoneyField} explain={METRIC_EXPLANATIONS.selling_price} />
+                <dt>COG</dt><dd>{formatCurrency(record.cog)}<MetricExplainer label="COG" description={METRIC_EXPLANATIONS.cog} /></dd>
                 <dt>Shipping / unit</dt><dd>{formatCurrency(record.shipping_per_unit)}</dd>
                 {/* Intermediate Profitability Engine terms. `null` means the
                     snapshot did not store them -- either the selling price was
@@ -290,12 +296,12 @@ export function ProductDetailPage() {
                 <dt>Selling fees</dt><dd>{formatCurrency(record.total_fees ?? null)}</dd>
                 <dt>Seller proceeds</dt><dd>{formatCurrency(record.seller_proceeds ?? null)}</dd>
                 <dt>Total landed cost</dt><dd>{formatCurrency(record.total_cost ?? null)}</dd>
-                <FormattedField label="Profit" value={record.profit} formatter={formatMoneyField} />
-                <FormattedField label="ROI" value={record.roi} formatter={formatPercent} />
-                <FormattedField label="Margin" value={record.margin} formatter={formatPercent} />
-                <FormattedField label="Break-even price" value={record.break_even_price} formatter={formatMoneyField} />
-                <FormattedField label="Max COG (target profit)" value={record.max_cog_target_profit} formatter={formatMoneyField} />
-                <FormattedField label="Max COG (target ROI)" value={record.max_cog_target_roi} formatter={formatMoneyField} />
+                <FormattedField label="Profit" value={record.profit} formatter={formatMoneyField} explain={METRIC_EXPLANATIONS.profit} />
+                <FormattedField label="ROI" value={record.roi} formatter={formatPercent} explain={METRIC_EXPLANATIONS.roi} />
+                <FormattedField label="Margin" value={record.margin} formatter={formatPercent} explain={METRIC_EXPLANATIONS.margin} />
+                <FormattedField label="Break-even price" value={record.break_even_price} formatter={formatMoneyField} explain={METRIC_EXPLANATIONS.break_even_price} />
+                <FormattedField label="Max COG (target profit)" value={record.max_cog_target_profit} formatter={formatMoneyField} explain={METRIC_EXPLANATIONS.max_cog_target_profit} />
+                <FormattedField label="Max COG (target ROI)" value={record.max_cog_target_roi} formatter={formatMoneyField} explain={METRIC_EXPLANATIONS.max_cog_target_roi} />
               </dl>
             </section>
 
@@ -316,6 +322,11 @@ export function ProductDetailPage() {
               ) : (
                 <p className="text-muted">No data-quality issues recorded for this record.</p>
               )}
+              {/* An issue list says what went wrong; this says which of the
+                  values on screen can be trusted. Both are needed. */}
+              <p className="eyebrow confidence-groups-heading">FIELDS BY CONFIDENCE</p>
+              <p className="text-muted">Every field on this snapshot, grouped by its own verification status (ADR-003/ADR-004). Statuses are read from the record, never derived here.</p>
+              <FieldConfidenceGroups record={record} />
             </section>
 
             <ProvenanceSection record={record} />

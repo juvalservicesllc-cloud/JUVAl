@@ -144,3 +144,70 @@ describe("RunForm", () => {
     expect(screen.getByText("10 of 10 files queued")).toBeInTheDocument()
   })
 })
+
+// C1.2 -- drag & drop recovered from Golden (ADR-029). Dropping must go through
+// the same validation path as the picker; there is only one ingestion rule.
+describe("RunForm drag and drop", () => {
+  function dropZone() {
+    return document.querySelector(".drop-zone") as HTMLElement
+  }
+  function dropFiles(files: File[]) {
+    fireEvent.drop(dropZone(), { dataTransfer: { files } })
+  }
+
+  it("keeps the file picker available alongside the drop zone", () => {
+    render(<RunForm disabled={false} onSubmit={vi.fn()} />)
+
+    // Keyboard/screen-reader users must still reach a real file input.
+    const input = screen.getByLabelText(/catalog files/i)
+    expect(input).toHaveAttribute("type", "file")
+    expect(dropZone()).toContainElement(input)
+  })
+
+  it("queues dropped files", () => {
+    render(<RunForm disabled={false} onSubmit={vi.fn()} />)
+
+    dropFiles([makeNamedFile("a.xlsx"), makeNamedFile("b.csv")])
+
+    expect(screen.getByText("a.xlsx")).toBeInTheDocument()
+    expect(screen.getByText("b.csv")).toBeInTheDocument()
+    expect(screen.getByText(/2 of 10 files queued/i)).toBeInTheDocument()
+  })
+
+  it("applies the same extension rule to a drop as to the picker", () => {
+    render(<RunForm disabled={false} onSubmit={vi.fn()} />)
+
+    dropFiles([makeNamedFile("good.csv"), makeNamedFile("nope.pdf")])
+
+    expect(screen.getByText("good.csv")).toBeInTheDocument()
+    expect(screen.getByRole("alert")).toHaveTextContent(/nope\.pdf/)
+  })
+
+  it("enforces MAX_FILES on a drop and names what was not queued", () => {
+    render(<RunForm disabled={false} onSubmit={vi.fn()} />)
+
+    dropFiles(Array.from({ length: 12 }, (_, i) => makeNamedFile(`f${i}.csv`)))
+
+    expect(screen.getByText(/10 of 10 files queued/i)).toBeInTheDocument()
+    expect(screen.getByRole("alert")).toHaveTextContent(/f10\.csv/)
+    expect(screen.getByRole("alert")).toHaveTextContent(/f11\.csv/)
+  })
+
+  it("shows a dragover state and clears it after the drop", () => {
+    render(<RunForm disabled={false} onSubmit={vi.fn()} />)
+
+    fireEvent.dragOver(dropZone())
+    expect(dropZone()).toHaveClass("dragging")
+
+    dropFiles([makeNamedFile("a.csv")])
+    expect(dropZone()).not.toHaveClass("dragging")
+  })
+
+  it("ignores a drop while the form is submitting", () => {
+    render(<RunForm disabled={true} onSubmit={vi.fn()} />)
+
+    dropFiles([makeNamedFile("a.csv")])
+
+    expect(screen.queryByText("a.csv")).not.toBeInTheDocument()
+  })
+})

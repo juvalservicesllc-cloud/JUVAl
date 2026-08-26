@@ -339,13 +339,39 @@ export function DashboardPage() {
                 </div>
               ) : (
                 <>
-                  {/* B. Primary KPIs -- headline numbers only. Decision counts live in
-                      the Decision Distribution chart below, not duplicated here. */}
-                  <section className="metric-grid">
+                  {/* B. KPI strip. Density recovered from the Golden Product
+                      Experience (ADR-029), which put the decision counts and the
+                      three averages on the overview rather than only inside a
+                      chart. Only metrics the analytics endpoint really returns
+                      appear here: Golden's file counts belong to a batch, not to
+                      a run, and its "estimated demo profit" total has no
+                      production equivalent (the endpoint exposes an average, not
+                      a sum), so neither is invented.
+
+                      The decision counts also appear in the distribution chart
+                      below. That repetition is deliberate: the chart answers
+                      "what is the shape", the tiles answer "how many", and the
+                      operator should not have to read a chart to get a number. */}
+                  <section className="metric-grid kpi-strip" aria-label="Run key figures">
                     <article className="metric-card">
                       <span>Total records</span>
                       <strong>{count(analytics.records.total_records)}</strong>
                       <small>From the analytics endpoint</small>
+                    </article>
+                    <article className="metric-card kpi-buy">
+                      <span>BUY</span>
+                      <strong>{count(analytics.decisions.BUY ?? 0)}</strong>
+                      <small>Decision Engine output</small>
+                    </article>
+                    <article className="metric-card kpi-review">
+                      <span>REVIEW</span>
+                      <strong>{count(analytics.decisions.REVIEW ?? 0)}</strong>
+                      <small>Decision Engine output</small>
+                    </article>
+                    <article className="metric-card kpi-pass">
+                      <span>PASS</span>
+                      <strong>{count(analytics.decisions.PASS ?? 0)}</strong>
+                      <small>Decision Engine output</small>
                     </article>
                     <article className="metric-card">
                       <span>With issues</span>
@@ -361,6 +387,11 @@ export function DashboardPage() {
                       <span>Average profit</span>
                       <strong>{formatCurrency(analytics.profitability.profit.average)}</strong>
                       <small>{count(analytics.profitability.profit.count)} VERIFIED records</small>
+                    </article>
+                    <article className="metric-card">
+                      <span>Average margin</span>
+                      <strong>{formatPercent(analytics.profitability.margin.average)}</strong>
+                      <small>{count(analytics.profitability.margin.count)} VERIFIED records</small>
                     </article>
                   </section>
 

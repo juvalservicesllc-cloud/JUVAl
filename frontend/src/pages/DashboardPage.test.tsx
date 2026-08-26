@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react"
+import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { MemoryRouter } from "react-router-dom"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -295,5 +295,62 @@ describe("DashboardPage", () => {
 
     await user.click(barsButton)
     expect(barsButton).toHaveAttribute("aria-pressed", "true")
+  })
+})
+
+// C1.6 -- denser KPI strip recovered from Golden (ADR-029). Only metrics the
+// analytics endpoint actually returns may appear.
+describe("DashboardPage KPI strip (C1)", () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it("surfaces the decision counts and all three averages as figures", async () => {
+    stubFetchWithRuns([RUN_A, RUN_B])
+    renderPage()
+    await screen.findByText(/total records/i)
+
+    const strip = document.querySelector(".kpi-strip") as HTMLElement
+    for (const label of ["Total records", "BUY", "REVIEW", "PASS", "With issues", "Average ROI", "Average profit", "Average margin"]) {
+      expect(within(strip).getByText(label)).toBeInTheDocument()
+    }
+    // Values come from the endpoint, formatted, never recomputed. Scoped per
+    // card: ROI and margin both average 0.3 in this fixture.
+    const card = (label: string) => within(strip).getByText(label).closest("article") as HTMLElement
+    expect(within(card("BUY")).getByText("2")).toBeInTheDocument()
+    expect(within(card("Average ROI")).getByText("30.0%")).toBeInTheDocument()
+    expect(within(card("Average margin")).getByText("30.0%")).toBeInTheDocument()
+    expect(within(card("Average profit")).getByText("$15.00")).toBeInTheDocument()
+  })
+
+  it("shows 0 for a decision the run produced none of, never blank", async () => {
+    stubFetchWithRuns([RUN_A, RUN_B])
+    renderPage()
+    await screen.findByText(/total records/i)
+
+    // The fixture reports BUY and REVIEW only; PASS must read 0, not "—".
+    const strip = document.querySelector(".kpi-strip") as HTMLElement
+    const pass = within(strip).getByText("PASS").closest("article") as HTMLElement
+    expect(within(pass).getByText("0")).toBeInTheDocument()
+  })
+
+  it("invents no metric the endpoint does not expose", async () => {
+    stubFetchWithRuns([RUN_A, RUN_B])
+    renderPage()
+    await screen.findByText(/total records/i)
+
+    const strip = document.querySelector(".kpi-strip") as HTMLElement
+    // Golden's per-batch file counts and its total "demo profit" have no
+    // production equivalent on a run-scoped analytics payload.
+    expect(within(strip).queryByText(/valid files/i)).not.toBeInTheDocument()
+    expect(within(strip).queryByText(/invalid files/i)).not.toBeInTheDocument()
+    expect(within(strip).queryByText(/^files$/i)).not.toBeInTheDocument()
+    expect(within(strip).queryByText(/total profit/i)).not.toBeInTheDocument()
+  })
+
+  it("labels every KPI accessibly", async () => {
+    stubFetchWithRuns([RUN_A, RUN_B])
+    renderPage()
+    await screen.findByText(/total records/i)
+
+    expect(screen.getByLabelText(/run key figures/i)).toBeInTheDocument()
   })
 })

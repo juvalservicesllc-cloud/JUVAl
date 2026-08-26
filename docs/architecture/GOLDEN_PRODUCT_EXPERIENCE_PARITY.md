@@ -365,14 +365,14 @@ bottom mobile nav · collapsible sidebar.
 
 | # | Capability | Class | Blocker |
 |---|---|---|---|
-| 1 | 404 / catch-all route | `GOLDEN_CAPABILITY_MISSING` | none — frontend-only |
-| 2 | Upload drag & drop zone | `GOLDEN_CAPABILITY_MISSING` | none — frontend-only |
-| 3 | Catalog filter persistence across navigation | `GOLDEN_UX_SUPERIOR` | none — frontend-only |
-| 4 | Explainable metric cards on Product Detail | `REQUIRES_PRODUCTIONIZATION` | none — frontend-only |
-| 5 | Provenance-grouped data quality on Product Detail | `GOLDEN_UX_SUPERIOR` | none — frontend-only |
+| 1 | 404 / catch-all route | **RECOVERED** (C1.1) | — |
+| 2 | Upload drag & drop zone | **RECOVERED** (C1.2) | — |
+| 3 | Catalog filter persistence across navigation | **RECOVERED** (C1.3) | — |
+| 4 | Explainable metric cards on Product Detail | **RECOVERED** (C1.4) | — |
+| 5 | Provenance-grouped data quality on Product Detail | **RECOVERED** (C1.5) | — |
 | 6 | Per-run decision counts in the Runs list | `GOLDEN_UX_SUPERIOR` | one analytics call per row, or a list projection |
 | 7 | Favorites page | `REQUIRES_PRODUCTIONIZATION` | cross-run record lookup for the multi-run view |
-| 8 | Dashboard KPI density (11 vs 4) | `GOLDEN_UX_SUPERIOR` | none — frontend-only |
+| 8 | Dashboard KPI density (11 vs 4) | **PARTIALLY_RECOVERED** (C1.6) — 8 of 11; Golden's file counts are batch-level and its profit *total* has no production equivalent | run-scoped analytics exposes an average, not a sum |
 | 9 | Price history KPI tiles | `FIXTURE_PRESENTATION_ONLY` | must keep the fixture label |
 | 10 | Brand filter dropdown | `REQUIRES_BACKEND_CONTRACT` | `brand` query param |
 | 11 | Product image | `REQUIRES_BACKEND_CONTRACT` | image field + rights/caching policy |
@@ -400,7 +400,7 @@ blockers and regression risk.
 
 | Unit | Scope | Depends on | Blockers | Risk | Value |
 |---|---|---|---|---|---|
-| **C1 — Frontend-only recovery** | 404 route · Upload drag & drop · catalog filter persistence · explainable metric cards · provenance-grouped data quality · Dashboard KPI density | none | **none** | low | high — 6 real Golden functions, no contract work |
+| **C1 — Frontend-only recovery** ✅ **DONE** | 404 route · Upload drag & drop · catalog filter persistence · explainable metric cards · provenance-grouped data quality · Dashboard KPI density | none | **none** | low | delivered 2026-08-26; 5 fully recovered, KPI density partially (see item 8) |
 | **C2 — Design-system pass** | tokens, shell, density, typography applied across all screens | best after C1 so it styles the final component set | none | medium | high — but restyles everything, so it must not run before the component set settles |
 | **C3 — Supplier-source contract** | image URL + supplier URL + suggested price + raw row + process trace as importer columns and `RecordOut` fields, with provenance | C1 | backend + rights/caching policy | medium | unblocks items 11–14, 17 at once |
 | **C4 — Query contract** | brand filter · column-classification/dry-run preview | C3 (same contract review) | backend | low | unblocks 10, 15, 16 |
@@ -424,5 +424,46 @@ that C2 would otherwise have to restyle twice.
 - `docs/architecture/CATALOG_GOLDEN_UX_PARITY_V2.md` — Catalog functional audit + Wave B3
 - `docs/architecture/DEMO_PRODUCTION_PARITY_MATRIX.md` — earlier capability inventory (2026-08-19)
 - `docs/architecture/PRODUCT_BEHAVIORAL_PARITY.md` — Waves B–D capability record
+
+---
+
+## 21. Convergence unit C1 — delivered 2026-08-26
+
+| # | Capability | Outcome | Where | Tests |
+|---|---|---|---|---|
+| C1.1 | Unknown-route experience | **RECOVERED** | `pages/NotFoundPage.tsx`, `App.tsx` `path="*"` inside `AppLayout` so the shell survives | 3 |
+| C1.2 | Upload drag & drop | **RECOVERED** | `components/RunForm.tsx` — the drop zone wraps the existing `<input type=file>` and routes drops through the same `selectFiles()` validation, so there is one ingestion rule | 6 |
+| C1.3 | Catalog filter persistence | **RECOVERED** | `catalogQuery.ts` — `sessionStorage`, key `juval.catalog.query.v1`, field-by-field validation on read | 5 |
+| C1.4 | Explainable metric cards | **RECOVERED** | `components/MetricExplainer.tsx` + `metricExplanations.ts`, applied to 8 economics fields | 3 |
+| C1.5 | Provenance-grouped data quality | **RECOVERED** | `components/FieldConfidenceGroups.tsx` on Product Detail | 4+4 |
+| C1.6 | Denser KPI strip | **PARTIALLY_RECOVERED** | `pages/DashboardPage.tsx` — 4 → 8 tiles | 4 |
+
+### C1.6 — what was not recovered, and why
+
+Golden shows 11 KPIs. Eight have true production equivalents and were
+recovered: Total records, BUY, REVIEW, PASS, With issues, Average ROI,
+Average profit, Average margin. Three were **not**:
+
+- **Files / Valid files / Invalid files** — batch-level facts. Production's
+  run-scoped analytics endpoint has no file counts because a run *is* one file
+  (`BatchFileOut` carries this instead). Surfacing them here would mean
+  inventing a per-run number that does not exist.
+- **"Estimated demo profit"** (a *total*) — `profitability.profit` exposes
+  `average`, `minimum`, `maximum` and `count`. Summing on the client would be a
+  frontend recomputation of a backend figure, which ADR-006 forbids, and would
+  silently include or exclude non-VERIFIED records depending on how it was
+  written.
+
+Both are recorded as open items rather than dropped. A run-total projection on
+the analytics endpoint would unblock the profit total.
+
+### C1.3 — scope choice worth recording
+
+Golden persists its catalog state in `sessionStorage`, and C1 keeps that
+scope deliberately. A remembered filter changes *which records an operator
+sees*; letting it outlive the sitting risks a later review being silently
+narrowed by a filter nobody remembers setting. The selected run and the page
+offset are not persisted either — both belong to the data, not to the
+operator's preference.
 
 Nothing from Golden has been dropped from this matrix.

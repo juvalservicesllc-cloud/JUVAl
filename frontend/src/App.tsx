@@ -3,6 +3,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom"
 import "./App.css"
 import { AppLayout } from "./components/AppLayout"
 import { DashboardPage } from "./pages/DashboardPage"
+import { NotFoundPage } from "./pages/NotFoundPage"
 import { ProductsPage } from "./pages/ProductsPage"
 import { ThemeProvider } from "./theme/ThemeProvider"
 
@@ -41,6 +42,9 @@ export default function App() {
               <Route path="runs/:executionId/records/:recordRef" element={<ProductDetailPage />} />
               <Route path="batches/:batchId" element={<BatchDetailPage />} />
               <Route path="appearance" element={<AppearancePage />} />
+              {/* Inside AppLayout on purpose: an unknown URL keeps the shell and
+                  its navigation instead of rendering an empty page. */}
+              <Route path="*" element={<NotFoundPage />} />
             </Route>
           </Routes>
         </Suspense>

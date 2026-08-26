@@ -251,3 +251,59 @@ main { max-width:1480px; margin:0 auto; padding:30px 34px 54px; }.page-intro { d
    `.table-group-bar`); the headers now actually carry them, which is what
    stops every product reading "JUVAL..." and every ASIN clipping mid-value. */
 .identity-evidence .provenance-value > span:first-child { overflow-wrap:anywhere; }
+
+/* ---- Convergence unit C1: capabilities recovered from the Golden Product
+   Experience (ADR-029). See GOLDEN_PRODUCT_EXPERIENCE_PARITY.md. ---- */
+
+/* C1.1 Unknown route */
+.not-found-panel { max-width:640px; }
+.not-found-path { margin:2px 0 16px; padding:8px 10px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface-raised); color:var(--text-secondary); font-size:12px; overflow-wrap:anywhere; }
+
+/* C1.2 Upload drag & drop. The picker stays a real <input> inside the label,
+   so keyboard and screen-reader users reach it exactly as before -- the drop
+   zone is an addition, never a replacement. */
+.run-form .drop-zone { position:relative; padding:14px; border:1px dashed var(--border-strong); border-radius:var(--radius-md); background:var(--surface-raised); transition:border-color .18s ease,background-color .18s ease; }
+.run-form .drop-zone .drop-zone-hint { display:block; margin-bottom:8px; color:var(--text-muted); font-size:11px; font-weight:650; }
+.run-form .drop-zone.dragging { border-color:var(--accent); border-style:solid; background:var(--accent-soft); }
+.run-form .drop-zone.dragging .drop-zone-hint { color:var(--accent); }
+/* The inner file input must not swallow the drop events the label listens for. */
+.run-form .drop-zone.dragging input[type=file] { pointer-events:none; }
+
+/* C1.4 Metric explanations */
+.metric-explainer { margin-top:5px; }
+.metric-explainer summary { color:var(--text-muted); font-size:10px; font-weight:650; cursor:pointer; list-style:none; }
+.metric-explainer summary::-webkit-details-marker { display:none; }
+.metric-explainer summary::before { content:"?"; display:inline-grid; place-items:center; width:13px; height:13px; margin-right:5px; border:1px solid var(--border-strong); border-radius:50%; font-size:9px; }
+.metric-explainer summary:hover { color:var(--accent); }
+.metric-explainer[open] summary { color:var(--text-secondary); }
+.metric-explainer p { max-width:52ch; margin:6px 0 0; color:var(--text-secondary); font-size:11px; line-height:1.5; }
+
+/* C1.5 Fields grouped by verification status. Each group is named and counted
+   in text; colour is a reinforcement, never the only signal. */
+.confidence-groups-heading { margin-top:18px; padding-top:14px; border-top:1px solid var(--border); }
+.confidence-groups { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:10px; margin-top:12px; }
+.confidence-group { padding:12px; border:1px solid var(--border); border-left:3px solid var(--border-strong); border-radius:var(--radius-md); background:var(--surface-raised); }
+.confidence-group header { display:flex; align-items:baseline; justify-content:space-between; gap:8px; }
+.confidence-group-name { color:var(--text-primary); font-size:11px; font-weight:750; letter-spacing:.04em; text-transform:uppercase; }
+.confidence-group header strong { font-size:19px; font-weight:650; letter-spacing:-.03em; }
+.confidence-group-meaning { margin:5px 0 8px; color:var(--text-muted); font-size:10px; line-height:1.45; }
+.confidence-group ul { margin:0; padding-left:15px; color:var(--text-secondary); font-size:11px; }
+.confidence-group li { margin-bottom:2px; }
+.confidence-verified { border-left-color:var(--success); }
+.confidence-inferred { border-left-color:var(--warning); }
+.confidence-demo-fixture { border-left-color:var(--info); }
+.confidence-not-found { border-left-color:var(--text-muted); }
+.confidence-invalid { border-left-color:var(--danger); }
+.confidence-unrecorded { border-left-color:var(--border-strong); }
+
+/* C1.6 Denser KPI strip: wraps instead of overflowing, and keeps the decision
+   tiles on the traffic-light semantics used everywhere else. */
+.kpi-strip { grid-template-columns:repeat(auto-fit,minmax(158px,1fr)); }
+.kpi-strip .metric-card { min-height:96px; }
+.kpi-strip .metric-card strong { font-size:22px; }
+.kpi-buy strong { color:#7fe0ab; }
+.kpi-review strong { color:#f0c473; }
+.kpi-pass strong { color:#f29aa0; }
+@media (max-width:600px) { .kpi-strip { grid-template-columns:repeat(2,minmax(0,1fr)); } .confidence-groups { grid-template-columns:1fr; } }
+/* Keep the required marker on the same line as its label inside the drop zone. */
+.run-form .drop-zone .file-field-label { display:block; margin-bottom:6px; white-space:nowrap; }
