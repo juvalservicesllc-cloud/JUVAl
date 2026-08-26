@@ -178,7 +178,17 @@ def build_verifier() -> Optional[TokenVerifier]:
 
     issuer = _required_env("JUVAL_OIDC_ISSUER")
     audience = _required_env("JUVAL_OIDC_AUDIENCE")
-    jwks_uri = os.environ.get("JUVAL_OIDC_JWKS_URI") or f"{issuer.rstrip('/')}/v1/keys"
+    # The fallback is the OpenID Provider Metadata convention
+    # (`<issuer>/.well-known/jwks.json`, OpenID Connect Discovery 1.0 §4), not
+    # any one vendor's path. It previously defaulted to Okta's `/v1/keys`,
+    # written while ADR-022 was the plan; Okta was rejected (ADR-022
+    # RECHAZADA/SUPERSEDED, 2026-08-19) and the approved direction is now
+    # FusionAuth (ADR-028), which publishes `/.well-known/jwks.json`. A
+    # vendor-shaped default in a provider-agnostic boundary is a trap: it
+    # fails only at the first real token verification, as a 401, long after
+    # startup succeeded. `JUVAL_OIDC_JWKS_URI` remains the explicit override
+    # for any provider that deviates from the convention.
+    jwks_uri = os.environ.get("JUVAL_OIDC_JWKS_URI") or f"{issuer.rstrip('/')}/.well-known/jwks.json"
     roles_claim = os.environ.get("JUVAL_OIDC_ROLES_CLAIM", "roles")
 
     jwk_client = jwt.PyJWKClient(jwks_uri)

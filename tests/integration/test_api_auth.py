@@ -310,3 +310,62 @@ def test_permissions_are_least_privilege():
     assert auth.RUNS_CREATE not in auth.ROLE_PERMISSIONS["viewer"]
     assert auth.RUNS_EXPORT not in auth.ROLE_PERMISSIONS["viewer"]
     assert auth.ROLE_PERMISSIONS["admin"] == auth.ALL_PERMISSIONS
+
+
+# --- JWKS discovery convention (RF-03) --------------------------------
+#
+# The default JWKS location must follow the OpenID Connect Discovery
+# convention rather than any one vendor's path. It previously defaulted to
+# Okta's `/v1/keys`; Okta is rejected (ADR-022 RECHAZADA/SUPERSEDED) and the
+# approved direction is FusionAuth (ADR-028), which publishes
+# `/.well-known/jwks.json`. A vendor-shaped default fails only at the first
+# real token verification, as a 401 long after startup succeeded.
+
+
+def _jwks_uri_for(monkeypatch, issuer: str, override: str | None = None) -> str:
+    """Build a verifier and report the JWKS URI it resolved, without network."""
+    captured: dict[str, str] = {}
+
+    class _Recorder:
+        def __init__(self, uri: str) -> None:
+            captured["uri"] = uri
+
+        def get_signing_key_from_jwt(self, token):  # pragma: no cover - never called
+            raise AssertionError("no token is verified in this test")
+
+    monkeypatch.setenv("JUVAL_AUTH_MODE", "oidc")
+    monkeypatch.setenv("JUVAL_OIDC_ISSUER", issuer)
+    monkeypatch.setenv("JUVAL_OIDC_AUDIENCE", AUDIENCE)
+    if override is None:
+        monkeypatch.delenv("JUVAL_OIDC_JWKS_URI", raising=False)
+    else:
+        monkeypatch.setenv("JUVAL_OIDC_JWKS_URI", override)
+    monkeypatch.setattr(auth.jwt, "PyJWKClient", _Recorder)
+    auth.reset_for_tests()
+    auth.build_verifier()
+    auth.reset_for_tests()
+    return captured["uri"]
+
+
+def test_default_jwks_uri_follows_the_discovery_convention(monkeypatch):
+    assert _jwks_uri_for(monkeypatch, "https://idp.example.com") == (
+        "https://idp.example.com/.well-known/jwks.json"
+    )
+
+
+def test_default_jwks_uri_is_not_a_vendor_specific_path(monkeypatch):
+    """Okta's `/v1/keys` must not reappear as the provider-agnostic default."""
+    assert not _jwks_uri_for(monkeypatch, "https://idp.example.com").endswith("/v1/keys")
+
+
+def test_default_jwks_uri_tolerates_a_trailing_slash_on_the_issuer(monkeypatch):
+    assert _jwks_uri_for(monkeypatch, "https://idp.example.com/") == (
+        "https://idp.example.com/.well-known/jwks.json"
+    )
+
+
+def test_explicit_jwks_uri_overrides_the_convention(monkeypatch):
+    """A provider that deviates from the convention stays configurable."""
+    assert _jwks_uri_for(
+        monkeypatch, "https://idp.example.com", override="https://idp.example.com/oauth2/keys"
+    ) == "https://idp.example.com/oauth2/keys"
