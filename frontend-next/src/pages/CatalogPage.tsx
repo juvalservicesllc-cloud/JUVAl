@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { apiErrorMessage } from "../api/client"
 import { filteredExportUrl, getRunRecords, getRuns } from "../api/catalog"
 import type { CatalogQuery, FieldValueOut, RecordOut, RecordSort, RunSummaryOut } from "../api/types"
+import { clearCatalogQuery, loadCatalogQuery, saveCatalogQuery } from "../catalogQuery"
 import { favoriteKey, loadFavorites, saveFavorites, toggleFavorite } from "../favorites"
 import { count, fieldMoney, fieldPercent } from "../format"
 import { Badge, ProvenanceBadge } from "./shared"
@@ -58,11 +59,17 @@ export function CatalogPage({ initialRunId = "" }: { initialRunId?: string } = {
   const [runs, setRuns] = useState<RunsState>({ kind: "loading" })
   const [runId, setRunId] = useState(initialRunId)
   const [records, setRecords] = useState<RecordsState>({ kind: "loading" })
-  const [query, setQuery] = useState<CatalogQuery>(DEFAULT_QUERY)
+  // Restored once, on mount. Only preferences come back -- never the run,
+  // never the page, never anything the server returned.
+  const [query, setQuery] = useState<CatalogQuery>(() => loadCatalogQuery(DEFAULT_QUERY))
   const [favorites, setFavorites] = useState<string[]>(loadFavorites)
   const [reload, setReload] = useState(0)
 
   const patch = (next: Partial<CatalogQuery>) => setQuery((current) => ({ ...current, ...next, offset: 0 }))
+
+  // Persist the canonical query, so what is remembered is exactly what was sent
+  // to the server -- not the raw input on the way to it.
+  useEffect(() => { saveCatalogQuery(query) }, [query])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -151,7 +158,7 @@ export function CatalogPage({ initialRunId = "" }: { initialRunId?: string } = {
           <label>Per page<select aria-label="Per page" value={query.limit} onChange={(e) => patch({ limit: Number(e.target.value) })}>
             {[25, 50, 100].map((n) => <option key={n} value={n}>{n}</option>)}
           </select></label>
-          <button onClick={() => setQuery(DEFAULT_QUERY)}>Reset filters</button>
+          <button onClick={() => { clearCatalogQuery(); setQuery(DEFAULT_QUERY) }}>Reset filters</button>
           <button onClick={() => window.open(filteredExportUrl(runId, query), "_blank", "noopener,noreferrer")} disabled={!runId}>Export {count(total)} results</button>
         </div>
       </section>

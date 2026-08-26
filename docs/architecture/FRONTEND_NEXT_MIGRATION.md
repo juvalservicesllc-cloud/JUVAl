@@ -22,6 +22,7 @@ from the product — only from the production candidate's runtime.
 | Batch detail | **DONE** (m2) |
 | Runs list | **DONE** (m2) |
 | Run detail (minimum) | **DONE** (m2) |
+| Catalog filter persistence | **DONE** (m2B) — sessionStorage, validated on restore |
 | Dashboard, Product Detail, Appearance, Compare, Favorites page | **NOT WIRED** — honest placeholder, no fixture data |
 
 ## Dependency reproducibility (milestone 2)
@@ -167,7 +168,8 @@ id was not.
 | State | Classification |
 |---|---|
 | queued files, drag state, submit state | `EPHEMERAL_UI` |
-| catalog filters / sort / page | `EPHEMERAL_UI` (session persistence is a later step) |
+| catalog filters / sort / page size | `SESSION_PREFERENCE` (m2B) — `sessionStorage`, validated on restore |
+| catalog page offset | `EPHEMERAL_UI` — never persisted |
 | selected run id | `EPHEMERAL_UI`, seeded from the URL |
 | favourites | `LOCAL_PREFERENCE` |
 | appearance (dark) | `LOCAL_PREFERENCE` |
@@ -175,6 +177,38 @@ id was not.
 | run status, counts, hashes, records | `SERVER_RUN_STATE` |
 
 No server truth is held in `localStorage`.
+
+## Milestone 2B — Catalog filter persistence
+
+Milestone 2 closed with one regression: the filter persistence recovered in the
+legacy app (unit C1) had not been ported. Restored natively in
+`src/catalogQuery.ts`, key `juval.next.catalog.query.v1`.
+
+**Scope is `sessionStorage`, deliberately.** A remembered filter changes *which
+records an operator sees*, so it should survive moving between screens in this
+tab but must not silently narrow an unrelated sourcing session tomorrow.
+
+| Persisted | Not persisted |
+|---|---|
+| search, decision, min ROI / profit / margin, HazMat, Bulky, provenance field + status, confidence mode, sort, direction, page size | **selected ExecutionRun** — that is which dataset is on screen, not a preference; restoring a stale id would point Catalog at a different run than the one the operator opened |
+| | **page offset** — a stored page against a run whose contents may have changed opens on a page that no longer means the same thing |
+| | **anything from the server** — no records, no totals, no error or loading state |
+
+Every field is validated against the current query contract on read. An
+obsolete `sort` from an older build degrades to the default instead of reaching
+FastAPI as an out-of-contract value and returning a 422 the operator cannot
+explain. The key is versioned so a future shape change cannot be misread as the
+current one.
+
+Reset clears the active filters, returns sort to `profit desc`, clears the
+stored copy and issues the canonical unfiltered query. (The persist effect then
+writes the defaults back, so the key holds the default state rather than being
+absent — nothing stale can restore either way.)
+
+Filtering, sorting, pagination and export all remain server-side; the export
+still issues the same effective query as the table, minus pagination.
+Favourites are untouched: still `localStorage`, run-scoped, labelled, no
+request.
 
 ## Next milestones
 

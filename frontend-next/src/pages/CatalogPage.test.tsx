@@ -43,7 +43,7 @@ function lastRecordsUrl(mock: ReturnType<typeof vi.fn>): URL {
 }
 
 describe("CatalogPage on the real backend", () => {
-  afterEach(() => { vi.unstubAllGlobals(); localStorage.clear() })
+  afterEach(() => { vi.unstubAllGlobals(); localStorage.clear(); sessionStorage.clear() })
 
   it("renders real persisted records, never fixture data", async () => {
     stubFetch()
