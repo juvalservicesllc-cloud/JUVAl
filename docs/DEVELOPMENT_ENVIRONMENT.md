@@ -6,7 +6,9 @@ No sustituye a `docs/architecture/TECHNOLOGY_DECISIONS.md`, que describe
 las tecnologías del *producto*.
 
 Última verificación: **2026-08-24**, ejecutando realmente las suites en
-los tres nodos (no por inspección de documentación).
+los tres nodos (no por inspección de documentación). E2E en Linux
+re-verificado **2026-08-26** — ver §4 (el bloqueo de dependencias del
+sistema para Chromium está resuelto, con evidencia medida).
 
 ## 1. Toolchain requerida
 
@@ -43,7 +45,7 @@ Los tres nodos están en el mismo commit y ejecutan la misma baseline.
 | `npm run build` (incluye `tsc -b`) | PASS | PASS | PASS |
 | `npm run lint` (oxlint) | PASS | PASS | PASS |
 | `tools/compliance_check.py` | 9 pass / 1 warn / 0 fail | 9 pass / 1 warn / 0 fail | 9 pass / 1 warn / 0 fail |
-| E2E Playwright | **27/27 passing** | **BLOQUEADO** (§4) | no se ejecuta (§4) |
+| E2E Playwright | **27/27 passing** | **27/27 passing** (§4, re-verificado 2026-08-26) | no se ejecuta (§4) |
 
 La diferencia de `skipped` (7 vs 2) no es un fallo: con `psycopg` instalado
 los tests que exigen una base real se saltan de uno en uno; sin el driver el
@@ -64,50 +66,51 @@ No es un fallo de instalación; es la diferencia entre shell interactivo y
 no interactivo. Se documenta aquí porque es exactamente lo que rompe un
 script de CI/cron que "funciona cuando lo pruebo a mano".
 
-## 4. Blocker E2E en Linux — EXTERNAL USER ACTION REQUIRED
+## 4. Blocker E2E en Linux — RESUELTO 2026-08-26
 
-El navegador de Playwright se instala sin sudo y funciona:
+Histórico: el navegador de Playwright se instalaba sin sudo y funcionaba
+para descargar el binario, pero Chromium no arrancaba porque faltaban
+nueve librerías del sistema (`libasound.so.2`, `libatk-1.0.so.0`,
+`libatk-bridge-2.0.so.0`, `libatspi.so.0`, `libgbm.so.1`,
+`libXcomposite.so.1`, `libXdamage.so.1`, `libXfixes.so.3`,
+`libXrandr.so.2`), que sí exigen `sudo`. El primer intento de resolverlo
+falló porque `sudo` no resolvía el `npx` de nvm (`sudo: npx: command not
+found` — nvm es user-scoped, `sudo` no hereda ese `PATH` por defecto).
 
-```bash
-export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh"
-cd /home/juval/JUVAl/APP/frontend && npx playwright install chromium   # OK, user-scoped
-```
+**Resuelto 2026-08-26**: el usuario expuso el `PATH` de la instalación
+nvm existente a `sudo` (sin instalar una segunda distribución de Node) y
+ejecutó la instalación real de las dependencias. Evidencia medida por el
+agente tras el hecho:
 
-Pero Chromium **no arranca**: faltan librerías del sistema, que sí exigen
-`sudo` (verificado 2026-08-24: `sudo -n true` responde
-`a password is required`). `ldd` sobre el binario reporta exactamente
-nueve ausentes:
+- `/var/log/apt/history.log` registra `Start-Date: 2026-08-26 13:12:37`,
+  `Requested-By: juval (1000)`, instalando el set exacto de paquetes de
+  Playwright (`libasound2t64`, `libatk-bridge2.0-0t64`, `libatk1.0-0t64`,
+  `libatspi2.0-0t64`, `libgbm1`, `libxcomposite1`, `libxdamage1`,
+  `libxfixes3`, `libxrandr2`, `xvfb`, fuentes, etc.).
+- Las nueve librerías antes ausentes están confirmadas en disco
+  (`find /usr/lib -iname <lib>` para cada una, todas bajo
+  `/usr/lib/x86_64-linux-gnu/`).
+- `ldd` sobre `chrome-headless-shell` y sobre `chrome`
+  (`~/.cache/ms-playwright/chromium{,_headless_shell}-1234/...`) no
+  reporta ninguna línea `not found`; ambos binarios responden a
+  `--version` (`Google Chrome for Testing 151.0.7922.34`).
+- **La suite E2E completa se ejecutó de verdad** en puertos aislados
+  (backend `127.0.0.1:8001` con una base SQLite nueva; frontend
+  `npm run build` + `npm run preview --host 127.0.0.1 --port 5180`, para
+  no depender de los servidores de desarrollo ya corriendo en
+  `0.0.0.0:5173`/`0.0.0.0:8000`) — **27/27 passing**, mismo conteo que el
+  histórico de Windows.
 
-```
-libasound.so.2   libatk-1.0.so.0   libatk-bridge-2.0.so.0
-libatspi.so.0    libgbm.so.1       libXcomposite.so.1
-libXdamage.so.1  libXfixes.so.3    libXrandr.so.2
-```
-
-**Comando exacto para el usuario** (una sola vez, en el servidor):
-
-```bash
-export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh"
-cd /home/juval/JUVAl/APP/frontend
-sudo npx playwright install-deps chromium
-```
-
-`install-deps` resuelve por sí mismo los nombres de paquete de Ubuntu
-24.04 (varios llevan sufijo `t64`), por eso se prefiere a un `apt install`
-escrito a mano. Tras ejecutarlo, verificar con:
-
-```bash
-npx playwright install chromium && E2E_BASE_URL=http://127.0.0.1:5180 npx playwright test
-```
-
-Hasta entonces, la evidencia E2E real vive en Windows (§2) — **no** se
-declara E2E verificado en Linux.
+La evidencia E2E real ahora existe en **ambos** nodos ejecutables
+(Windows y Linux) — ver `frontend/e2e/README.md` para el detalle
+completo del run 2026-08-26.
 
 ## 5. E2E: cómo se obtuvo la evidencia
 
 27/27 contra el stack real (build de producción servido por
-`npm run preview`, FastAPI real, SQLite real — sin mocks). Procedimiento
-completo y por qué el puerto 5180 en `frontend/e2e/README.md`.
+`npm run preview`, FastAPI real, SQLite real — sin mocks) en Windows y,
+desde 2026-08-26, también en Linux (§4). Procedimiento completo y por qué
+el puerto 5180 en `frontend/e2e/README.md`.
 
 E2E **no** está en CI todavía: necesita los dos servidores levantados y las
 dependencias de sistema del navegador. Se añadirá cuando sea reproducible;

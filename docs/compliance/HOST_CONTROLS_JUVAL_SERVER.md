@@ -2,7 +2,8 @@
 
 Measured evidence for the Linux node that holds a working copy of the JUVAl
 repository. Every row was produced by running the stated command on
-2026-08-24, not by reading configuration intent.
+2026-08-24, not by reading configuration intent. H-1, H-2, H-3 and H-13
+were re-measured on 2026-08-26 — see §5.
 
 **Scope.** This host's permanent role is formalized in
 [`ADR-027`](../adr/ADR-027-juval-server-role.md): development / CI-like
@@ -25,9 +26,9 @@ incomplete), `IMPLEMENTED_NOT_VERIFIED`, `NOT_IMPLEMENTED`,
 
 | # | Requirement | Source | Implementation | Verification command | Evidence (2026-08-24) | Gap | Owner | Status |
 |---|---|---|---|---|---|---|---|---|
-| H-1 | Host firewall enabled | RF-02 | UFW | `systemctl is-active ufw`; `/etc/default/ufw`, `/etc/ufw/ufw.conf` (world-readable) | `active`; **default policy read directly 2026-08-24**: `DEFAULT_INPUT_POLICY="DROP"`, `DEFAULT_OUTPUT_POLICY="ACCEPT"`, `DEFAULT_FORWARD_POLICY="DROP"`, `IPV6=yes`, `ENABLED=yes` (start on boot) | The specific allow-list (`/etc/ufw/user.rules`, `640 root:root`) still needs sudo to enumerate — default-deny-inbound is now confirmed, but *which* ports are explicitly allowed beyond that is not | User (for the rule enumeration only) | **PARTIAL** (upgraded from the prior pass — default policy is now directly verified, not merely "active") |
-| H-2 | Brute-force protection | RF-02 | fail2ban | `systemctl is-active fail2ban`; `/etc/fail2ban/jail.conf`, `/etc/fail2ban/jail.d/*.conf` (world-readable) | `active`; **effective `sshd` jail policy read directly 2026-08-24**: `jail.d/defaults-debian.conf` enables `[sshd]` with `banaction = nftables`/`backend = systemd`; no local override of the upstream defaults in `jail.conf` `[DEFAULT]` — effective policy is `bantime=10m`, `findtime=10m`, `maxretry=5` (ban after 5 failed attempts within a 10-minute window, for 10 minutes) | Live ban counts and currently-banned IPs (`fail2ban-client status sshd`) still need sudo — the socket at `/var/run/fail2ban/fail2ban.sock` is root-only | User (for live ban state only) | **PARTIAL** (upgraded — jail enablement and policy are now directly verified from config, not inferred from `active` alone) |
-| H-3 | Network exposure minimised | RF-02 | Default install | `ss -tulnp \| grep LISTEN` | **Re-measured 2026-08-24 22:34**: `:22` (SSH, all interfaces) and DNS `:53` (loopback only) as before, **plus `:5173` (Vite dev server) and `:8000` (FastAPI/uvicorn) now bound to `0.0.0.0`** — two user-started foreground processes (`pts/3`/`pts/4`, started 22:31/22:32, same session as this audit), LAN-exposed rather than localhost-only | Transient, not a persistent service (§6, ADR-027 forbids this host opening app ports as part of its *permanent* role) — but while running, any LAN host can reach them unauthenticated. Recommendation: bind dev servers to `127.0.0.1` unless LAN access from another device is actually needed for the task at hand | User | **PARTIAL** (was `VERIFIED` when no app port was listening; degraded on re-measurement, not a regression this session introduced) |
+| H-1 | Host firewall enabled | RF-02 | UFW | `systemctl is-active ufw`; `/etc/default/ufw`, `/etc/ufw/ufw.conf` (world-readable); `sudo ufw status verbose` | `active`; default policy read directly 2026-08-24: `DEFAULT_INPUT_POLICY="DROP"`, `DEFAULT_OUTPUT_POLICY="ACCEPT"`, `DEFAULT_FORWARD_POLICY="DROP"`, `IPV6=yes`; **rule allow-list reported by the user 2026-08-26 (`sudo ufw status verbose`)**: logging low, default deny incoming, default allow outgoing, routed disabled, `22/tcp` (OpenSSH) allowed, `5173/tcp` allowed **only from `192.168.0.0/24`**, `8000/tcp` allowed **only from `192.168.0.0/24`**, OpenSSH IPv6 allowed | None — allow-list now enumerated, closing the prior sudo gap. The agent independently re-confirmed 2026-08-26 it still has no sudo (`sudo -n true` → `a password is required`), so this row's evidence is user-reported, not agent-executed | User (ran the sudo command and reported output) | **VERIFIED** (2026-08-26 — upgraded from `PARTIAL`; allow-list matches the intended LAN-only exposure for 5173/8000, see H-3) |
+| H-2 | Brute-force protection | RF-02 | fail2ban | `systemctl is-active fail2ban`; `/etc/fail2ban/jail.conf`, `/etc/fail2ban/jail.d/*.conf` (world-readable); `sudo fail2ban-client status sshd` | `active`; effective `sshd` jail policy read directly 2026-08-24: `bantime=10m`, `findtime=10m`, `maxretry=5`; **live state reported by the user 2026-08-26 (`sudo fail2ban-client status sshd`)**: jail active, currently failed 0, total failed 0, currently banned 0, total banned 0, journal filter active | None — live ban state now confirmed, closing the prior sudo gap. Agent-side sudo access independently re-checked 2026-08-26 (still unavailable), so this row's evidence is user-reported | User (ran the sudo command and reported output) | **VERIFIED** (2026-08-26 — upgraded from `PARTIAL`; jail is live and the host has no ongoing brute-force activity) |
+| H-3 | Network exposure minimised | RF-02 | Default install | `ss -tulnp \| grep LISTEN` | **Re-measured 2026-08-24 22:34**: `:22` (SSH, all interfaces) and DNS `:53` (loopback only) as before, **plus `:5173` (Vite dev server) and `:8000` (FastAPI/uvicorn) bound to `0.0.0.0`** — two user-started foreground processes, LAN-exposed rather than localhost-only. **2026-08-26**: same two processes still listening on `0.0.0.0:5173`/`0.0.0.0:8000` (`ps -o lstart` confirms unchanged since 2026-08-24 22:31/22:32) — the *application* bind is still all-interfaces and unauthenticated at the app layer. What is new is the perimeter control: H-1's user-reported UFW rule enumeration confirms `5173/tcp` and `8000/tcp` are allowed **only from `192.168.0.0/24`**, so reachability is firewall-constrained to the LAN subnet, not open to the internet | The app itself still binds `0.0.0.0` with no application-layer auth (`JUVAL_AUTH_MODE=disabled`) — UFW is a compensating control, not a substitute for binding to `127.0.0.1` when LAN access isn't actually needed. Recommendation unchanged: bind dev servers to `127.0.0.1` unless LAN access from another device is the actual task | User | **PARTIAL** (app-level exposure unchanged; the LAN-only firewall constraint is now directly confirmed rather than inferred — see H-1) |
 | H-4 | SSH key authentication works | RF-04 | `~/.ssh/authorized_keys` | `ssh -o BatchMode=yes juval@…` | Historical verification (2026-08-24, from the Windows workstation): non-interactive key auth succeeds. **Could not be re-tested from `juval-server` itself this session** — this host holds only the public key in `authorized_keys` (`stat`: `600 juval:juval`), no private key material, by design (a server does not need to SSH into itself) | Re-verification must happen from the client side, as it did originally — do not treat the absence of a private key on this host as a finding | Agent | **VERIFIED** (2026-08-24, workstation-side; not independently re-testable from this host) |
 | H-5 | SSH password authentication disabled | RF-04 | — | `ssh -o PubkeyAuthentication=no -v …` | **Re-verified 2026-08-24 22:34**, unchanged: server answers `Authentications that can continue: publickey,password` — **password auth is still ENABLED** | Password login is accepted on a host holding the repository. See §2 | User | **NOT_IMPLEMENTED** |
 | H-6 | OS security patches current | RF-02 (F-01) | `unattended-upgrades` | `apt list --upgradable`; `systemctl is-enabled unattended-upgrades` | 1 upgradable package, **0 security**; unattended-upgrades `enabled`; apt metadata refreshed 2026-08-24 21:22; no `/var/run/reboot-required`; kernel 6.8.0-138 | None currently | Agent | **VERIFIED** |
@@ -37,7 +38,7 @@ incomplete), `IMPLEMENTED_NOT_VERIFIED`, `NOT_IMPLEMENTED`,
 | H-10 | Secrets absent from the working copy | RF-02 | `.gitignore` + scanner | `python tools/compliance_check.py` | `secret_scan`: no secret-shaped strings in 312 files; `.env` and `frontend/.env.local` present but git-ignored and never staged | None | Agent | **VERIFIED** |
 | H-11 | Capacity headroom | Ops | — | `df -h /`; `free -h` | 98 G volume, 10% used (84 G free); 13 GiB RAM, 4 GiB swap, 12 GiB available | No alerting on thresholds | Agent | **PARTIAL** |
 | H-12 | Backup and restore of source code | Ops / RF-05 | GitHub (`origin`) | fresh `git clone` + `diff -r` against the working tree | **Restore-tested 2026-08-24**: cloned `origin/master` into a scratch directory; `diff -r` against the working tree showed zero differences beyond this session's own not-yet-committed edits and known git-ignored artifacts (`.env.local`, `frontend/dist`, `juval_runs.db`, `*.egg-info`) | None for source code specifically. **Secrets and local-only config remain `NOT_IMPLEMENTED` by design** — no destination exists that is both off-host and as secure as this host, and copying a secret to an insecure destination is explicitly worse than no backup (ADR-027 §"Expectativas de backup") | Agent | **VERIFIED** (source code only) |
-| H-13 | Browser E2E dependencies | Gate 8 | Playwright | `ldd chrome-headless-shell \| grep "not found"` | **Re-verified 2026-08-24**: nine libraries still missing (`libatk-1.0.so.0`, `libatk-bridge-2.0.so.0`, `libXcomposite.so.1`, `libXdamage.so.1`, `libXfixes.so.3`, `libXrandr.so.2`, `libgbm.so.1`, `libasound.so.2`, `libatspi.so.0`); `apt` history (`/var/log/apt/history.log`) shows no chromium-dependency package was ever installed — the `DEPENDENCIES_VALIDATED` marker Playwright writes under `~/.cache/ms-playwright/` does **not** mean the system libraries are present, it is misleading here; `sudo -n true` → `a password is required` | E2E cannot run on this host until `sudo npx playwright install-deps chromium` actually completes | User | **BLOCKED_EXTERNAL** (unchanged; the mission brief's premise that this was already run is not supported by any evidence found) |
+| H-13 | Browser E2E dependencies | Gate 8 | Playwright | `ldd chrome-headless-shell \| grep "not found"`; `E2E_BASE_URL=... npx playwright test` | **Resolved 2026-08-26**: `/var/log/apt/history.log` shows `Start-Date: 2026-08-26 13:12:37`, `Commandline: apt-get install -y --no-install-recommends libasound2t64 libatk-bridge2.0-0t64 libatk1.0-0t64 libatspi2.0-0t64 ... xvfb ...`, `Requested-By: juval (1000)` (sudo, with the user-scoped nvm `npx` exposed on `PATH`); all 9 previously-missing libraries confirmed present by direct `find` (`libatk-1.0.so.0`, `libatk-bridge-2.0.so.0`, `libXcomposite.so.1`, `libXdamage.so.1`, `libXfixes.so.3`, `libXrandr.so.2`, `libgbm.so.1`, `libasound.so.2`, `libatspi.so.0` all under `/usr/lib/x86_64-linux-gnu/`); `ldd` on both `chrome-headless-shell` and `chrome` (`~/.cache/ms-playwright/chromium{,_headless_shell}-1234/...`) shows **zero** `not found` lines, both binaries answer `--version` (`Google Chrome for Testing 151.0.7922.34`); **full E2E suite executed for real** on isolated ports (backend `127.0.0.1:8001`, fresh SQLite db; frontend `vite build` + `npm run preview --host 127.0.0.1 --port 5180`, avoiding the pre-existing LAN-bound 5173/8000 dev servers) — **27/27 passing**, same count as the historical Windows baseline | None | Agent (deps install by User via sudo; E2E execution and verification by Agent) | **VERIFIED** (2026-08-26 — upgraded from `BLOCKED_EXTERNAL`; the Linux E2E blocker is closed) |
 | H-14 | Production service hardening | ADR-018 | — | — | Host runs no JUVAl service by design | — | — | **NOT_APPLICABLE** |
 | H-15 | Host monitoring (disk/RAM/load/temp/failed units/log growth/backup status) | Ops, Gate 6 | `tools/host_monitor.sh` + `systemd --user` timer | `systemctl --user status juval-host-monitor.timer`; `journalctl --user -u juval-host-monitor.service` | **Implemented and verified 2026-08-24**: script checks disk, memory, 1-min load vs. core count, CPU temperature (`thermal_zone0`), failed systemd units (system+user), git-based backup status (uncommitted/unpushed), and journal disk usage; runs every 30 min via `juval-host-monitor.timer`, output captured in the user journal. First real run: `PASS WITH WARNINGS` (uncommitted changes correctly flagged) | Only this host's own state; no alert delivery channel configured (no email/webhook) — a human must check `journalctl --user` or the timer status, there is no push notification | Agent | **VERIFIED** |
 | H-16 | Reboot persistence for user-level automation | Ops, Gate 7 | `loginctl enable-linger juval` | `loginctl show-user juval \| grep Linger` | **Enabled 2026-08-24 without sudo** (`Linger=yes`) — this is the standard systemd mechanism that starts `user@1000.service` at boot without an interactive login, so `systemd --user` timers (H-15) survive a reboot | Not reboot-tested — this host has active interactive sessions this audit deliberately did not disrupt (STOP conditions: real risk of losing work). Linger is a well-documented systemd behavior, but "the mechanism is enabled" is reported here, not "reboot was tested and the timer fired" | Agent | **IMPLEMENTED_NOT_VERIFIED** (mechanism enabled; reboot itself not exercised) |
@@ -130,7 +131,66 @@ This host's permanent role is now formalized by
 JUVAl service here would be a change of architecture requiring a new ADR,
 not an extension of this one.
 
-## 5. Related
+## 5. 2026-08-26 update — H-1, H-2, H-13 closed; H-3 evidence strengthened
+
+**H-13 (Linux E2E dependency blocker): closed.** The prior session's
+blocker was genuine — `sudo` had no cached credential and the mission
+brief's premise that dependencies were already installed was unsupported
+by evidence. This session the user ran the actual install using the
+existing user-scoped nvm Node (not a second Node distribution — none was
+installed), exposing its `PATH` to `sudo` so `sudo npx playwright
+install-deps chromium` (or an equivalent explicit `apt-get install` of
+the same package set, per the apt history line quoted in the H-13 row)
+could resolve `npx`. The agent independently verified the result: all 9
+libraries present on disk, `ldd` clean on both Chromium binaries, and —
+the only verification that actually matters — **the real E2E suite run
+end-to-end and passing 27/27**, matching the historical Windows count.
+
+**Method note**: the agent ran E2E against isolated ports (backend
+`127.0.0.1:8001` with a scratch SQLite db, frontend production build
+served via `npm run preview` on `127.0.0.1:5180`), not the pre-existing
+dev servers already listening on `0.0.0.0:5173`/`0.0.0.0:8000` (running
+since 2026-08-24 22:31/22:32, unrelated to this task). This follows
+`frontend/e2e/README.md`'s own documented rationale — an isolated port
+means a stale/concurrent server can't be mistaken for the result. Those
+pre-existing dev-server processes were left running untouched; the
+agent's own backend/frontend processes on 8001/5180 were torn down after
+the run, and `frontend/.env.local` was restored to its original content
+(`VITE_API_BASE_URL=http://192.168.0.26:8000`). `git status` was clean
+before and after — no untracked artifacts (`dist/`, `.env.local`) were
+staged, both are already `.gitignore`d.
+
+**H-1 / H-2 (UFW allow-list, fail2ban live state): closed, but by
+user-reported evidence, not agent-executed evidence.** The agent still
+has no sudo on this host (`sudo -n true` → `a password is required`,
+re-confirmed 2026-08-26) and cannot run `ufw status` or
+`fail2ban-client status` itself (`ERROR: You need to be root to run
+this script`; `Permission denied to socket`). The user ran both commands
+with sudo and reported the output, which is treated here the same way
+H-4's workstation-side SSH verification is treated: real evidence,
+sourced from the user rather than re-executed by the agent this session.
+The reported UFW allow-list (`22/tcp` open, `5173/tcp` and `8000/tcp`
+restricted to `192.168.0.0/24`) is consistent with — and explains — the
+H-3 measurement that those two ports are listening on `0.0.0.0`: the
+application binds all interfaces, but the firewall is what actually
+constrains reachability to the LAN subnet. Per the mission brief, these
+ports must not be described as internet-exposed; the UFW evidence is
+exactly why that description would be wrong.
+
+**H-3: still `PARTIAL`, not upgraded.** The firewall constraint is now
+directly confirmed rather than inferred, which is real progress, but the
+underlying finding — the app processes bind `0.0.0.0` and have no
+application-layer authentication — is unchanged. UFW is a compensating
+network control, not a fix at the layer H-3 measures.
+
+**Not touched this session, by mission constraint**: UFW rules,
+fail2ban configuration, SSH authentication (H-5 remains
+`NOT_IMPLEMENTED` — password auth is still enabled), FusionAuth
+deployment, AI Analyst, enrichment. No second Node/npm distribution was
+installed; the existing nvm-scoped one was reused for both the
+dependency install and the E2E run.
+
+## 6. Related
 
 [`ADR-027`](../adr/ADR-027-juval-server-role.md) (host role, security/
 network/data boundaries, backup/recovery/observability expectations),

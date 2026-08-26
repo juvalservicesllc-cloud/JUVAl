@@ -43,13 +43,35 @@ cd frontend && npm run dev -- --host 127.0.0.1 --port 5173
 cd frontend && npm run test:e2e
 ```
 
-Verified 2026-08-24 against the real stack on the isolated port
+Verified 2026-08-26 on Linux (`juval-server`) against the real stack on
+isolated ports -- backend `http://127.0.0.1:8001` (fresh SQLite db,
+`JUVAL_CORS_ORIGINS=http://127.0.0.1:5180`), frontend
+`http://127.0.0.1:5180` (production `vite build` served by `npm run
+preview`, `VITE_API_BASE_URL` pointed at the isolated backend) -- no
+mocks: **27/27 passing**, same commit and count as the Windows baseline
+below. This closes the Chromium system-library blocker recorded here
+since 2026-08-24: the nine missing libraries
+(`libatk-1.0.so.0`, `libatk-bridge-2.0.so.0`, `libXcomposite.so.1`,
+`libXdamage.so.1`, `libXfixes.so.3`, `libXrandr.so.2`, `libgbm.so.1`,
+`libasound.so.2`, `libatspi.so.0`) were installed via `sudo apt-get
+install` (the user exposed the existing user-scoped nvm `PATH` to
+`sudo` rather than installing a second Node distribution); `ldd` on both
+`chrome` and `chrome-headless-shell` now resolves cleanly. See
+`docs/DEVELOPMENT_ENVIRONMENT.md` §4 and
+`docs/compliance/HOST_CONTROLS_JUVAL_SERVER.md` (H-13) for full evidence.
+The isolated ports (8001/5180) were used instead of the pre-existing dev
+servers already running on `0.0.0.0:5173`/`0.0.0.0:8000` so this result
+can't be confused with that separate, still-running LAN-bound instance;
+those processes and this run's own temporary processes/files were left
+in their original state afterward.
+
+Historical: verified 2026-08-24 against the real stack on the isolated port
 `http://127.0.0.1:5180` (production `vite build` served by `npm run
 preview`, real FastAPI, real SQLite -- no mocks): **27/27 passing**, on the
 consolidated baseline that includes multi-file batches, CSV ingestion and
-the locale-pinned formatting fix. Run on Windows: Chromium cannot start on
-`juval-server` yet, see `docs/DEVELOPMENT_ENVIRONMENT.md` §4 for the exact
-one-time sudo command that unblocks it.
+the locale-pinned formatting fix. Run on Windows; Chromium could not yet
+start on `juval-server` at that time (system libraries missing, resolved
+2026-08-26 above).
 Historical: verified 2026-08-20 against the real stack on the isolated port
 `http://127.0.0.1:5180` (R4 independent parity verification, production
 `vite build` served by `npm run preview`, not the dev server): **27/27
