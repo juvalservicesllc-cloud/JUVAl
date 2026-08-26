@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react"
-import { ArrowUpRight, CaretDown, CaretUp, MagnifyingGlass } from "@phosphor-icons/react"
+import { ArrowUpRight, CaretDown, CaretUp, CaretUpDown, MagnifyingGlass } from "@phosphor-icons/react"
 import { Link } from "react-router-dom"
 import { ApiError, apiErrorMessage, apiUrl } from "../api/client"
 import { getRunRecords } from "../api/records"
 import { getRuns } from "../api/runs"
 import { percentInputToRatio } from "../contract"
 import { ProductThumbnail } from "../components/ProductThumbnail"
-import { ProvenanceValue } from "../components/ProvenanceValue"
 import { StatusBadge } from "../components/StatusBadge"
 import type { Decision, RecordOut, RecordPaginationOut, RecordSort, RunSummaryOut, SortDirection } from "../types"
 import { count, money, percent } from "../format"
@@ -22,19 +21,23 @@ const SORT_LABEL: Record<RecordSort, string> = { record_ref: "Record", sku: "Pro
 // record_ref/sku/decision are naturally read ascending; profit/roi/margin are
 // interesting largest-first -- matches the prior client-side sort behavior.
 const DEFAULT_DIRECTION: Record<RecordSort, SortDirection> = { record_ref: "asc", sku: "asc", asin: "asc", title: "asc", price: "desc", cog: "asc", decision: "asc", profit: "desc", roi: "desc", margin: "desc", hazmat: "asc", bulky: "asc" }
-type ColumnKey = "record_ref" | "product" | "identity" | "price" | "cog" | "profit" | "roi" | "margin" | "hazmat" | "bulky" | "decision" | "issues" | "action"
-const DEFAULT_COLUMNS: ColumnKey[] = ["record_ref", "product", "identity", "price", "cog", "profit", "roi", "margin", "hazmat", "bulky", "decision", "issues", "action"]
-const COLUMN_LABEL: Record<ColumnKey, string> = { record_ref: "Record", product: "Product / SKU", identity: "ASIN / UPC", price: "Price", cog: "COG", profit: "Profit", roi: "ROI", margin: "Margin", hazmat: "HazMat", bulky: "Bulky", decision: "Decision", issues: "Issues", action: "Inspect" }
+type ColumnKey = "image" | "record_ref" | "product" | "identity" | "price" | "cog" | "profit" | "roi" | "margin" | "hazmat" | "bulky" | "decision" | "issues" | "action"
+const DEFAULT_COLUMNS: ColumnKey[] = ["image", "record_ref", "product", "identity", "price", "cog", "profit", "roi", "margin", "hazmat", "bulky", "decision", "issues", "action"]
+const COLUMN_LABEL: Record<ColumnKey, string> = { image: "Image", record_ref: "Record", product: "Product / SKU", identity: "ASIN / UPC", price: "Price", cog: "COG", profit: "Profit", roi: "ROI", margin: "Margin", hazmat: "HazMat", bulky: "Bulky", decision: "Decision", issues: "Issues", action: "Inspect" }
 // The one place a column is mapped to its server sort key. Defined once so
 // the header button and the `aria-sort` announced on the same cell can
 // never disagree. `null` means the column is not sortable server-side.
-const COLUMN_SORT_KEY: Record<ColumnKey, RecordSort | null> = { record_ref: "record_ref", product: "sku", identity: "asin", price: "price", cog: "cog", profit: "profit", roi: "roi", margin: "margin", hazmat: "hazmat", bulky: "bulky", decision: "decision", issues: null, action: null }
-const COLUMN_STORAGE_KEY = "juval.catalog.columns.v1"
+const COLUMN_SORT_KEY: Record<ColumnKey, RecordSort | null> = { image: null, record_ref: "record_ref", product: "sku", identity: "asin", price: "price", cog: "cog", profit: "profit", roi: "roi", margin: "margin", hazmat: "hazmat", bulky: "bulky", decision: "decision", issues: null, action: null }
+// v2 introduced the leading media column. A stored v1 preference is a valid
+// subset of v2's keys, so it would silently survive the upgrade and hide the
+// new column from exactly the returning users the redesign is for -- the key
+// bump is what makes the new default actually apply.
+const COLUMN_STORAGE_KEY = "juval.catalog.columns.v2"
 // `.catalog-table` is `table-layout: fixed`, so a column is exactly as wide as
 // its header cell says. These are the design system's own `.col-*` widths and
 // they sum to the table's 1430px, matching the group bar above it.
 const COLUMN_WIDTH_CLASS: Record<ColumnKey, string> = {
-  record_ref: "col-record", product: "col-identity", identity: "col-evidence",
+  image: "col-media", record_ref: "col-record", product: "col-identity", identity: "col-evidence",
   price: "col-money", cog: "col-money", profit: "col-money", roi: "col-number", margin: "col-number",
   hazmat: "col-risk", bulky: "col-risk", decision: "col-decision", issues: "col-quality", action: "col-action",
 }
@@ -55,9 +58,16 @@ function formatPercent(value: unknown): string {
   return Number.isFinite(amount) ? percent(amount) : "—"
 }
 
+/** One catalog cell: the value beside its verification status, never without it.
+ *
+ * When there is no value the badge already reads NOT FOUND / INVALID, so the
+ * extra "No value" caption the detail view spells out is dropped here -- at 50
+ * rows it doubled the height of every row to repeat what the badge said. The
+ * status itself is never dropped (ADR-003/ADR-004).
+ */
 function formattedField(value: RecordOut["profit"], formatter: (value: unknown) => string) {
   if (value.status === null) return <span className="fv fv-empty">—</span>
-  return <span className="provenance-value"><span>{value.value === null ? "No value" : formatter(value.value)}</span><StatusBadge value={value.status} /></span>
+  return <span className="provenance-value"><span>{value.value === null ? "—" : formatter(value.value)}</span><StatusBadge value={value.status} compact /></span>
 }
 
 export function ProductsPage() {
@@ -170,7 +180,9 @@ export function ProductsPage() {
         aria-label={`${SORT_LABEL[key]}${active ? `, sorted ${direction === "asc" ? "ascending" : "descending"}. Activate for ${nextDirection}.` : ". Activate to sort."}`}
       >
         {SORT_LABEL[key]}
-        {active && (direction === "asc" ? <CaretUp size={11} weight="bold" aria-hidden="true" /> : <CaretDown size={11} weight="bold" aria-hidden="true" />)}
+        {active
+          ? (direction === "asc" ? <CaretUp size={11} weight="bold" aria-hidden="true" /> : <CaretDown size={11} weight="bold" aria-hidden="true" />)
+          : <CaretUpDown size={11} weight="bold" aria-hidden="true" className="sort-idle" />}
       </button>
     )
   }
@@ -214,9 +226,10 @@ export function ProductsPage() {
   }
 
   function cellFor(column: ColumnKey, record: RecordOut) {
+    if (column === "image") return <ProductThumbnail label={text(record.title?.value) || record.record_ref} />
     if (column === "record_ref") return <Link to={`/runs/${encodeURIComponent(selectedRunId)}/records/${encodeURIComponent(record.record_ref)}`} state={{ record }} aria-label={`Inspect record ${record.record_ref}`} title="Inspect run-scoped record">{record.record_ref}</Link>
-    if (column === "product") return <div className="product-identity"><ProductThumbnail label={text(record.title?.value) || record.record_ref} /><div><strong>{text(record.title?.value) || "—"}</strong>{record.brand?.value ? <div className="text-muted">{text(record.brand.value)}</div> : null}<small className="identity-meta">SKU {record.supplier_sku ?? "—"}</small></div></div>
-    if (column === "identity") return <div className="identity-evidence"><span><small>ASIN</small>{<ProvenanceValue value={record.asin} />}</span><span><small>UPC</small>{<ProvenanceValue value={record.upc} />}</span></div>
+    if (column === "product") return <div className="product-identity"><div><strong>{text(record.title?.value) || "—"}</strong>{record.brand?.value ? <div className="text-muted">{text(record.brand.value)}</div> : null}<small className="identity-meta">SKU {record.supplier_sku ?? "—"}</small></div></div>
+    if (column === "identity") return <div className="identity-evidence"><span><small>ASIN</small>{formattedField(record.asin, text)}</span><span><small>UPC</small>{formattedField(record.upc, text)}</span></div>
     if (column === "price") return formattedField(record.selling_price, formatMoney)
     if (column === "cog") return formatMoney(record.cog)
     if (column === "profit") return formattedField(record.profit, formatMoney)
@@ -331,7 +344,11 @@ export function ProductsPage() {
                 {LIMIT_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
               </select>
             </label>
-            <button type="button" className="secondary-button" onClick={exportFiltered} disabled={!selectedRunId}>Export filtered view</button>
+            {/* The count is the same `total` the pagination reports, so the button
+                always names exactly how many rows the export will contain. */}
+            <button type="button" className="secondary-button catalog-export" onClick={exportFiltered} disabled={!selectedRunId}>
+              {pagination ? `Export ${count(pagination.total)} result${pagination.total === 1 ? "" : "s"}` : "Export filtered view"}
+            </button>
             {hasActiveQuery && <button type="button" className="secondary-button catalog-reset" onClick={resetQuery}>Reset search &amp; filters</button>}
           </section>
 
@@ -385,7 +402,7 @@ export function ProductsPage() {
                   </thead>
                   <tbody>
                     {recordsState.records.map((record) => (
-                      <tr key={record.record_ref}>{columns.map((column) => <td key={column} className={`${column === "record_ref" ? "mono " : ""}${["price", "cog", "profit", "roi", "margin"].includes(column) ? "numeric-cell economic-value" : ""}${column === "product" ? "product-cell" : ""}${column === "identity" ? "identity-cell" : ""}`}>{cellFor(column, record)}</td>)}</tr>
+                      <tr key={record.record_ref}>{columns.map((column) => <td key={column} className={`${column === "record_ref" ? "mono " : ""}${["price", "cog", "profit", "roi", "margin"].includes(column) ? "numeric-cell economic-value" : ""}${column === "product" ? "product-cell" : ""}${column === "identity" ? "identity-cell" : ""}${column === "image" ? "media-cell" : ""}`}>{cellFor(column, record)}</td>)}</tr>
                     ))}
                   </tbody>
                 </table>

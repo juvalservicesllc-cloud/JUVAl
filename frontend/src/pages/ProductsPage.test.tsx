@@ -296,7 +296,7 @@ describe("ProductsPage filtered export", () => {
     await user.type(screen.getByLabelText("Minimum ROI percentage"), "30")
     await user.type(screen.getByLabelText("Minimum margin percentage"), "20")
     await user.selectOptions(screen.getByLabelText("Filter by decision"), "BUY")
-    await user.click(screen.getByRole("button", { name: /export filtered view/i }))
+    await user.click(screen.getByRole("button", { name: /^export \d/i }))
 
     const url = new URL(open.mock.calls.at(-1)![0] as string, "http://localhost")
     expect(url.pathname).toContain("/records/export")
@@ -315,10 +315,87 @@ describe("ProductsPage filtered export", () => {
     renderPage()
     await screen.findByText("Alpha")
 
-    await user.click(screen.getByRole("button", { name: /export filtered view/i }))
+    await user.click(screen.getByRole("button", { name: /^export \d/i }))
 
     const url = new URL(open.mock.calls.at(-1)![0] as string, "http://localhost")
     expect(url.searchParams.has("min_roi")).toBe(false)
     expect(url.searchParams.has("min_margin")).toBe(false)
+  })
+})
+
+// Regression cover for the golden-UX Catalog convergence (ADR-029). These
+// assert the *contract* behind each migrated visual, not its styling: a
+// screenshot can drift, a query parameter cannot.
+describe("ProductsPage golden-UX catalog", () => {
+  afterEach(() => { vi.unstubAllGlobals(); localStorage.clear() })
+
+  it("sends the HazMat filter server-side", async () => {
+    const fetchMock = stubFetch()
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText("Alpha")
+
+    await user.selectOptions(screen.getByLabelText("Filter by HazMat"), "PRESENT")
+
+    await waitFor(() => expect(lastRequestUrl(fetchMock).searchParams.get("hazmat")).toBe("PRESENT"))
+  })
+
+  it("sends the Bulky filter server-side", async () => {
+    const fetchMock = stubFetch()
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText("Alpha")
+
+    await user.selectOptions(screen.getByLabelText("Filter by Bulky"), "ABSENT")
+
+    await waitFor(() => expect(lastRequestUrl(fetchMock).searchParams.get("bulky")).toBe("ABSENT"))
+  })
+
+  it("renders ROI as a percentage, never as the raw ratio", async () => {
+    stubFetch()
+    renderPage()
+    await screen.findByText("Alpha")
+
+    // Backend ratio 0.1/0.4 must reach the operator as 10.00%/40.00%.
+    expect(await screen.findByText("10.00%")).toBeInTheDocument()
+    expect(screen.getByText("40.00%")).toBeInTheDocument()
+    expect(screen.queryByText("0.1")).not.toBeInTheDocument()
+    expect(screen.queryByText("0.4")).not.toBeInTheDocument()
+  })
+
+  it("keeps a product media slot per row that never invents an image", async () => {
+    stubFetch()
+    renderPage()
+    await screen.findByText("Alpha")
+
+    const slots = screen.getAllByRole("img", { name: /no product image available/i })
+    expect(slots).toHaveLength(records.length)
+    // No <img> may be emitted while RecordOut carries no canonical image field.
+    expect(document.querySelectorAll(".catalog-table img")).toHaveLength(0)
+  })
+
+  it("names the exact number of rows the filtered export will contain", async () => {
+    stubFetch()
+    renderPage()
+    await screen.findByText("Alpha")
+
+    expect(await screen.findByRole("button", { name: `Export ${records.length} results` })).toBeInTheDocument()
+  })
+
+  it("keeps every sortable column reachable and announces its sort state", async () => {
+    const fetchMock = stubFetch()
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText("Alpha")
+
+    const roi = screen.getByRole("button", { name: /^ROI\./ })
+    await user.click(roi)
+
+    await waitFor(() => {
+      const params = lastRequestUrl(fetchMock).searchParams
+      expect(params.get("sort")).toBe("roi")
+      expect(params.get("direction")).toBe("desc")
+    })
+    expect(screen.getByRole("button", { name: /^ROI, sorted descending/ })).toHaveAttribute("aria-pressed", "true")
   })
 })

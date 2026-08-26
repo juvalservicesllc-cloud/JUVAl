@@ -78,17 +78,35 @@ main { max-width:1480px; margin:0 auto; padding:30px 34px 54px; }.page-intro { d
 }
 
 /* M2.1 sourcing grid: deliberate grouping and high-density scan order. */
-.table-group-bar { display:grid; grid-template-columns:120px 240px 180px repeat(5,90px) 100px 100px 100px 130px 100px; min-width:1430px; border-bottom:1px solid var(--border-strong); background:var(--surface-raised); color:var(--text-muted); font-size:9px; font-weight:750; letter-spacing:.1em; line-height:1; text-transform:uppercase; }
+/* Widths are rebalanced against the compact status marker: the media column is
+   paid for out of the other columns rather than added on top, so Decision --
+   the run's actual output -- still lands inside the viewport instead of behind
+   a horizontal scroll. */
+.table-group-bar { display:grid; grid-template-columns:56px 110px 200px 150px repeat(5,86px) 90px 90px 100px 110px 90px; min-width:1426px; border-bottom:1px solid var(--border-strong); background:var(--surface-raised); color:var(--text-muted); font-size:9px; font-weight:750; letter-spacing:.1em; line-height:1; text-transform:uppercase; }
 .table-group-bar span { padding:10px 12px 8px; border-right:1px solid var(--border); }
-.table-group-bar .group-identity { grid-column:1 / span 3; color:var(--accent); }
-.table-group-bar .group-economics { grid-column:4 / span 5; }
-.table-group-bar .group-risk { grid-column:9 / span 2; }
-.table-group-bar .group-decision { grid-column:11; color:var(--warning); }
-.table-group-bar .group-quality { grid-column:12; }
-.table-group-bar .group-action { grid-column:13; color:var(--accent); }
+.table-group-bar .group-identity { grid-column:1 / span 4; color:var(--accent); }
+.table-group-bar .group-economics { grid-column:5 / span 5; }
+.table-group-bar .group-risk { grid-column:10 / span 2; }
+.table-group-bar .group-decision { grid-column:12; color:var(--warning); }
+.table-group-bar .group-quality { grid-column:13; }
+.table-group-bar .group-action { grid-column:14; color:var(--accent); }
 .catalog-table-scroll { overflow-x:auto; overscroll-behavior-x:contain; }
-.catalog-table { min-width:1430px !important; table-layout:fixed; }
-.catalog-table .col-record { width:120px; }.catalog-table .col-identity { width:240px; }.catalog-table .col-evidence { width:180px; }.catalog-table .col-money { width:90px; }.catalog-table .col-number { width:90px; }.catalog-table .col-risk { width:100px; }.catalog-table .col-decision { width:100px; }.catalog-table .col-quality { width:130px; }.catalog-table .col-action { width:100px; }
+.catalog-table { min-width:1426px !important; table-layout:fixed; }
+.catalog-table .col-media { width:56px; }.catalog-table .col-record { width:110px; }.catalog-table .col-identity { width:200px; }.catalog-table .col-evidence { width:150px; }.catalog-table .col-money { width:86px; }.catalog-table .col-number { width:86px; }.catalog-table .col-risk { width:90px; }.catalog-table .col-decision { width:100px; }.catalog-table .col-quality { width:110px; }.catalog-table .col-action { width:90px; }
+.catalog-table td.media-cell { padding:8px 12px; vertical-align:middle; }
+/* Traffic-light decision, reinforced by shape so the three outcomes stay
+   distinguishable without relying on colour alone (colour-blind readers,
+   greyscale print). Semantics are unchanged: the decision still comes from
+   the backend rule set (ADR-006/ADR-007), never from the badge. */
+/* Status as a marker rather than a word -- see StatusBadge. Colour comes from
+   the existing badge-* rules, so VERIFIED/INFERRED/NOT_FOUND/INVALID keep the
+   exact palette they have everywhere else. */
+.badge-compact { width:9px; min-width:9px; height:9px; min-height:9px; padding:0; border-radius:50%; }
+.badge-buy::before,.badge-review::before,.badge-pass::before { margin-right:4px; font-size:8px; line-height:1; }
+.badge-compact::before { content:none; }
+.badge-buy::before { content:"\25CF"; }
+.badge-review::before { content:"\25B2"; }
+.badge-pass::before { content:"\25A0"; }
 .catalog-table th,.catalog-table td { padding:10px 12px; }
 .catalog-table td { overflow:hidden; vertical-align:top; }
 .catalog-table td.numeric-cell { white-space:nowrap; }
@@ -102,7 +120,18 @@ main { max-width:1480px; margin:0 auto; padding:30px 34px 54px; }.page-intro { d
 
 .mode-control-row { display:flex; align-items:center; gap:10px; }.appearance-mode-switch { position:relative; display:grid; grid-template-columns:1fr 1fr; align-items:center; width:168px; min-height:38px; padding:4px; border:1px solid var(--border-strong); border-radius:999px; background:var(--bg); color:var(--text-secondary); font-size:11px; font-weight:700; cursor:pointer; isolation:isolate; }.appearance-mode-switch > span:not(.appearance-mode-thumb) { position:relative; z-index:1; text-align:center; }.appearance-mode-thumb { position:absolute; inset:4px auto 4px 4px; z-index:0; display:grid; place-items:center; width:calc(50% - 4px); border-radius:999px; background:var(--surface-hover); color:var(--text-primary); transition:transform .2s ease,background-color .2s ease; }.appearance-mode-switch.is-dark .appearance-mode-thumb { transform:translateX(100%); }.appearance-mode-switch:hover { border-color:var(--accent); }.appearance-mode-switch:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
 
-.table-panel th button { display:inline-flex; align-items:center; gap:3px; padding:0; border:0; background:transparent; color:inherit; font:inherit; font-weight:inherit; letter-spacing:inherit; text-transform:inherit; cursor:pointer; }.table-panel th button:hover { color:var(--text-primary); }.provenance-value { display:grid; gap:4px; align-items:start; justify-items:start; }.numeric-cell { font-variant-numeric:tabular-nums; }.product-cell { max-width:220px; }.product-cell strong,.product-cell div { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }.product-cell strong { display:block; }.catalog-controls { display:flex; flex-wrap:wrap; align-items:end; gap:12px; }.catalog-controls label { display:grid; gap:5px; color:var(--text-secondary); font-size:10px; font-weight:650; }.catalog-controls select,.catalog-controls input { min-height:34px; min-width:160px; padding:7px 9px; border:1px solid var(--border-strong); border-radius:var(--radius-md); background:var(--bg); color:var(--text-primary); }.catalog-controls label:first-child select { max-width:360px; }.catalog-controls > span { margin-left:auto; color:var(--text-muted); font-size:11px; }.search-input { position:relative; display:flex; align-items:center; min-width:200px; }.search-input svg { position:absolute; left:9px; color:var(--text-muted); pointer-events:none; }.search-input input { width:100%; padding-left:29px; }
+.table-panel th button { display:inline-flex; align-items:center; gap:3px; padding:0; border:0; background:transparent; color:inherit; font:inherit; font-weight:inherit; letter-spacing:inherit; text-transform:inherit; cursor:pointer; }.table-panel th button:hover { color:var(--text-primary); }
+/* Golden-reference header treatment (ADR-029): every sortable column reads as
+   an actionable pill and always shows its sort affordance, so a column's
+   sortability is visible before the first click instead of only after it. */
+.catalog-table thead th button { gap:5px; min-height:26px; padding:0 9px; border:1px solid var(--border-strong); border-radius:var(--radius-pill); background:var(--surface); color:var(--text-secondary); }
+.catalog-table thead th button:hover { border-color:var(--accent); background:var(--accent-soft); color:var(--text-primary); }
+.catalog-table thead th button[aria-pressed="true"] { border-color:var(--accent); background:var(--accent-soft); color:var(--accent); }
+.catalog-table thead th button .sort-idle { opacity:.45; }
+/* One row per record: the status stays attached to its value (ADR-003/004)
+   but sits beside it rather than under it, which is what made the golden
+   catalog scannable at 50 rows a page. */
+.provenance-value { display:inline-flex; align-items:center; gap:5px; }.numeric-cell { font-variant-numeric:tabular-nums; }.product-cell { max-width:220px; }.product-cell strong,.product-cell div { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }.product-cell strong { display:block; }.catalog-controls { display:flex; flex-wrap:wrap; align-items:end; gap:12px; }.catalog-controls label { display:grid; gap:5px; color:var(--text-secondary); font-size:10px; font-weight:650; }.catalog-controls select,.catalog-controls input { min-height:34px; min-width:160px; padding:7px 9px; border:1px solid var(--border-strong); border-radius:var(--radius-md); background:var(--bg); color:var(--text-primary); }.catalog-controls label:first-child select { max-width:360px; }.catalog-controls > span { margin-left:auto; color:var(--text-muted); font-size:11px; }.search-input { position:relative; display:flex; align-items:center; min-width:200px; }.search-input svg { position:absolute; left:9px; color:var(--text-muted); pointer-events:none; }.search-input input { width:100%; padding-left:29px; }
 
 .text-muted { color:var(--text-muted); font-size:10px; }
 
@@ -178,10 +207,15 @@ main { max-width:1480px; margin:0 auto; padding:30px 34px 54px; }.page-intro { d
 @media (max-width:600px) { .run-form fieldset { grid-template-columns:1fr; }.run-form label,.run-form legend,.form-help,.file-selection,.persist-option { grid-column:1; }.run-actions { display:grid; grid-template-columns:1fr; }.run-actions > * { width:100%; }.decision-summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); }.decision-summary div { min-width:0; }.decision-summary dd { font-size:18px; } }
 
 /* Wave B-D recovery: product media slot, batch file tables, paired analytics. */
-.product-identity { display:grid; grid-template-columns:auto minmax(0,1fr); gap:9px; align-items:start; }
+/* The media slot moved out to its own leading column, so the identity cell is
+   a single text column now. */
+.product-identity { display:grid; grid-template-columns:minmax(0,1fr); align-items:start; }
 .product-identity > div { min-width:0; }
 .product-identity strong,.product-identity > div > div { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
-.product-thumbnail { display:grid; place-items:center; width:30px; height:30px; flex:0 0 30px; border:1px dashed var(--border-strong); border-radius:5px; background:var(--surface-raised); color:var(--text-muted); }
+/* Fixed media slot, sized so that dropping a real `RecordOut.image` in later
+   is a data change and not a table re-layout. Dashed border + muted glyph
+   keep "no canonical image" honest rather than dressing it as a product. */
+.product-thumbnail { display:grid; place-items:center; width:40px; height:40px; flex:0 0 40px; border:1px dashed var(--border-strong); border-radius:6px; background:var(--surface-raised); color:var(--text-muted); }
 
 .batch-file-scroll { overflow-x:auto; overscroll-behavior-x:contain; margin:0 -18px -18px; border-top:1px solid var(--border); }
 .batch-file-table { min-width:880px; }
