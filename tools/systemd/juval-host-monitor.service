@@ -1,0 +1,11 @@
+[Unit]
+Description=JUVAl host monitoring check (ADR-027, Gate 6)
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/JUVAl/APP
+# host_monitor.sh exits 0 (pass) / 1 (warn) / 2 (fail). Only a real FAIL
+# should mark this unit failed in `systemctl --failed` -- a WARN (e.g.
+# uncommitted changes mid-session) is expected during normal development
+# and must not create failed-unit noise that would mask a real FAIL.
+ExecStart=/bin/bash -c '%h/JUVAl/APP/tools/host_monitor.sh; ec=$?; [ "$ec" -eq 2 ] && exit 1; exit 0'
