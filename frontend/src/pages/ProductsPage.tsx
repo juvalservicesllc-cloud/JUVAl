@@ -18,13 +18,27 @@ type RecordsState =
   | { kind: "ready"; records: RecordOut[]; pagination: RecordPaginationOut }
 
 const LIMIT_OPTIONS = [25, 50, 100]
+// Golden opens the catalog on the most profitable rows rather than on record
+// order, and that is the sourcing question the page exists to answer. `profit`
+// is an allow-listed server-side sort, and SQLite orders NULLs last under DESC,
+// so records whose profit is NOT_FOUND/INVALID sink to the bottom instead of
+// heading the page (verified against the live API, not assumed). This changes
+// presentation order only -- no value, decision or stored record is touched.
+const DEFAULT_SORT: RecordSort = "profit"
+const DEFAULT_SORT_DIRECTION: SortDirection = "desc"
 const SORT_LABEL: Record<RecordSort, string> = { record_ref: "Record", sku: "Product / SKU", asin: "ASIN", title: "Product", price: "Price", cog: "COG", decision: "Decision", profit: "Profit", roi: "ROI", margin: "Margin", hazmat: "HazMat", bulky: "Bulky" }
 // record_ref/sku/decision are naturally read ascending; profit/roi/margin are
 // interesting largest-first -- matches the prior client-side sort behavior.
 const DEFAULT_DIRECTION: Record<RecordSort, SortDirection> = { record_ref: "asc", sku: "asc", asin: "asc", title: "asc", price: "desc", cog: "asc", decision: "asc", profit: "desc", roi: "desc", margin: "desc", hazmat: "asc", bulky: "asc" }
 type ColumnKey = "image" | "record_ref" | "product" | "identity" | "price" | "cog" | "profit" | "roi" | "margin" | "hazmat" | "bulky" | "decision" | "issues" | "favorite" | "action"
-const DEFAULT_COLUMNS: ColumnKey[] = ["image", "record_ref", "product", "identity", "price", "cog", "profit", "roi", "margin", "hazmat", "bulky", "decision", "issues", "favorite", "action"]
-const COLUMN_LABEL: Record<ColumnKey, string> = { image: "Image", record_ref: "Record", product: "Product / SKU", identity: "ASIN / UPC", price: "Price", cog: "COG", profit: "Profit", roi: "ROI", margin: "Margin", hazmat: "HazMat", bulky: "Bulky", decision: "Decision", issues: "Issues", favorite: "Favorite", action: "Inspect" }
+// Ordered by what a sourcing decision is actually read from, widest-viewport
+// last: identity, then the decision itself, then the economics that justify it,
+// then risk, then quality/marks, and only then the audit/lookup fields. At
+// 1366px everything through Bulky is visible without horizontal scrolling;
+// ASIN, record ref and Inspect are the columns that scroll. Every column
+// remains toggleable and re-orderable.
+const DEFAULT_COLUMNS: ColumnKey[] = ["image", "product", "decision", "roi", "profit", "margin", "price", "cog", "hazmat", "bulky", "issues", "favorite", "identity", "record_ref", "action"]
+const COLUMN_LABEL: Record<ColumnKey, string> = { image: "Image", record_ref: "Record", product: "Product / SKU", identity: "ASIN / UPC", price: "Price", cog: "COG", profit: "Profit", roi: "ROI", margin: "Margin", hazmat: "HazMat", bulky: "Bulky", decision: "Decision", issues: "Issues", favorite: "Favorite (local)", action: "Inspect" }
 // The one place a column is mapped to its server sort key. Defined once so
 // the header button and the `aria-sort` announced on the same cell can
 // never disagree. `null` means the column is not sortable server-side.
@@ -32,8 +46,8 @@ const COLUMN_SORT_KEY: Record<ColumnKey, RecordSort | null> = { image: null, rec
 // Bumped whenever a column is added: an older stored preference is a valid
 // subset of the new keys, so it would silently survive the upgrade and hide the
 // new column from exactly the returning users the change is for. v2 added the
-// media column, v3 the favourite column.
-const COLUMN_STORAGE_KEY = "juval.catalog.columns.v3"
+// media column, v3 the favourite column, v4 reordered the default hierarchy.
+const COLUMN_STORAGE_KEY = "juval.catalog.columns.v4"
 // `.catalog-table` is `table-layout: fixed`, so a column is exactly as wide as
 // its header cell says. These are the design system's own `.col-*` widths and
 // they sum to the table's 1430px, matching the group bar above it.
@@ -81,8 +95,8 @@ export function ProductsPage() {
   const [searchInput, setSearchInput] = useState("")
   const [search, setSearch] = useState("")
   const [decision, setDecision] = useState<"ALL" | Decision>("ALL")
-  const [sort, setSort] = useState<RecordSort>("record_ref")
-  const [direction, setDirection] = useState<SortDirection>("asc")
+  const [sort, setSort] = useState<RecordSort>(DEFAULT_SORT)
+  const [direction, setDirection] = useState<SortDirection>(DEFAULT_SORT_DIRECTION)
   const [limit, setLimit] = useState(50)
   const [offset, setOffset] = useState(0)
   const [minRoi, setMinRoi] = useState("")
@@ -193,14 +207,14 @@ export function ProductsPage() {
   const rangeStart = pagination && pagination.total > 0 ? pagination.offset + 1 : 0
   const rangeEnd = pagination ? Math.min(pagination.offset + limit, pagination.total) : 0
   const selectedRun = runsState.kind === "ready" ? runsState.runs.find((run) => run.execution_id === selectedRunId) : null
-  const hasActiveQuery = Boolean(searchInput || decision !== "ALL" || sort !== "record_ref" || direction !== "asc" || offset > 0 || limit !== 50 || minRoi || minProfit || minMargin || confidence !== "VERIFIED_ONLY" || hazmat || bulky || provenanceField || provenanceStatus)
+  const hasActiveQuery = Boolean(searchInput || decision !== "ALL" || sort !== DEFAULT_SORT || direction !== DEFAULT_SORT_DIRECTION || offset > 0 || limit !== 50 || minRoi || minProfit || minMargin || confidence !== "VERIFIED_ONLY" || hazmat || bulky || provenanceField || provenanceStatus)
 
   function resetQuery() {
     setSearchInput("")
     setSearch("")
     setDecision("ALL")
-    setSort("record_ref")
-    setDirection("asc")
+    setSort(DEFAULT_SORT)
+    setDirection(DEFAULT_SORT_DIRECTION)
     setLimit(50)
     setOffset(0)
     setMinRoi(""); setMinProfit(""); setMinMargin(""); setConfidence("VERIFIED_ONLY"); setHazmat(""); setBulky(""); setProvenanceField(""); setProvenanceStatus("")
@@ -384,7 +398,7 @@ export function ProductsPage() {
             {hazmat && <span className="query-chip">HazMat: {hazmat}</span>}
             {bulky && <span className="query-chip">Bulky: {bulky}</span>}
             {provenanceField && provenanceStatus && <span className="query-chip">{provenanceField}: {provenanceStatus}</span>}
-            {sort !== "record_ref" && <span className="query-chip">Sorted by: {SORT_LABEL[sort]} {direction === "asc" ? "↑" : "↓"}</span>}
+            {(sort !== DEFAULT_SORT || direction !== DEFAULT_SORT_DIRECTION) && <span className="query-chip">Sorted by: {SORT_LABEL[sort]} {direction === "asc" ? "↑" : "↓"}</span>}
             {/* Favourites are a browser preference, never server state -- say so
                 where the operator can see it, so a star is not mistaken for
                 saved business data. */}

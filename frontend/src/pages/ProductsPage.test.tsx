@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react"
+import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { MemoryRouter } from "react-router-dom"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -65,16 +65,21 @@ describe("ProductsPage", () => {
     expect(await screen.findByText("Alpha")).toBeInTheDocument()
     expect(screen.getByRole("heading", { name: "Catalog" })).toBeInTheDocument()
     expect(screen.getByText(/run context/i)).toBeInTheDocument()
-    expect(screen.getAllByText("VERIFIED").length).toBeGreaterThan(0)
-    expect(screen.getAllByText("INFERRED").length).toBeGreaterThan(0)
+    // Scoped to the table on purpose: the unscoped query also matched the
+    // provenance-status <select> options, so it passed without the table
+    // showing any status at all.
+    const table = document.querySelector(".catalog-table") as HTMLElement
+    expect(within(table).getAllByLabelText("Status: VERIFIED").length).toBeGreaterThan(0)
+    expect(within(table).getAllByLabelText("Status: INFERRED").length).toBeGreaterThan(0)
     expect(screen.getByText("10.00%")).toBeInTheDocument()
     expect(screen.getByText("40.00%")).toBeInTheDocument()
 
     const url = lastRequestUrl(fetchMock)
     expect(url.searchParams.get("limit")).toBe("50")
     expect(url.searchParams.get("offset")).toBe("0")
-    expect(url.searchParams.get("sort")).toBe("record_ref")
-    expect(url.searchParams.get("direction")).toBe("asc")
+    // Catalog opens on the most profitable rows (ADR-029 golden default).
+    expect(url.searchParams.get("sort")).toBe("profit")
+    expect(url.searchParams.get("direction")).toBe("desc")
     expect(url.searchParams.has("search")).toBe(false)
     expect(url.searchParams.has("decision")).toBe(false)
   })
@@ -153,7 +158,8 @@ describe("ProductsPage", () => {
     await waitFor(() => {
       const url = lastRequestUrl(fetchMock)
       expect(url.searchParams.has("decision")).toBe(false)
-      expect(url.searchParams.get("sort")).toBe("record_ref")
+      expect(url.searchParams.get("sort")).toBe("profit")
+      expect(url.searchParams.get("direction")).toBe("desc")
       expect(screen.queryByRole("button", { name: /reset search & filters/i })).not.toBeInTheDocument()
     })
   })
@@ -193,14 +199,16 @@ describe("ProductsPage", () => {
     renderPage()
     await screen.findByText("Alpha")
 
-    await user.click(screen.getByRole("button", { name: /^profit/i }))
+    // Start from a non-default key so the first click selects a new sort key
+    // rather than flipping the default's direction.
+    await user.click(screen.getByRole("button", { name: /^COG/i }))
     await waitFor(() => {
-      expect(lastRequestUrl(fetchMock).searchParams.get("sort")).toBe("profit")
-      expect(lastRequestUrl(fetchMock).searchParams.get("direction")).toBe("desc")
+      expect(lastRequestUrl(fetchMock).searchParams.get("sort")).toBe("cog")
+      expect(lastRequestUrl(fetchMock).searchParams.get("direction")).toBe("asc")
     })
 
-    await user.click(screen.getByRole("button", { name: /^profit/i }))
-    await waitFor(() => expect(lastRequestUrl(fetchMock).searchParams.get("direction")).toBe("asc"))
+    await user.click(screen.getByRole("button", { name: /^COG/i }))
+    await waitFor(() => expect(lastRequestUrl(fetchMock).searchParams.get("direction")).toBe("desc"))
   })
 
   it("paginates with Previous/Next using has_more and shows a range label", async () => {
@@ -451,5 +459,86 @@ describe("ProductsPage favorites (recovered from Golden)", () => {
     renderPage()
 
     expect(await screen.findByText("Alpha")).toBeInTheDocument()
+  })
+})
+
+// Wave B3: the final catalog pass -- default ordering, provenance legibility,
+// column hierarchy and the honesty of the favourites disclosure.
+describe("ProductsPage catalog final pass (Wave B3)", () => {
+  afterEach(() => { vi.unstubAllGlobals(); localStorage.clear() })
+
+  it("opens on profit descending and lets the operator override it", async () => {
+    const fetchMock = stubFetch()
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText("Alpha")
+
+    expect(lastRequestUrl(fetchMock).searchParams.get("sort")).toBe("profit")
+    expect(lastRequestUrl(fetchMock).searchParams.get("direction")).toBe("desc")
+
+    // A user choice must win over the default, in both directions.
+    await user.click(screen.getByRole("button", { name: /^Product \/ SKU/ }))
+    await waitFor(() => {
+      expect(lastRequestUrl(fetchMock).searchParams.get("sort")).toBe("sku")
+      expect(lastRequestUrl(fetchMock).searchParams.get("direction")).toBe("asc")
+    })
+    await user.click(screen.getByRole("button", { name: /^Product \/ SKU/ }))
+    await waitFor(() => expect(lastRequestUrl(fetchMock).searchParams.get("direction")).toBe("desc"))
+  })
+
+  it("carries the effective sort into the filtered export", async () => {
+    stubFetch()
+    const open = vi.fn()
+    vi.stubGlobal("open", open)
+    renderPage()
+    await screen.findByText("Alpha")
+
+    await userEvent.setup().click(screen.getByRole("button", { name: /^export \d/i }))
+
+    const url = new URL(open.mock.calls.at(-1)![0] as string, "http://localhost")
+    expect(url.searchParams.get("sort")).toBe("profit")
+    expect(url.searchParams.get("direction")).toBe("desc")
+  })
+
+  it("shows provenance as readable text in the table, not colour or hover alone", async () => {
+    stubFetch()
+    renderPage()
+    await screen.findByText("Alpha")
+
+    const table = document.querySelector(".catalog-table") as HTMLElement
+    const verified = within(table).getAllByLabelText("Status: VERIFIED")
+    const inferred = within(table).getAllByLabelText("Status: INFERRED")
+    // Legible on screen: an abbreviation a reader can tell apart without hovering.
+    expect(verified[0]).toHaveTextContent("VER")
+    expect(inferred[0]).toHaveTextContent("INF")
+    expect(verified[0].textContent).not.toBe("")
+    // ...and still fully spelled out for assistive technology.
+    expect(verified[0]).toHaveAttribute("title", "VERIFIED")
+  })
+
+  it("orders decision-critical columns ahead of audit fields by default", async () => {
+    stubFetch()
+    renderPage()
+    await screen.findByText("Alpha")
+
+    const headers = [...document.querySelectorAll(".catalog-table thead th")].map((th) => th.textContent ?? "")
+    const at = (needle: string) => headers.findIndex((h) => h.includes(needle))
+    // Decision, ROI and Profit must precede ASIN and Record: at narrow widths
+    // the trailing columns are the ones that scroll out of view.
+    expect(at("Decision")).toBeLessThan(at("ASIN"))
+    expect(at("ROI")).toBeLessThan(at("ASIN"))
+    expect(at("Profit")).toBeLessThan(at("Record"))
+    expect(at("Decision")).toBeLessThan(at("Record"))
+    // ...and the operator can still change all of it.
+    expect(screen.getByText(/configure columns/i)).toBeInTheDocument()
+  })
+
+  it("labels favourites as local to this browser in the column header", async () => {
+    stubFetch()
+    renderPage()
+    await screen.findByText("Alpha")
+
+    const table = document.querySelector(".catalog-table") as HTMLElement
+    expect(within(table).getByText(/favorite \(local\)/i)).toBeInTheDocument()
   })
 })

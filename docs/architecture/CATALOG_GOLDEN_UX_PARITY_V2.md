@@ -52,13 +52,14 @@ remained byte-identical throughout (`demo/src` SHA-256
 | Capability | Golden location | Golden behavior | Golden data source | Production location | Production behavior | Backend support | Provenance impact | Status | Class | Recovery plan | Blocker | Tests | User-visible difference |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | Sortable columns | `select.ts` `fields` | 11 fields, client sort, stable `recordRef` tiebreak | in-memory | `ProductsPage.tsx` | 12 allow-listed server sort keys | yes | none | PRESERVED | A | — | — | yes | production sorts the whole result set, not the page |
-| **Default sort** | `defaultCatalogState` | **`profit:desc`** — best opportunities first | — | `ProductsPage.tsx` | `record_ref:asc` — neutral/stable | yes | none | **DIFFERENT** | **D** | one-line default change; **not applied unilaterally** — it changes what the operator sees first | user decision | n/a | Golden opens on the most profitable rows |
+| **Default sort** | `defaultCatalogState` | **`profit:desc`** — best opportunities first | — | `ProductsPage.tsx` `DEFAULT_SORT` | **`profit:desc`** | yes (allow-listed sort; NULLs last under DESC, verified against the live API) | none — presentation order only | **RECOVERED (Wave B3)** | **E → done** | — | — | 2 new tests (default + override + export carries it) | none remaining |
 | Column visibility | — | fixed columns | — | `ProductsPage.tsx` | toggleable, persisted | n/a | preference | PRODUCTION-ONLY | A | — | — | yes | Golden cannot hide a column |
 | Column ordering | — | fixed | — | `ProductsPage.tsx` | reorderable, persisted | n/a | preference | PRODUCTION-ONLY | A | — | — | yes | — |
 | Pagination | `select.ts` | client slice, page size 20 | in-memory | `ProductsPage.tsx` | server 25/50/100 + range label | yes | none | PRESERVED | A | — | — | yes | production scales past one page of memory |
 | Filtered export | `CatalogPage.tsx` → `exportCsv` | exports the **filtered set** (`shown.all`), 22 columns incl. `amazon_provenance` | in-memory | `ProductsPage.tsx` | canonical query-equivalent server export | yes | query metadata | PRESERVED | B | — | — | yes | button now names the row count (Wave B) |
 | Row → Product Detail | `productPath()` | `/run/:run/file/:file/product/:ref` | local | `ProductsPage.tsx` | `Link` to `/runs/:id/records/:ref`, same tab | yes | run-scoped | PRESERVED | B | — | — | yes | none |
-| **Favourite star per row** | `CatalogPage.tsx` + `favorites.ts` | star toggle, `runId:sourceFileId:recordRef`, localStorage | browser | `ProductsPage.tsx` + `src/favorites.ts` | star toggle, `executionId:recordRef`, localStorage, labelled local-only | **none (by design)** | none | **RECOVERED (Wave B2)** | **E → done** | — | — | **4 new tests** | restored |
+| **Favourite star per row** | `CatalogPage.tsx` + `favorites.ts` | star toggle, `runId:sourceFileId:recordRef`, localStorage | browser | `ProductsPage.tsx` + `src/favorites.ts` | star toggle, `executionId:recordRef`, localStorage; column header reads **"Favorite (local)"** and a chip reads "starred in this browser only" | **none (by design)** | none | **RECOVERED (Wave B2, disclosure hardened B3)** | **E → done** | — | — | **5 tests** | restored |
+| **Provenance legibility in-table** | Golden shows no status in the catalog at all | — | — | `StatusBadge` `compact` | short readable badge — `VER` / `INF` / `N/F` / `INV` / `DEMO`, coloured, full word in `aria-label` + `title` | n/a | **core** — status is never colour-only or hover-only | **PRODUCTION-ONLY, hardened B3** | A | — | — | 1 new test | production states provenance per value; Golden does not show it in the table |
 | Thumbnail slot | `ProductThumbnail.tsx` | 44px slot, `img` or "No image" | **real supplier URL from the source CSV** | `components/ProductThumbnail.tsx` | 40px slot, explicit unavailable state | **`RecordOut` has no image field** | image would need provenance | PARTIAL | **C + F** | add an optional image column to the tabular contract so a supplier file that carries one is preserved *with* provenance | backend contract + rights/caching policy | yes (asserts no `<img>`) | Golden shows supplier pictures; production shows an empty slot |
 
 ## 3. Catalog — decision policy
@@ -199,5 +200,32 @@ authorized provider.
 | **ADR required** | Compare · decision-threshold bands and re-run semantics · `ExecutionRun.thresholds` · opportunity ranking · run duplicate/delete |
 | **Frontend only (no blocker)** | Favorites page · explainable metric cards · provenance-grouped data quality · default-sort change · multi-source analytics table |
 | **Fixture-only, presentation may migrate** | price KPIs (with the `DEMO_FIXTURE` label) |
+
+---
+
+## Wave B3 — final catalog pass (2026-08-26)
+
+Scope was limited to gaps needing **no** new backend contract, data source, ADR,
+auth, Compare work or decision-model change.
+
+| # | Change | Evidence |
+|---|---|---|
+| 1 | Catalog opens on **profit descending** | `profit` is an allow-listed server sort; probed against the live API — `DESC` returns 8.99, 5.25, then the NULL-profit records, so unknowns sink instead of heading the page. User sorting still overrides; ASC/DESC intact; export carries the effective order; pagination still server-side; no Decision Engine change |
+| 2 | Compact status became **readable text** (`VER`/`INF`/`N/F`/`INV`) instead of a coloured dot | a dot made provenance ambiguous on screen; the word stays in `aria-label`/`title`, but is no longer the *only* place the status exists |
+| 3 | Default column order re-prioritised: Image → Product → **Decision** → ROI → Profit → Margin → Price → COG → HazMat → Bulky → Issues → Favorite → ASIN → Record → Inspect | at 1366px everything through Bulky is visible without horizontal scrolling; the audit/lookup columns are the ones that scroll. Visibility and ordering remain fully configurable |
+| 4 | Favourites disclosure hardened: header reads **"Favorite (local)"** | always visible, not hover-only; no request is issued when starring (asserted); corrupt storage still degrades safely |
+| 5 | Fixed a vacuous assertion | `getAllByText("VERIFIED")` was matching the provenance `<select>` options rather than the table, so it passed even when the table showed no status at all. Now scoped to `.catalog-table` |
+
+Validated at **1920 / 1600 / 1366 / 430**.
+
+### Blocked capabilities re-checked (item 6)
+
+Every capability recorded in this matrix is still classified, and nothing was
+removed. Untouched in Wave B3, still on the roadmap with their blockers:
+Compare · `ExecutionRun.thresholds` and decision re-run · product-image
+contract · supplier-URL contract · raw source row · process trace · authorized
+market provider · real price KPIs · brand filter · opportunity ranking ·
+multi-source analytics table · run duplicate/delete · Favorites page ·
+explainable metric cards · provenance-grouped data quality.
 
 Nothing from Golden has been dropped from this matrix.
