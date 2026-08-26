@@ -82,17 +82,23 @@ main { max-width:1480px; margin:0 auto; padding:30px 34px 54px; }.page-intro { d
    paid for out of the other columns rather than added on top, so Decision --
    the run's actual output -- still lands inside the viewport instead of behind
    a horizontal scroll. */
-.table-group-bar { display:grid; grid-template-columns:56px 110px 200px 150px repeat(5,86px) 90px 90px 100px 110px 90px; min-width:1426px; border-bottom:1px solid var(--border-strong); background:var(--surface-raised); color:var(--text-muted); font-size:9px; font-weight:750; letter-spacing:.1em; line-height:1; text-transform:uppercase; }
+.table-group-bar { display:grid; grid-template-columns:56px 110px 200px 150px repeat(5,86px) 90px 90px 100px 110px 62px 90px; min-width:1488px; border-bottom:1px solid var(--border-strong); background:var(--surface-raised); color:var(--text-muted); font-size:9px; font-weight:750; letter-spacing:.1em; line-height:1; text-transform:uppercase; }
 .table-group-bar span { padding:10px 12px 8px; border-right:1px solid var(--border); }
 .table-group-bar .group-identity { grid-column:1 / span 4; color:var(--accent); }
 .table-group-bar .group-economics { grid-column:5 / span 5; }
 .table-group-bar .group-risk { grid-column:10 / span 2; }
 .table-group-bar .group-decision { grid-column:12; color:var(--warning); }
 .table-group-bar .group-quality { grid-column:13; }
-.table-group-bar .group-action { grid-column:14; color:var(--accent); }
+.table-group-bar .group-action { grid-column:14 / span 2; color:var(--accent); }
 .catalog-table-scroll { overflow-x:auto; overscroll-behavior-x:contain; }
-.catalog-table { min-width:1426px !important; table-layout:fixed; }
-.catalog-table .col-media { width:56px; }.catalog-table .col-record { width:110px; }.catalog-table .col-identity { width:200px; }.catalog-table .col-evidence { width:150px; }.catalog-table .col-money { width:86px; }.catalog-table .col-number { width:86px; }.catalog-table .col-risk { width:90px; }.catalog-table .col-decision { width:100px; }.catalog-table .col-quality { width:110px; }.catalog-table .col-action { width:90px; }
+.catalog-table { min-width:1488px !important; table-layout:fixed; }
+.catalog-table .col-media { width:56px; }.catalog-table .col-record { width:110px; }.catalog-table .col-identity { width:200px; }.catalog-table .col-evidence { width:150px; }.catalog-table .col-money { width:86px; }.catalog-table .col-number { width:86px; }.catalog-table .col-risk { width:90px; }.catalog-table .col-decision { width:100px; }.catalog-table .col-quality { width:110px; }.catalog-table .col-favorite { width:62px; }.catalog-table .col-action { width:90px; }
+/* Run-scoped star, stored in this browser only (src/favorites.ts). Deliberately
+   quiet until it is set, so it never competes with the decision badge. */
+.favorite-button { display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; padding:0; border:1px solid var(--border-strong); border-radius:var(--radius-md); background:var(--surface-raised); color:var(--text-muted); cursor:pointer; }
+.favorite-button:hover { border-color:var(--accent); color:var(--accent); }
+.favorite-button.starred { border-color:var(--warning); color:var(--warning); }
+.favorite-button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 .catalog-table td.media-cell { padding:8px 12px; vertical-align:middle; }
 /* Traffic-light decision, reinforced by shape so the three outcomes stay
    distinguishable without relying on colour alone (colour-blind readers,

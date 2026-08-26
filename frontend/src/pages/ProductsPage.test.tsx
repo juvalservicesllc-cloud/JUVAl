@@ -399,3 +399,57 @@ describe("ProductsPage golden-UX catalog", () => {
     expect(screen.getByRole("button", { name: /^ROI, sorted descending/ })).toHaveAttribute("aria-pressed", "true")
   })
 })
+
+// Favourites recovered from the Golden Product Experience (ADR-029). These pin
+// the two properties that make the recovery honest: run-scoped identity, and
+// no server call.
+describe("ProductsPage favorites (recovered from Golden)", () => {
+  afterEach(() => { vi.unstubAllGlobals(); localStorage.clear() })
+
+  it("stars a record against the run, persisting locally and issuing no request", async () => {
+    const fetchMock = stubFetch()
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText("Alpha")
+    const before = fetchMock.mock.calls.length
+
+    await user.click(screen.getByRole("button", { name: /add alpha to favorites/i }))
+
+    // Run-scoped key: the record is starred inside run r1, not as a product.
+    expect(JSON.parse(localStorage.getItem("juval.catalog.favorites.v1")!)).toEqual(["r1:row-0"])
+    // Starring must never reach the backend -- it is a browser preference.
+    expect(fetchMock.mock.calls.length).toBe(before)
+    expect(screen.getByRole("button", { name: /remove alpha from favorites/i })).toHaveAttribute("aria-pressed", "true")
+  })
+
+  it("restores stars from local storage and un-stars them again", async () => {
+    localStorage.setItem("juval.catalog.favorites.v1", JSON.stringify(["r1:row-0"]))
+    stubFetch()
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText("Alpha")
+
+    const starred = await screen.findByRole("button", { name: /remove alpha from favorites/i })
+    expect(starred).toHaveAttribute("aria-pressed", "true")
+
+    await user.click(starred)
+    expect(JSON.parse(localStorage.getItem("juval.catalog.favorites.v1")!)).toEqual([])
+  })
+
+  it("says out loud that stars live in this browser only", async () => {
+    localStorage.setItem("juval.catalog.favorites.v1", JSON.stringify(["r1:row-0"]))
+    stubFetch()
+    renderPage()
+    await screen.findByText("Alpha")
+
+    expect(await screen.findByText(/starred in this browser only/i)).toBeInTheDocument()
+  })
+
+  it("survives corrupt favorite storage instead of failing the catalog", async () => {
+    localStorage.setItem("juval.catalog.favorites.v1", "{ not json")
+    stubFetch()
+    renderPage()
+
+    expect(await screen.findByText("Alpha")).toBeInTheDocument()
+  })
+})

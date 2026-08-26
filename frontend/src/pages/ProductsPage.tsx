@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react"
-import { ArrowUpRight, CaretDown, CaretUp, CaretUpDown, MagnifyingGlass } from "@phosphor-icons/react"
+import { ArrowUpRight, CaretDown, CaretUp, CaretUpDown, MagnifyingGlass, Star } from "@phosphor-icons/react"
 import { Link } from "react-router-dom"
 import { ApiError, apiErrorMessage, apiUrl } from "../api/client"
 import { getRunRecords } from "../api/records"
 import { getRuns } from "../api/runs"
 import { percentInputToRatio } from "../contract"
+import { favoriteKey, loadFavorites, saveFavorites, toggleFavorite } from "../favorites"
 import { ProductThumbnail } from "../components/ProductThumbnail"
 import { StatusBadge } from "../components/StatusBadge"
 import type { Decision, RecordOut, RecordPaginationOut, RecordSort, RunSummaryOut, SortDirection } from "../types"
@@ -21,25 +22,25 @@ const SORT_LABEL: Record<RecordSort, string> = { record_ref: "Record", sku: "Pro
 // record_ref/sku/decision are naturally read ascending; profit/roi/margin are
 // interesting largest-first -- matches the prior client-side sort behavior.
 const DEFAULT_DIRECTION: Record<RecordSort, SortDirection> = { record_ref: "asc", sku: "asc", asin: "asc", title: "asc", price: "desc", cog: "asc", decision: "asc", profit: "desc", roi: "desc", margin: "desc", hazmat: "asc", bulky: "asc" }
-type ColumnKey = "image" | "record_ref" | "product" | "identity" | "price" | "cog" | "profit" | "roi" | "margin" | "hazmat" | "bulky" | "decision" | "issues" | "action"
-const DEFAULT_COLUMNS: ColumnKey[] = ["image", "record_ref", "product", "identity", "price", "cog", "profit", "roi", "margin", "hazmat", "bulky", "decision", "issues", "action"]
-const COLUMN_LABEL: Record<ColumnKey, string> = { image: "Image", record_ref: "Record", product: "Product / SKU", identity: "ASIN / UPC", price: "Price", cog: "COG", profit: "Profit", roi: "ROI", margin: "Margin", hazmat: "HazMat", bulky: "Bulky", decision: "Decision", issues: "Issues", action: "Inspect" }
+type ColumnKey = "image" | "record_ref" | "product" | "identity" | "price" | "cog" | "profit" | "roi" | "margin" | "hazmat" | "bulky" | "decision" | "issues" | "favorite" | "action"
+const DEFAULT_COLUMNS: ColumnKey[] = ["image", "record_ref", "product", "identity", "price", "cog", "profit", "roi", "margin", "hazmat", "bulky", "decision", "issues", "favorite", "action"]
+const COLUMN_LABEL: Record<ColumnKey, string> = { image: "Image", record_ref: "Record", product: "Product / SKU", identity: "ASIN / UPC", price: "Price", cog: "COG", profit: "Profit", roi: "ROI", margin: "Margin", hazmat: "HazMat", bulky: "Bulky", decision: "Decision", issues: "Issues", favorite: "Favorite", action: "Inspect" }
 // The one place a column is mapped to its server sort key. Defined once so
 // the header button and the `aria-sort` announced on the same cell can
 // never disagree. `null` means the column is not sortable server-side.
-const COLUMN_SORT_KEY: Record<ColumnKey, RecordSort | null> = { image: null, record_ref: "record_ref", product: "sku", identity: "asin", price: "price", cog: "cog", profit: "profit", roi: "roi", margin: "margin", hazmat: "hazmat", bulky: "bulky", decision: "decision", issues: null, action: null }
-// v2 introduced the leading media column. A stored v1 preference is a valid
-// subset of v2's keys, so it would silently survive the upgrade and hide the
-// new column from exactly the returning users the redesign is for -- the key
-// bump is what makes the new default actually apply.
-const COLUMN_STORAGE_KEY = "juval.catalog.columns.v2"
+const COLUMN_SORT_KEY: Record<ColumnKey, RecordSort | null> = { image: null, record_ref: "record_ref", product: "sku", identity: "asin", price: "price", cog: "cog", profit: "profit", roi: "roi", margin: "margin", hazmat: "hazmat", bulky: "bulky", decision: "decision", issues: null, favorite: null, action: null }
+// Bumped whenever a column is added: an older stored preference is a valid
+// subset of the new keys, so it would silently survive the upgrade and hide the
+// new column from exactly the returning users the change is for. v2 added the
+// media column, v3 the favourite column.
+const COLUMN_STORAGE_KEY = "juval.catalog.columns.v3"
 // `.catalog-table` is `table-layout: fixed`, so a column is exactly as wide as
 // its header cell says. These are the design system's own `.col-*` widths and
 // they sum to the table's 1430px, matching the group bar above it.
 const COLUMN_WIDTH_CLASS: Record<ColumnKey, string> = {
   image: "col-media", record_ref: "col-record", product: "col-identity", identity: "col-evidence",
   price: "col-money", cog: "col-money", profit: "col-money", roi: "col-number", margin: "col-number",
-  hazmat: "col-risk", bulky: "col-risk", decision: "col-decision", issues: "col-quality", action: "col-action",
+  hazmat: "col-risk", bulky: "col-risk", decision: "col-decision", issues: "col-quality", favorite: "col-favorite", action: "col-action",
 }
 
 function text(value: unknown): string {
@@ -92,6 +93,7 @@ export function ProductsPage() {
   const [bulky, setBulky] = useState("")
   const [provenanceField, setProvenanceField] = useState("")
   const [provenanceStatus, setProvenanceStatus] = useState("")
+  const [favorites, setFavorites] = useState<string[]>(loadFavorites)
   const [columns, setColumns] = useState<ColumnKey[]>(() => {
     try {
       const parsed = JSON.parse(localStorage.getItem(COLUMN_STORAGE_KEY) ?? "null")
@@ -204,6 +206,12 @@ export function ProductsPage() {
     setMinRoi(""); setMinProfit(""); setMinMargin(""); setConfidence("VERIFIED_ONLY"); setHazmat(""); setBulky(""); setProvenanceField(""); setProvenanceStatus("")
   }
 
+  // Starring marks a run-scoped snapshot in this browser only -- it writes no
+  // value, status or decision, and reaches no server (see src/favorites.ts).
+  function starRecord(recordRef: string) {
+    setFavorites((current) => { const next = toggleFavorite(current, favoriteKey(selectedRunId, recordRef)); saveFavorites(next); return next })
+  }
+
   function updateColumns(next: ColumnKey[]) { setColumns(next); localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify(next)) }
   function toggleColumn(key: ColumnKey) { if (key === "record_ref" || key === "product" || key === "decision") return; updateColumns(columns.includes(key) ? columns.filter((column) => column !== key) : [...columns, key]) }
   function moveColumn(key: ColumnKey, delta: number) { const index = columns.indexOf(key); const nextIndex = index + delta; if (index < 0 || nextIndex < 0 || nextIndex >= columns.length) return; const next = [...columns]; [next[index], next[nextIndex]] = [next[nextIndex], next[index]]; updateColumns(next) }
@@ -239,6 +247,10 @@ export function ProductsPage() {
     if (column === "bulky") return <StatusBadge value={record.bulky_status ?? "UNKNOWN"} />
     if (column === "decision") return record.decision ? <StatusBadge value={record.decision} /> : "—"
     if (column === "issues") return record.issue_count > 0 ? <details className="issue-disclosure"><summary>{record.issue_count} issue{record.issue_count === 1 ? "" : "s"}</summary><ul className="issues">{record.issues.map((issue) => <li key={issue}>{issue}</li>)}</ul></details> : "—"
+    if (column === "favorite") {
+      const starred = favorites.includes(favoriteKey(selectedRunId, record.record_ref))
+      return <button type="button" className={`favorite-button${starred ? " starred" : ""}`} aria-pressed={starred} aria-label={`${starred ? "Remove" : "Add"} ${text(record.title?.value) || record.record_ref} ${starred ? "from" : "to"} favorites`} title={starred ? "Starred in this browser" : "Star in this browser"} onClick={() => starRecord(record.record_ref)}><Star size={14} weight={starred ? "fill" : "regular"} aria-hidden="true" /></button>
+    }
     return <Link className="row-action" to={`/runs/${encodeURIComponent(selectedRunId)}/records/${encodeURIComponent(record.record_ref)}`} state={{ record }} aria-label={`Open detail for ${record.record_ref}`}>Open <ArrowUpRight size={13} weight="bold" aria-hidden="true" /></Link>
   }
 
@@ -373,6 +385,10 @@ export function ProductsPage() {
             {bulky && <span className="query-chip">Bulky: {bulky}</span>}
             {provenanceField && provenanceStatus && <span className="query-chip">{provenanceField}: {provenanceStatus}</span>}
             {sort !== "record_ref" && <span className="query-chip">Sorted by: {SORT_LABEL[sort]} {direction === "asc" ? "↑" : "↓"}</span>}
+            {/* Favourites are a browser preference, never server state -- say so
+                where the operator can see it, so a star is not mistaken for
+                saved business data. */}
+            {favorites.length > 0 && <span className="query-chip">★ {count(favorites.length)} starred in this browser only</span>}
           </div>
 
           {recordsState.kind === "loading" && <div className="status" aria-live="polite">Loading records…</div>}
