@@ -1464,3 +1464,89 @@ findings.
 `RF-03 / RF-04 = NOT_VERIFIED` (unchanged — selecting a provider verifies
 nothing; Amazon's response to the identity-scope clarification, §21, also
 remains independently pending)
+
+## 31. Identity deployment readiness and an Okta-shaped defect removed (2026-08-26)
+
+Implementation pass, not research. No provider was re-evaluated: FusionAuth
+remains the approved direction (ADR-028), Okta remains rejected (ADR-022) and
+is not reopened. Nothing here changes whether any finding is compliant.
+
+### 31.1 A real defect found and fixed
+
+`interfaces/api/auth.py` derived its default JWKS location as
+`<issuer>/v1/keys` — **Okta's** path, written while ADR-022 was the plan. Okta
+was rejected 2026-08-19; FusionAuth publishes `/.well-known/jwks.json`.
+
+A vendor-shaped default inside a deliberately provider-agnostic boundary is a
+trap: startup succeeds, and the first real token verification fails as a bare
+`401` with no indication that the key endpoint was wrong. It now follows the
+OpenID Connect Discovery 1.0 §4 convention, with `JUVAL_OIDC_JWKS_URI` kept as
+the explicit override. Four tests pin it, one of them specifically asserting
+that `/v1/keys` cannot return as the default. `.env.example` carried the same
+Okta framing and was corrected.
+
+This is the only code change in this pass, and it is a **prerequisite** for
+RF-03: without it, activating `JUVAL_AUTH_MODE=oidc` against FusionAuth would
+have failed in a way that looks like a bad token rather than a bad config.
+
+### 31.2 What was produced
+
+| Artifact | Purpose |
+|---|---|
+| `docs/compliance/IDENTITY_DEPLOYMENT_FUSIONAUTH.md` | Control-by-control matrix (`NATIVE_FUSIONAUTH` / `CONFIGURABLE` / `APPLICATION_ENFORCED` / `CUSTOM_EXTENSION_REQUIRED` / `NOT_VERIFIED`), deployment architecture, resource estimate, verification procedure, secret ownership |
+| `deploy/fusionauth/tenant-password-policy.template.json` | Reproducible tenant policy at Amazon's exact values. No secret, no tenant id. Declares the ≥1.63.0 requirement and states in-file that it does **not** close control 6 |
+| `tools/verify_oidc.py` | Read-only runtime verification: discovery, issuer match, JWKS reachability, RS256, `kid` presence, tenant policy vs Amazon values. Takes no secret as an argument, prints no token/key/secret, exits non-zero on failure |
+| `docs/adr/ADR-031-fusionauth-hosting-location.md` | **Propuesta** — where FusionAuth runs |
+
+### 31.3 The deployment is blocked on an architectural conflict, not on effort
+
+`juval-server` is the obvious host — the user built and hardened it for this
+work. **ADR-027 (Aceptada) forbids it**: *"**Identity server** — ningún IdP se
+despliega aquí … seguirá siendo un servicio gestionado externo"*, derived from
+an explicit user instruction, and *"Cualquier extensión de este rol requiere un
+ADR nuevo"*.
+
+This is not a compatible extension; it is a direct conflict with an Accepted
+ADR. Deploying anyway would be exactly the silent contradiction `CLAUDE.md` §3
+and §18 forbid. There is also a decisive technical consequence: the production
+backend runs on Railway, so for it to validate tokens the issuer must be
+reachable from the internet — which breaks ADR-027's LAN-only network boundary
+as well.
+
+ADR-031 sets out four options (self-host here / FusionAuth Cloud / dedicated
+VPS / local-verification-only) and recommends the managed service, the only one
+that modifies no Accepted ADR. **It is `Propuesta`. Nothing is deployed.**
+
+### 31.4 Control 6 remains the open HARD gap
+
+Unchanged from ADR-021: FusionAuth ≥1.63.0 rejects the configured *login
+identifier*, not *any part of the user's name*. Re-verified this pass that the
+gap is architectural, not documentary, and that the only mechanism which would
+close it is a custom proxy in front of FusionAuth's APIs — custom
+authentication, which `CLAUDE.md` forbids. Resolution is organizational
+(disclosed residual risk plus a naming standard) or Amazon's answer to §21.
+`tools/verify_oidc.py` reports control 6 as `NOT_VERIFIED` **by design**, so a
+fully green run can never be read as closing it.
+
+### 31.5 Status after this pass
+
+```
+RF-01  PARTIAL          (unchanged) — one exercise filed, not recurring; CA-01 open
+RF-02  PARTIAL          (unchanged) — blocked solely on F-01, workstation patching
+RF-03  PARTIAL          backend prerequisite fixed; IdP still NOT_IMPLEMENTED
+RF-04  PARTIAL          (unchanged) — RBAC implemented and tested, dormant
+RF-05  PARTIAL          (unchanged) — scanning recurring; tabletop cadence unproven
+
+IDP_SELECTION          = FUSIONAUTH_SELECTED (ADR-028)
+IDP_HOSTING            = UNDECIDED (ADR-031 Propuesta)  <-- new blocker, made explicit
+IDP_IMPLEMENTATION     = NOT_IMPLEMENTED
+IDP_RUNTIME            = INACTIVE (JUVAL_AUTH_MODE unset)
+RF-03 / RF-04          = NOT_VERIFIED
+IDENTITY SECURITY GATE = BLOCKED
+REAPPLICATION GATE     = BLOCKED
+AMAZON_COMPLIANCE_READINESS = NOT_READY
+```
+
+**No finding changed state.** What changed is that the identity blocker is now
+a single named decision (ADR-031) with templates and a verification tool
+waiting behind it, rather than an undefined amount of work.
