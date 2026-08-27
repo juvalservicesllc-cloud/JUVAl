@@ -11,11 +11,36 @@ plan is **resolved** — ADR-031 is Accepted (Option A) and ADR-027 was formally
 amended in the same operation. §3.1 below is rewritten accordingly. The
 executable runbook is `deploy/fusionauth/README.md`.
 
-**This document is a plan and a set of templates. It is not evidence.** No
-FusionAuth instance exists. `IDP_IMPLEMENTATION = NOT_IMPLEMENTED`,
-`IDP_RUNTIME = INACTIVE`, `RF-03 / RF-04 = NOT_VERIFIED` — unchanged. A
-decision to deploy is not a deployment, and a deployment will not be a
-verification.
+**Updated 2026-08-27 (execution pass).** Phase 1 is **done**: a FusionAuth
+1.69.0 instance is installed and running on `juval-server`
+(`SP_API_REGISTRATION_REMEDIATION.md` §33). `IDP_IMPLEMENTATION` is now
+`PARTIALLY_IMPLEMENTED` — the instance is up, but there is still no `JUVAl`
+tenant, application, role or applied policy, so `RF-03 / RF-04 = NOT_VERIFIED`
+is unchanged and `IDP_RUNTIME = INACTIVE` is unchanged. The templates below
+are now backed by an idempotent tool (`tools/configure_fusionauth.py`) that
+turns them into real objects; it is blocked on a single FusionAuth API key.
+
+**A deployment is not a configuration, a configuration is not enforcement, and
+enforcement is not evidence.** Those four states stay separate throughout this
+document.
+
+---
+
+## 0. Runtime status — 2026-08-27
+
+| Layer | State | Provenance |
+|---|---|---|
+| FusionAuth 1.69.0 package + `fusionauth-app` service | `active` + `enabled` | **VERIFIED** (agent, read-only) |
+| PostgreSQL, `:5432` loopback-only | `active` | **VERIFIED** |
+| `GET /api/status` | `{"status":"Ok"}` | **VERIFIED** |
+| OIDC discovery / JWKS / RS256 / `kid` | well-formed | **VERIFIED against the local `http://127.0.0.1:9011` issuer only** — `tools/verify_oidc.py` exit 0. Not production evidence |
+| `fusionauth.properties`, staged JDK, `runtime-mode` | — | `NOT_VERIFIED` — root-only, no `sudo`. Phase 1 was run manually, not via `install.sh`; re-running `install.sh` (idempotent) would reconcile it |
+| Listener `:9012` (also serves the full app) | present, all-interfaces, no UFW `allow` rule | Covered by the same default-deny boundary as `:9011`; **documentation gap**, flagged in §33.3 and ADR-027/ADR-031 |
+| Tenant `JUVAl`, application, roles, policy, MFA, lockout | `NOT_CREATED` / `NOT_APPLIED` | Blocked on a FusionAuth API key (no admin credential, no `sudo`, no readable key) |
+
+Next action is exact and single: **create a FusionAuth API key in the admin
+UI** (over the existing `ssh -L 9011:127.0.0.1:9011` forward), then
+`JUVAL_IDP_API_KEY=… python tools/configure_fusionauth.py`. See §33.9.
 
 ---
 
@@ -172,6 +197,18 @@ python tools/verify_oidc.py --issuer https://<issuer>
 JUVAL_IDP_API_KEY=... python tools/verify_oidc.py --issuer https://<issuer> --tenant-policy
 ```
 
+`tools/verify_rbac.py` (added 2026-08-27) does the runtime half that no
+config read can: it mints RS256 tokens for each role via `POST /api/jwt/vend`
+and asserts the OIDC + least-privilege status-code matrix against a **running**
+backend (`viewer` may read but not export → 403; unknown/absent role → 403;
+wrong `aud`/`iss`/expired → 401). It needs the application and roles to exist
+and a backend under `JUVAL_AUTH_MODE=oidc`:
+
+```
+JUVAL_IDP_API_KEY=... python tools/verify_rbac.py \
+    --issuer https://<issuer> --audience <application id> --backend http://127.0.0.1:8000
+```
+
 | Check | Evidences |
 |---|---|
 | discovery document reachable, `issuer` matches | the value pinned in `JUVAL_OIDC_ISSUER` is the one tokens will carry |
@@ -230,9 +267,10 @@ JWKS and needs no client secret to do so.
 
 | Item | Blocker | Class |
 |---|---|---|
-| Deploy FusionAuth (Phase 1) | ~~ADR-027 forbids an IdP on `juval-server`~~ — **UNBLOCKED 2026-08-26** (ADR-031 Accepted, ADR-027 amended). Now blocked only on `sudo`, which the agent has never had on this host | **User execution** — `sudo bash deploy/fusionauth/install.sh` |
-| Create tenant / application / users | requires a running instance and an admin credential | **User secret / third-party** |
-| Export password-policy evidence | requires a tenant | Downstream of the above |
+| Deploy FusionAuth (Phase 1) | ~~ADR-027 forbids an IdP~~ / ~~blocked on `sudo`~~ — **DONE 2026-08-27** (user-executed, manually rather than via `install.sh`; see §33.2). Instance installed and running | ✅ complete; re-run `install.sh` to reconcile to the runbook |
+| Create tenant / application / roles | `tools/configure_fusionauth.py` is written and idempotent; blocked on a **FusionAuth API key** the agent cannot mint (no admin credential, no `sudo`) | **User** — create the key in the admin UI, then run one command (§33.9) |
+| Export password-policy evidence | requires the tenant from the row above | Downstream — then `verify_oidc.py --tenant-policy` |
+| RBAC runtime matrix | `tools/verify_rbac.py` written; needs the application/roles + a backend under `JUVAL_AUTH_MODE=oidc` | Downstream of the API key and Phase 2 |
 | Public issuer (Phase 2) | needs a third-party outbound-tunnel account, and for one option a domain | **User decision + third-party** |
 | Close control 6 | architectural in FusionAuth; R-1 or R-2 both need the user or Amazon. **Unchanged by self-hosting** | **User / Amazon** |
 | Set `JUVAL_AUTH_MODE=oidc` in production | would break every request with no reachable issuer | Downstream of Phase 2 |

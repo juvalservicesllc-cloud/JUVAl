@@ -253,3 +253,27 @@ la misma operación.
 y define el despliegue, **no lo ejecuta**. Aceptar no es desplegar, y desplegar
 no será verificar — los tres estados se mantienen separados en
 `SP_API_REGISTRATION_REMEDIATION.md`.
+
+### Estado de implementación — 2026-08-27
+
+`IMPLEMENTATION = PARTIALLY_IMPLEMENTED`. La Fase 1 está **desplegada**:
+FusionAuth 1.69.0 corre en `juval-server` (`fusionauth-app` `active`+`enabled`,
+PostgreSQL `active`, `/api/status` Ok, discovery/JWKS/RS256 bien formados —
+verificado read-only por el agente). La ejecutó el usuario **manualmente**, no
+con `deploy/fusionauth/install.sh` (importó el schema con `psql`); las
+garantías del script — JDK con checksum, contraseña generada, `runtime-mode`
+en `fusionauth.properties` — quedan `NOT_VERIFIED` porque el directorio es
+root-only y el agente no tiene `sudo`. Re-ejecutar `install.sh` (idempotente)
+reconcilia la instalación con el runbook.
+
+`RUNTIME = INACTIVE` y `RF-03/RF-04 = NOT_VERIFIED` **sin cambio**: no existe
+todavía el tenant `JUVAl`, ni aplicación, ni roles, ni política aplicada. Eso
+está preparado como herramienta idempotente (`tools/configure_fusionauth.py`)
+y bloqueado en **una** API key de FusionAuth que el agente no puede emitir.
+La Fase 2 (emisor público) sigue bloqueada en la decisión de túnel del
+usuario. Detalle completo y matriz de evidencia en
+`SP_API_REGISTRATION_REMEDIATION.md` §33.
+
+Consecuencia menor observada y no anticipada por este ADR: la instalación
+expone **dos** listeners (`:9011` y `:9012`), ambos cubiertos por la misma
+frontera default-deny — ver ADR-027 §"Fronteras de red", nota 2026-08-27.

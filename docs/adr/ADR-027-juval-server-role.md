@@ -135,6 +135,15 @@ general para crecer el rol por conveniencia.
   con un túnel **de salida** hacia un extremo HTTPS gestionado, no con un
   puerto entrante — ver ADR-031 §"Frontera de red (Opción A)" y
   `deploy/fusionauth/README.md`.
+  **Nota 2026-08-27 (runtime medido)**: la instalación de FusionAuth 1.69.0
+  expone **dos** listeners de aplicación en todas las interfaces, `:9011` y
+  `:9012` (ambos sirven la app completa). Ninguno recibe regla `ufw allow`, así
+  que la política default-deny (H-1) los mantiene inalcanzables por igual —
+  verificado inalcanzable desde `192.168.0.3` (ESTADO CONFIRMADO). El proxy de
+  la Fase 2 (`nginx-fusionauth-public.conf`) sólo reenvía a `127.0.0.1:9011`.
+  Si `fusionauth.properties` no requiere el segundo conector, retirarlo en la
+  próxima edición del archivo; mientras tanto, queda cubierto por el mismo
+  control, no es una exposición.
 - UFW y fail2ban están activos (`systemctl is-active`); el ruleset exacto
   sigue sin verificarse por falta de sudo — ver Gate 4 de la auditoría de
   hardening en curso (`HOST_CONTROLS_JUVAL_SERVER.md` H-1/H-2).

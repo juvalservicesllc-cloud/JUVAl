@@ -1680,3 +1680,173 @@ AMAZON_COMPLIANCE_READINESS = NOT_READY
 
 **Deciding is not deploying, and deploying will not be verifying.** The three
 states stay separate. `IDP_HOSTING` is the only line that moved.
+
+---
+
+## 33. FusionAuth installed and running; tenant configuration blocked on one credential (2026-08-27)
+
+Execution pass. FusionAuth Phase 1 (ADR-031, `deploy/fusionauth/README.md` §3)
+is **done** — the instance is installed, running and answering. Everything
+downstream of it (tenant, application, roles, password policy, MFA, lockout)
+is **prepared as idempotent tooling** and blocked on a single FusionAuth API
+key the agent cannot mint (no admin credential, no `sudo`, no existing key
+readable). No finding changed compliance state; one implementation status line
+moved.
+
+### 33.1 What is now VERIFIED at runtime (agent-executed, read-only)
+
+| Fact | Evidence | Provenance |
+|---|---|---|
+| `fusionauth-app` service `active` + `enabled` | `systemctl is-active/is-enabled fusionauth-app` | **VERIFIED** 2026-08-27 |
+| PostgreSQL `active`, `:5432` bound to `127.0.0.1` only | `systemctl is-active postgresql`; `ss -lntp` | **VERIFIED** |
+| FusionAuth answers `GET /api/status` → `{"status":"Ok"}` | `curl 127.0.0.1:9011/api/status` | **VERIFIED** |
+| OIDC discovery reachable, `issuer` self-consistent | `tools/verify_oidc.py --issuer http://127.0.0.1:9011` → exit 0 | **VERIFIED** (against a **local `http://` issuer** — configuration evidence only, not production) |
+| JWKS reachable, 1 key, `alg=RS256`, `kid` present | same run; matches `interfaces/api/auth.py::_ALLOWED_ALGORITHMS` | **VERIFIED** |
+| Backend unchanged, fails closed, 11/11 routes enforce a permission | `tools/compliance_check.py` (`auth.*` PASS); 356 backend tests pass, 7 skipped | **VERIFIED** |
+
+### 33.2 Deviation from the runbook, recorded
+
+Phase 1 was performed **manually**, not via `deploy/fusionauth/install.sh`.
+The FusionAuth 1.69.0 database schema artifact was downloaded and its checksum
+verified (`6e65b5257ddfdde6da27c5e3b604dff7ca894322965cb1002e51d0ac200fae50`,
+per this mission's ESTADO CONFIRMADO and the operator's shell history), then
+imported with `psql` as the `fusionauth` role (103 tables, owned by
+`fusionauth`). The setup wizard was completed and the first admin created over
+the SSH forward.
+
+What this means for evidence: `install.sh`'s guarantees — pre-staged
+checksum-verified Temurin JDK (so `start.sh` never fetches an unverified JVM),
+generated database password never echoed, `runtime-mode=production` /
+`fusionauth-app.memory=768M` / `search.type=database` in
+`fusionauth.properties` — **could not be confirmed** by the agent, because
+`/usr/local/fusionauth/` is `fusionauth:root` `0600`/`0700` and the agent has
+no `sudo`. `JDK path`, `fusionauth.properties` contents and the JVM's
+provenance are `NOT_VERIFIED`. This is not a claim they are wrong — only that
+they are unverified, and re-running `sudo bash deploy/fusionauth/install.sh`
+(idempotent) would reconcile the install to the runbook's stated state.
+
+### 33.3 Port 9012 — undocumented listener
+
+`ss -lntp` shows **both** `:9011` and `:9012` listening on all interfaces, and
+both serve the full FusionAuth application (identical `/.well-known/openid-
+configuration`, both `/admin` → `301`). ADR-031 §"Frontera de red", ADR-027
+§"Fronteras de red" and `deploy/fusionauth/README.md` §1 all account for
+`:9011` and `:5432` only. Whether `:9012` is a 1.69.0 DEB default or a
+configuration artifact could not be determined without reading
+`fusionauth.properties` (`sudo`-gated).
+
+Risk assessment: **the same UFW default-deny boundary covers it** — no `allow`
+rule exists for `9012` any more than for `9011`, and the ESTADO CONFIRMADO
+records `192.168.0.3 → 192.168.0.26:9012` as `TcpTestSucceeded False`. So this
+is a **documentation gap, not an exposure**. Actions: (a) ADR-027/ADR-031/
+README updated to name `:9012` and state it is covered by the same control;
+(b) if the properties file does not require it, the operator should remove the
+second connector when next editing `fusionauth.properties`; (c)
+`nginx-fusionauth-public.conf` (Phase 2) already `proxy_pass`es only to
+`127.0.0.1:9011`, so the public surface is unaffected either way.
+
+### 33.4 What is prepared and blocked
+
+| Item | State | Blocked on |
+|---|---|---|
+| Tenant `JUVAl` (separate from `Default`) | `NOT_CREATED` — `Default` is the only tenant | **A FusionAuth API key.** `tools/configure_fusionauth.py` creates it (FusionAuth-generated UUID), never touching `Default` — it aborts if the two resolve to the same id |
+| Password policy (controls 1–5, 7) | `NOT_APPLIED` | Same key. `configure_fusionauth.py` PATCHes `deploy/fusionauth/tenant-password-policy.template.json` |
+| Minimum / maximum password age (controls 8, 9) | `NOT_APPLIED` | Same key. Tool sets `minimumPasswordAge=86400s`, `maximumPasswordAge=365d` |
+| Lockout ≤ 10 (control 11) | `NOT_APPLIED` | Same key. Template `failedAuthenticationConfiguration.tooManyAttempts=10` |
+| MFA (control 10) | `CAPABILITY_PRESENT` (TOTP is Community, confirmed by the licence-boundary note in §31/ADR-031); `NOT_CONFIGURED`, `NOT_ENFORCED`, `NOT_ENROLLED` | Same key for config; **per-user enrolment is a human action** — see §33.6 |
+| Application `JUVAl` (OAuth client / `aud`) | `NOT_CREATED` | Same key. Least-privilege grants: `authorization_code` + `refresh_token`, PKCE `Required`, **no** implicit, **no** client-credentials, **no** production redirect URI invented |
+| Roles `viewer` / `operator` / `admin` | `NOT_CREATED` | Same key. Names pinned to `interfaces/api/auth.py::ROLE_PERMISSIONS` by `tests/compliance/test_fusionauth_config.py` |
+| Public HTTPS issuer (Phase 2) | `NOT_STARTED` | **User decision** — which outbound tunnel (ADR-031 §6). Until then the tenant `issuer` is local and tokens are configuration evidence only |
+| `JUVAL_AUTH_MODE=oidc` on Railway | `INACTIVE` (deliberate) | Downstream of Phase 2 + a green `verify_oidc.py`/`verify_rbac.py` against the public issuer |
+| Backup schedule (H-17) | `NOT_SCHEDULED` — `/var/backups/juval-fusionauth` does not exist | **User `sudo`**: install `tools/systemd/juval-fusionauth-backup.{service,timer}`, run `backup.sh` once |
+
+### 33.5 Amazon RF / control matrix — evidence-based, this pass
+
+| # | Control | Classification | Evidence status | Note |
+|---|---|---|---|---|
+| RF-01 | Incident notification | `IMPLEMENTED` | `PARTIAL` (unchanged) | Not touched this pass |
+| RF-02 | Network defence | `IMPLEMENTED` | `PARTIAL` (unchanged) | F-01 workstation patching still the sole blocker. New: FusionAuth/PostgreSQL listeners added to the host, boundary re-checked — `:5432` loopback-only **VERIFIED**; `:9011`/`:9012` all-interfaces with no `allow` rule, unreachable from `192.168.0.3` per ESTADO CONFIRMADO (user-reported) |
+| RF-03 | Password / MFA / lockout | `PARTIALLY_IMPLEMENTED` | `NOT_VERIFIED` | Backend half unchanged (implemented, tested, dormant). IdP: **instance running**, but no tenant → controls 1–11 all `NOT_VERIFIED`. Was blocked on a *decision*, then on *effort*; now blocked on **one API key** |
+| RF-04 | Least privilege | `PARTIALLY_IMPLEMENTED` | `NOT_VERIFIED` | RBAC code implemented + tested (37 negative tests). `tools/verify_rbac.py` added to produce the runtime matrix (positive viewer/operator/admin + negative no-role/bad-aud/bad-iss/expired) against the real issuer via `POST /api/jwt/vend` — **cannot run** until the app/roles exist (API key) and a backend runs with `JUVAL_AUTH_MODE=oidc` |
+| RF-05 | Response governance | `IMPLEMENTED` | `PARTIAL` (unchanged) | Not touched. `host_monitor.sh` gained a FusionAuth health + backup-freshness check (H-19 partial) |
+| 1 | min length ≥ 12 | `CONFIGURABLE` | `NOT_VERIFIED` | template `minLength=12`; test-pinned |
+| 2–3 | upper + lower | `CONFIGURABLE` | `NOT_VERIFIED` | `requireMixedCase=true` |
+| 4 | numeric | `CONFIGURABLE` | `NOT_VERIFIED` | `requireNumber=true` |
+| 5 | special char | `CONFIGURABLE` | `NOT_VERIFIED` | `requireNonAlpha=true` |
+| **6** | **no part of the user's name** | **`CUSTOM_EXTENSION_REQUIRED`** | **`B — PARTIALLY_SATISFIED`** (unchanged, ADR-021) | FusionAuth ≥ 1.63 rejects the **login identifier** only, not `firstName`/`lastName`. The agent additionally could not confirm the exact 1.69.0 field name for that native check without an API key to read the tenant schema. **Not closed by deploying.** R-1 (disclosed residual risk + naming standard) or R-2 (Amazon §21 answer) only |
+| 7 | history ≥ 10 | `CONFIGURABLE` | `NOT_VERIFIED` | `rememberPreviousPasswords.count=10` |
+| 8 | min age ≥ 1 day | `NATIVE_FUSIONAUTH` | `NOT_VERIFIED` | tool sets `86400s` |
+| 9 | max age ≤ 365 days | `NATIVE_FUSIONAUTH` | `NOT_VERIFIED` | tool sets `365d` |
+| 10 | MFA all accounts | `CONFIGURABLE` (capability), enrolment is per-user | `NOT_VERIFIED` | TOTP is Community. Enabling ≠ enforcing ≠ enrolled ≠ tested |
+| 11 | lockout ≤ 10 | `CONFIGURABLE` | `NOT_VERIFIED` | template `tooManyAttempts=10`; "actually locks" needs deliberate failed logins against a throwaway account |
+| — | role separation | `APPLICATION_ENFORCED` | backend `VERIFIED` / runtime `NOT_VERIFIED` | see RF-04 |
+| — | OIDC transport (discovery/JWKS/RS256/kid) | `NATIVE_FUSIONAUTH` | **`VERIFIED`** against the local issuer; `NOT_VERIFIED` against a production issuer | `tools/verify_oidc.py` exit 0, 2026-08-27 |
+
+### 33.6 MFA — the four states kept separate
+
+- **Capability available**: yes — TOTP authenticator, FusionAuth Community. Not agent-verified against this instance's licence status (needs the admin UI / an API key), but confirmed against FusionAuth's published plan matrix in §31.
+- **Configuration enabled**: **no**. The template's `multiFactorConfiguration` (`authenticator.enabled=true`, `loginPolicy="Required"`) is not applied — no tenant.
+- **Enforcement real**: **no**. `loginPolicy="Required"` challenges a user *who has a method*; a tenant-wide "every session is MFA'd" posture also depends on each user having enrolled.
+- **Proof executed**: **no**.
+
+If `configure_fusionauth.py` runs, the first three advance to
+enabled/enabled/partly-enforced. The remaining human action is exact:
+**each user completes TOTP enrolment, and the operator exports the per-user
+enrolment report** (`GET /api/user/search` + `twoFactor` state, or the admin
+UI's user list). That report — not a tenant setting — is the RF-03 MFA
+evidence Amazon rejected the first application for lacking.
+
+### 33.7 Files produced this pass
+
+| File | Purpose |
+|---|---|
+| `tools/configure_fusionauth.py` | Idempotent: find-or-create tenant `JUVAl` (never `Default`), apply password/age/lockout/MFA policy, find-or-create application `JUVAl` with least-privilege grants, ensure roles `viewer`/`operator`/`admin`. Reads `JUVAL_IDP_API_KEY` from the environment only; prints no secret; UUIDs come from FusionAuth |
+| `tools/verify_rbac.py` | Mints RS256 tokens via `POST /api/jwt/vend` and asserts the OIDC + least-privilege status-code matrix against a **running** backend. Read-only w.r.t. IdP config; prints no token value |
+| `tools/systemd/juval-fusionauth-backup.{service,timer}` | Daily `backup.sh` (system units — `backup.sh` needs root for `pg_dump` as `postgres`). Git-tracked, following the H-15 pattern |
+| `tests/compliance/test_fusionauth_config.py` | 5 tests pinning tool roles ↔ backend roles, and template values ↔ Amazon's numeric baseline; asserts no licensed feature and no implicit grant |
+| `tools/host_monitor.sh` (edit) | Conditional FusionAuth + PostgreSQL health check and backup-freshness check (no-op when the unit is absent) — H-19 partial |
+
+### 33.8 Status after this pass
+
+```
+FusionAuth instance     = INSTALLED + RUNNING (VERIFIED 2026-08-27, agent read-only)
+IDP_SELECTION           = FUSIONAUTH_SELECTED (ADR-028)
+IDP_HOSTING             = SELF_HOSTED_JUVAL_SERVER (ADR-031 Aceptada)
+IDP_IMPLEMENTATION      = PARTIALLY_IMPLEMENTED  <-- was NOT_IMPLEMENTED
+                          (instance up; no tenant, application, roles or policy)
+IDP_RUNTIME             = INACTIVE (JUVAL_AUTH_MODE unset — unchanged)
+OIDC_TRANSPORT          = VERIFIED against local issuer / NOT_VERIFIED against production
+TENANT_JUVAL            = NOT_CREATED (blocked: FusionAuth API key)
+CONTROLS 1-11           = NOT_VERIFIED (no tenant)
+CONTROL_6               = B - PARTIALLY_SATISFIED (unchanged)
+MFA                     = CAPABILITY_PRESENT / NOT_CONFIGURED / NOT_ENFORCED / NOT_ENROLLED
+BACKUP (H-17)           = NOT_SCHEDULED (blocked: user sudo)
+PHASE_2_ISSUER          = NOT_STARTED (blocked: user tunnel decision)
+RF-03 / RF-04           = PARTIAL / NOT_VERIFIED (unchanged)
+IDENTITY SECURITY GATE  = BLOCKED
+REAPPLICATION GATE      = BLOCKED
+AMAZON_COMPLIANCE_READINESS = NOT_READY
+```
+
+**No finding changed state.** Installing an IdP is not configuring a tenant,
+configuring is not enforcing, and enforcing is not evidenced. The blocker for
+RF-03/RF-04 is now a single named credential, with idempotent tooling and a
+runtime verifier waiting behind it.
+
+### 33.9 Exact next actions
+
+1. **Operator** (over the existing SSH forward, `ssh -L 9011:127.0.0.1:9011`):
+   in the admin UI, Settings → API Keys, create a key with write access to
+   Tenants and Applications. Do not paste it anywhere in this repository.
+2. **Operator**, on `juval-server`:
+   `JUVAL_IDP_API_KEY=<key> python tools/configure_fusionauth.py`
+   then `JUVAL_IDP_API_KEY=<key> python tools/verify_oidc.py --issuer http://127.0.0.1:9011 --tenant-policy`.
+   Revoke the key when Phase 2 configuration is complete, or scope a
+   longer-lived one deliberately.
+3. **User decision**: the Phase 2 outbound tunnel (ADR-031 §6). Then re-run
+   `configure_fusionauth.py --issuer https://<public>` and both verifiers.
+4. **User `sudo`**: `sudo bash deploy/fusionauth/install.sh` once (idempotent —
+   reconciles the manual install to the runbook and stages the JDK); install
+   the backup timer; run `backup.sh` once.
+5. **Only then**: `JUVAL_AUTH_MODE=oidc` on Railway, re-run `verify_rbac.py`
+   against the public issuer.
