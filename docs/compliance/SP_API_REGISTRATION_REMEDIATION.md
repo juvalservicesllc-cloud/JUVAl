@@ -1702,7 +1702,8 @@ moved.
 | FusionAuth answers `GET /api/status` → `{"status":"Ok"}` | `curl 127.0.0.1:9011/api/status` | **VERIFIED** |
 | OIDC discovery reachable, `issuer` self-consistent | `tools/verify_oidc.py --issuer http://127.0.0.1:9011` → exit 0 | **VERIFIED** (against a **local `http://` issuer** — configuration evidence only, not production) |
 | JWKS reachable, 1 key, `alg=RS256`, `kid` present | same run; matches `interfaces/api/auth.py::_ALLOWED_ALGORITHMS` | **VERIFIED** |
-| Backend unchanged, fails closed, 11/11 routes enforce a permission | `tools/compliance_check.py` (`auth.*` PASS); 356 backend tests pass, 7 skipped | **VERIFIED** |
+| Backend unchanged, fails closed, 11/11 routes enforce a permission | `tools/compliance_check.py` (`auth.*` PASS); 361 backend tests pass, 7 skipped | **VERIFIED** |
+| Backend wired to the **real** issuer boots and rejects bad tokens | ran `JUVAL_AUTH_MODE=oidc JUVAL_OIDC_ISSUER=http://127.0.0.1:9011`: `build_verifier()` succeeds; missing / garbage / foreign-signing-key tokens → `401`; the foreign-key case produced `PyJWKClientError` — i.e. the backend **fetched FusionAuth's live JWKS** and correctly found no matching `kid` | **VERIFIED** (negative path only — positive `200`/`403` needs a minted token, which needs the API key) |
 
 ### 33.2 Deviation from the runbook, recorded
 
@@ -1767,7 +1768,7 @@ second connector when next editing `fusionauth.properties`; (c)
 | RF-01 | Incident notification | `IMPLEMENTED` | `PARTIAL` (unchanged) | Not touched this pass |
 | RF-02 | Network defence | `IMPLEMENTED` | `PARTIAL` (unchanged) | F-01 workstation patching still the sole blocker. New: FusionAuth/PostgreSQL listeners added to the host, boundary re-checked — `:5432` loopback-only **VERIFIED**; `:9011`/`:9012` all-interfaces with no `allow` rule, unreachable from `192.168.0.3` per ESTADO CONFIRMADO (user-reported) |
 | RF-03 | Password / MFA / lockout | `PARTIALLY_IMPLEMENTED` | `NOT_VERIFIED` | Backend half unchanged (implemented, tested, dormant). IdP: **instance running**, but no tenant → controls 1–11 all `NOT_VERIFIED`. Was blocked on a *decision*, then on *effort*; now blocked on **one API key** |
-| RF-04 | Least privilege | `PARTIALLY_IMPLEMENTED` | `NOT_VERIFIED` | RBAC code implemented + tested (37 negative tests). `tools/verify_rbac.py` added to produce the runtime matrix (positive viewer/operator/admin + negative no-role/bad-aud/bad-iss/expired) against the real issuer via `POST /api/jwt/vend` — **cannot run** until the app/roles exist (API key) and a backend runs with `JUVAL_AUTH_MODE=oidc` |
+| RF-04 | Least privilege | `PARTIALLY_IMPLEMENTED` | `NOT_VERIFIED` (positive path) / **negative path VERIFIED against the real issuer** | RBAC code implemented + tested (37 negative tests). Backend run with `JUVAL_AUTH_MODE=oidc` pointed at `http://127.0.0.1:9011`: missing / garbage / foreign-key tokens all → `401`, and the foreign-key rejection proves the backend fetched FusionAuth's live JWKS. `tools/verify_rbac.py` produces the **full** matrix (positive viewer/operator/admin + 403 for viewer-export/no-role + 401 for bad-aud/iss/expired) via `POST /api/jwt/vend` — **cannot run** until the app/roles exist (API key) |
 | RF-05 | Response governance | `IMPLEMENTED` | `PARTIAL` (unchanged) | Not touched. `host_monitor.sh` gained a FusionAuth health + backup-freshness check (H-19 partial) |
 | 1 | min length ≥ 12 | `CONFIGURABLE` | `NOT_VERIFIED` | template `minLength=12`; test-pinned |
 | 2–3 | upper + lower | `CONFIGURABLE` | `NOT_VERIFIED` | `requireMixedCase=true` |
