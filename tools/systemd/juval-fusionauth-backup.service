@@ -1,0 +1,17 @@
+[Unit]
+Description=JUVAl FusionAuth backup (identity data — not regenerable from Git)
+Documentation=file:/home/juval/JUVAl/APP/deploy/fusionauth/README.md
+After=postgresql.service fusionauth-app.service
+Requires=postgresql.service
+
+[Service]
+Type=oneshot
+# Runs as root: backup.sh calls pg_dump via `runuser -u postgres` and writes
+# to /var/backups/juval-fusionauth (0700). It refuses to run as non-root.
+# ADR-027 §"Enmienda 2026-08-26" makes this a deployment requirement.
+ExecStart=/bin/bash /home/juval/JUVAl/APP/deploy/fusionauth/backup.sh
+Nice=10
+IOSchedulingClass=idle
+
+[Install]
+WantedBy=multi-user.target

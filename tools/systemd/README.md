@@ -1,3 +1,14 @@
+# JUVAl systemd units (git-tracked, reproducible from source)
+
+Two unrelated sets live here:
+
+| Unit | Scope | Installed by | Purpose |
+|---|---|---|---|
+| `juval-host-monitor.{timer,service}` | **user** (`~/.config/systemd/user/`) | `juval`, no sudo | Host monitoring (H-15) — see below |
+| `juval-fusionauth-backup.{timer,service}` | **system** (`/etc/systemd/system/`) | root / `sudo` | Daily `deploy/fusionauth/backup.sh` (H-17). System-scoped because `backup.sh` needs root for `pg_dump` as `postgres` and to write `/var/backups/juval-fusionauth`. Install steps in `deploy/fusionauth/README.md` §5. **Not installed yet** as of 2026-08-27 |
+
+---
+
 # `juval-host-monitor` systemd user units
 
 Mirrors of the unit files running live on `juval-server` at

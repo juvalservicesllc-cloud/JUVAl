@@ -93,6 +93,32 @@ else
   warn "git.backup" "${REPO_DIR} is not a git working tree"
 fi
 
+# --- FusionAuth identity stack (only if deployed — ADR-031, H-19) ---
+# No-op on a clean node or a dev workstation. Read-only, no sudo.
+if systemctl list-unit-files fusionauth-app.service >/dev/null 2>&1 \
+   && systemctl cat fusionauth-app.service >/dev/null 2>&1; then
+  fa_active=$(systemctl is-active fusionauth-app 2>/dev/null || true)
+  pg_active=$(systemctl is-active postgresql 2>/dev/null || true)
+  if [ "$fa_active" = "active" ] && [ "$pg_active" = "active" ] \
+     && curl -fsS -o /dev/null --max-time 10 http://127.0.0.1:9011/api/status 2>/dev/null; then
+    pass "fusionauth" "fusionauth-app + postgresql active, /api/status Ok"
+  else
+    fail "fusionauth" "fusionauth-app=${fa_active:-?} postgresql=${pg_active:-?} status-endpoint unreachable"
+  fi
+
+  # Identity data is not regenerable from Git (H-17). A backup older than
+  # 48h, or none at all, is a real gap once the stack is live.
+  backup_dir="/var/backups/juval-fusionauth"
+  latest=$(find "$backup_dir" -maxdepth 1 -name 'fusionauth-*.dump' -mmin -2880 2>/dev/null | head -1)
+  if [ -n "$latest" ]; then
+    pass "fusionauth.backup" "a dump under 48h old exists in ${backup_dir}"
+  elif [ -d "$backup_dir" ]; then
+    warn "fusionauth.backup" "no dump under 48h old in ${backup_dir} (H-17 timer running?)"
+  else
+    warn "fusionauth.backup" "${backup_dir} does not exist yet (H-17 not scheduled)"
+  fi
+fi
+
 # --- journal log growth (informational; journald self-limits by default) ---
 if command -v journalctl >/dev/null 2>&1; then
   journal_size=$(journalctl --disk-usage 2>/dev/null | grep -oE '[0-9.]+[MG]' | tail -1)

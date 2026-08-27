@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the JUVAl FusionAuth backup daily
+Documentation=file:/home/juval/JUVAl/APP/deploy/fusionauth/README.md
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+RandomizedDelaySec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
