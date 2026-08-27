@@ -150,14 +150,29 @@ verified.
 
 ## 3. Install (Phase 1)
 
+**Status 2026-08-27: DONE — but run manually, not via this script.** A
+FusionAuth 1.69.0 instance is installed and running on `juval-server`
+(`fusionauth-app` `active`+`enabled`, PostgreSQL `active`, `/api/status` Ok,
+OIDC discovery/JWKS verified read-only). The operator imported the schema with
+`psql` directly. `install.sh` was not used, so its JDK-checksum,
+generated-password and `runtime-mode=production` guarantees are **unverified**
+(`SP_API_REGISTRATION_REMEDIATION.md` §33.2). Re-running the script is
+idempotent and reconciles the install to this runbook — recommended:
+
 The agent has no `sudo` on `juval-server`; every step below is user-executed,
 as in every prior host-control session.
 
 ```bash
 ssh juval@192.168.0.26
 cd ~/JUVAl/APP && git pull
-sudo bash deploy/fusionauth/install.sh
+sudo bash deploy/fusionauth/install.sh   # idempotent — reconciles the manual install
 ```
+
+Also observed at runtime: the instance listens on **`:9011` and `:9012`**,
+both serving the full app, both bound to all interfaces, neither with a UFW
+`allow` rule (so both are covered by the default-deny boundary). Only `:9011`
+is referenced by the Phase 2 proxy. If `fusionauth.properties` does not need
+the second connector, remove it when next editing that file.
 
 The script is idempotent — each step checks its end state first — and refuses
 to continue rather than guess if it finds a half-configured install. It prints
@@ -192,19 +207,30 @@ further.
    `ssh -L 9011:127.0.0.1:9011 juval@192.168.0.26`, then
    `http://127.0.0.1:9011`. Creates the first admin account. That password goes
    in the operator's password manager — never in this repository, never in a
-   document, never in shell history.
-2. **Tenant password policy**: apply
-   `deploy/fusionauth/tenant-password-policy.template.json` with
-   `PATCH /api/tenant/{tenantId}`, using an API key from the environment.
-   Controls 8 and 9 sit outside `passwordValidationRules` in the Tenants API —
-   the template's `_controls_not_expressible_here` block says where they go.
-3. **Issuer**: set the tenant's `issuer` to the public HTTPS URL from Phase 2.
-   Until Phase 2 exists, tokens carry a local issuer and are only good for
-   configuration evidence, not for production activation.
-4. **Verify**: `python tools/verify_oidc.py --issuer <url>` and, with
-   `JUVAL_IDP_API_KEY` in the environment, `--tenant-policy`. Read-only, prints
-   no secret, exits non-zero on failure.
-5. **Schedule backups** (§5).
+   document, never in shell history. **Done 2026-08-27.**
+2. **API key**: admin UI → Settings → API Keys → create a key with write access
+   to Tenants and Applications. Pass it only in the environment
+   (`JUVAL_IDP_API_KEY`). Revoke it when configuration is finished.
+3. **Tenant + application + roles + policy** — one idempotent command:
+   ```bash
+   JUVAL_IDP_API_KEY=<key> python tools/configure_fusionauth.py
+   ```
+   Creates the `JUVAl` tenant (never `Default`), applies
+   `tenant-password-policy.template.json` plus controls 8/9, creates the
+   `JUVAl` application (least-privilege grants: `authorization_code` +
+   `refresh_token`, PKCE required, no implicit), and ensures the roles
+   `viewer`/`operator`/`admin`. Prints the backend env block — the application
+   id is `JUVAL_OIDC_AUDIENCE`. UUIDs come from FusionAuth.
+4. **Issuer**: re-run `configure_fusionauth.py --issuer https://<public>` once
+   Phase 2 exists. Until then the tenant `issuer` is local and tokens are
+   configuration evidence only, not production.
+5. **Verify**:
+   `JUVAL_IDP_API_KEY=<key> python tools/verify_oidc.py --issuer <url> --tenant-policy`,
+   then (backend running under `JUVAL_AUTH_MODE=oidc`)
+   `JUVAL_IDP_API_KEY=<key> python tools/verify_rbac.py --issuer <url> --audience <app id> --backend <url>`.
+6. **Schedule backups** (§5): install
+   `tools/systemd/juval-fusionauth-backup.{service,timer}` and run `backup.sh`
+   once.
 
 Only then does `JUVAL_AUTH_MODE=oidc` get set on Railway. Setting it earlier
 breaks every request against an unreachable issuer (`SECRETS.md` §8 S-4).
@@ -243,9 +269,21 @@ dump with `pg_restore --list` before reporting success — a truncated dump pass
 a size check and fails a restore, which is the worst possible moment to find
 out. Retention 14 days.
 
-Schedule it with a `systemd` timer under `juval`, following the pattern already
-proven for `juval-host-monitor` (`tools/systemd/`, H-15). Do not invent a
-second scheduling mechanism.
+Schedule it with the **system** `systemd` timer git-tracked at
+`tools/systemd/juval-fusionauth-backup.{service,timer}` (system, not
+`--user`: `backup.sh` needs root to run `pg_dump` as `postgres` and to write
+`/var/backups/juval-fusionauth`). Install:
+
+```bash
+sudo cp tools/systemd/juval-fusionauth-backup.service /etc/systemd/system/
+sudo cp tools/systemd/juval-fusionauth-backup.timer   /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now juval-fusionauth-backup.timer
+sudo systemctl start juval-fusionauth-backup.service   # run once now
+```
+
+`tools/host_monitor.sh` warns (`fusionauth.backup`) until a dump under 48h old
+exists. Do not invent a second scheduling mechanism.
 
 **Restore** — deliberately not a script. Restoring drops live identity data;
 it is rare, high-stakes and belongs under a human's supervision:
