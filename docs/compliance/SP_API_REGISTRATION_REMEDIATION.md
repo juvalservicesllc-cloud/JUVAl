@@ -1715,6 +1715,25 @@ imported with `psql` as the `fusionauth` role (103 tables, owned by
 `fusionauth`). The setup wizard was completed and the first admin created over
 the SSH forward.
 
+**Integrity note added 2026-08-28**: a leftover copy of the schema artifact
+from that session is still present at
+`/tmp/fusionauth-schema-1.69.0/postgresql.sql`. Its SHA-256, computed fresh
+this pass (`sha256sum`), is `999216da64310282548f631cb7bceead5b1f20ed481f8369c67f8679319772c9`
+— it does **not** match the checksum recorded two paragraphs above
+(`6e65b525...`), which the operator has stated twice as confirmed
+(`ESTADO CONFIRMADO`, both in the 2026-08-27 session and again in this pass).
+The file's structure is consistent with a genuine FusionAuth 1.69.0 schema
+(the FusionAuth copyright header, `\set ON_ERROR_STOP true`, and a
+`migrations/postgresql/` tree running through the correct version range), so
+this is not evidence the schema itself is wrong — only that **the file
+currently on disk in `/tmp` is not the same bytes as whatever was actually
+verified and imported**, most likely because `/tmp` is not durable and the
+copy was touched or replaced after the fact. Practical consequence: none —
+`deploy/fusionauth/install.sh`'s 2026-08-28 fix (§34.2) does not read this
+file at all, so this discrepancy does not block or weaken that fix. Recorded
+here only so this specific checksum is never cited as still-verifiable
+against the `/tmp` copy.
+
 What this means for evidence: `install.sh`'s guarantees — pre-staged
 checksum-verified Temurin JDK (so `start.sh` never fetches an unverified JVM),
 generated database password never echoed, `runtime-mode=production` /
