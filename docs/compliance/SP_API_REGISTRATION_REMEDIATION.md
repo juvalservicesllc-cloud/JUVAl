@@ -1851,3 +1851,124 @@ runtime verifier waiting behind it.
    the backup timer; run `backup.sh` once.
 5. **Only then**: `JUVAL_AUTH_MODE=oidc` on Railway, re-run `verify_rbac.py`
    against the public issuer.
+
+## 34. Forensic re-verification of commits b130fd7…d3d49dc, and an installer defect found (2026-08-28)
+
+Audit pass, not a deployment pass. Mission: re-derive every claim in the five
+FusionAuth/identity commits from live evidence rather than trust the commit
+messages, then continue remediation on everything technically reachable
+without the credentials this project has never had. **No commit's claims were
+found to be overclaimed.** Every "VERIFIED" line checked against runtime
+either reproduced cleanly or was already correctly qualified as
+`NOT_VERIFIED`/local-only in §33. One real defect was found and fixed, in
+code untouched by any of the five commits: `deploy/fusionauth/install.sh`.
+
+### 34.1 Independently re-derived this pass (fresh evidence, not re-cited)
+
+| Fact | Fresh evidence, 2026-08-28 |
+|---|---|
+| `fusionauth-app` active+enabled, `postgresql` active+enabled | `systemctl status`/`is-enabled`, re-run |
+| Listeners `:9011`/`:9012` all-interfaces, `:5432` `127.0.0.1`-only | `ss -tln`, re-run |
+| UFW active, `DEFAULT_INPUT_POLICY="DROP"` | `/etc/default/ufw`, `/etc/ufw/ufw.conf` (world-readable), re-read; `systemctl is-active ufw` → `active`; **1,306** `[UFW BLOCK]` kernel log lines in the last 2 days (`journalctl -k`) — the boundary is not merely configured, it is observably dropping traffic continuously |
+| `sudo ufw status verbose` (the rule allow-list) | **Still not agent-verifiable** — `sudo -n` → `a password is required`, juval has no `NOPASSWD` entry despite group membership. Unchanged from every prior session |
+| OIDC discovery/JWKS positive path against the real local issuer | Re-ran `tools/verify_oidc.py --issuer http://127.0.0.1:9011`: discovery, issuer match, JWKS, RS256, kid → all `PASS`, exit 0. (An initial run against `http://localhost:9011` correctly `FAIL`ed on issuer mismatch — a live demonstration, not a citation, that the tool's issuer check actually discriminates) |
+| Negative path against the real local issuer | Independently re-built `build_verifier()` with `JUVAL_AUTH_MODE=oidc` / `JUVAL_OIDC_ISSUER=http://127.0.0.1:9011`, then fed it a missing token, a garbage string, and a token signed with a locally-generated RSA key (`kid` not published by FusionAuth): all three → `401`, the foreign-key case via `PyJWKClientError` — i.e. the backend fetched FusionAuth's **live** JWKS and correctly found no matching key. Matches d3d49dc's claim exactly |
+| `/api/tenant` requires auth | `curl -o /dev/null -w '%{http_code}' http://127.0.0.1:9011/api/tenant` → `401` without a key |
+| `JUVAL_IDP_API_KEY` not available this session | Checked environment — unset. Same blocker §33.4/§33.9 names, unresolved |
+| Backend test suite | `.venv/bin/python -m pytest -q` → `366 passed, 7 skipped` (361 + 5 new static tests below) |
+| `tools/compliance_check.py` | `9 pass, 1 warn` (the pre-existing IRP role-placeholder warning), `0 fail` |
+| `pip-audit` | No known vulnerabilities |
+| Secret scan | No secret-shaped strings in 384 files |
+| H-15 monitoring timer | `systemctl --user list-timers` shows it live, last run 9 min before this check, next in 20; `journalctl --user -u juval-host-monitor.service` shows real, varying PASS/WARN output (not static text), correctly flags `fusionauth.backup` as `WARN` every run |
+| H-17 backup — still not scheduled | No `juval-fusionauth-backup.{service,timer}` unit installed anywhere under `/etc/systemd/system/`; `/var/backups/juval-fusionauth` does not exist. Confirms §33.4/HOST_CONTROLS_JUVAL_SERVER.md H-17 exactly — needs user `sudo`, unchanged |
+| TABLETOP-002 | Confirmed still `PREPARED — not run` in its own header. Not executed by this pass — a human tabletop cannot be synthesized |
+| F-01 (Windows workstation patching) | Confirmed, re-reading `NETWORK_SECURITY.md`, that F-01 is specifically the Windows 10 Home workstation (`KB5072653`, 2025-11-19) — unrelated to this Linux host's own (separately-tracked, `VERIFIED`) H-6 patch control. Not touched or closed by this pass; remains `OPEN`, external user action |
+| Role names | `interfaces/api/auth.py::ROLE_PERMISSIONS` re-read directly: `viewer`/`operator`/`admin`, least-privilege as documented |
+
+### 34.2 Installer defect found and fixed: `deploy/fusionauth/install.sh`
+
+Not a claim in any of the five commits — a latent bug in code none of them
+touched, found while investigating why Phase 1 needed a manual schema import
+at all (§33.2 records *that* it happened, not *why* the script couldn't do
+it). Root cause, confirmed against FusionAuth's own published documentation
+(not guessed):
+
+1. `install.sh` sets `fusionauth-app.runtime-mode=production`. FusionAuth:
+   *"When in production runtime mode, maintenance mode will never run."*
+   Maintenance mode is what interactively builds the schema on a development
+   install — production mode removes it and the script configured no
+   replacement.
+2. The replacement is Silent Mode. Its *default* only becomes `true` when
+   `database.root.username` is also set — a superuser fallback credential the
+   script never wrote (correctly: it would be unused, since `${DB_USER}`
+   already owns its own database). Neither the default's precondition nor the
+   property itself was set, so Silent Mode never activated either, and an
+   empty database stayed empty with no automated path to fill it.
+3. The resulting manual recovery — importing a schema dump with `psql` as the
+   **`postgres`** superuser — is what left all 103 tables and 2 functions
+   `postgres`-owned instead of `${DB_USER}`-owned, producing `permission
+   denied for table ...` until re-imported correctly. That compounding bug is
+   `§33.2`'s "deviation from the runbook," now explained rather than just
+   recorded.
+
+**Fix** (`deploy/fusionauth/install.sh`, step 2 and step 5): explicitly set
+`fusionauth-app.silent-mode=true` — FusionAuth's own documented answer for a
+managed/non-superuser database, in preference to adding root credentials —
+and make `${DB_USER}` own the `public` schema (not only the database) before
+FusionAuth ever connects, idempotently, with `ON_ERROR_STOP=1`, and a hard
+failure rather than a silent guess if a non-empty schema is ever found under
+the wrong owner. No external schema file is downloaded or pinned: Silent Mode
+uses FusionAuth's own package code — already checksum-verified in step 3 —
+which is a more authoritative source of "the official schema" than a
+separately-hosted SQL dump whose canonical URL this pass could not confirm
+with confidence (and declined to guess, per project policy on URLs).
+Five static tests added: `tests/compliance/test_fusionauth_install_script.py`
+(bash syntax, silent-mode present, no root credential written, ownership fix
+present and `ON_ERROR_STOP`-guarded, non-empty-schema case fails loudly
+instead of guessing).
+
+**Not yet re-verified end-to-end.** This session has no `sudo` on
+`juval-server` and could not run `install.sh` against a fresh database to
+confirm Silent Mode completes in practice. The live instance is unaffected
+either way — it was already fixed manually, step 5 leaves an existing config
+file alone, and step 2's ownership check is idempotent and found the existing
+state already correct when read (via the `postgres`-context queries the
+script itself uses). Closing evidence requires the operator to run
+`sudo bash deploy/fusionauth/install.sh` against a throwaway host/VM, or to
+accept the fix on code review alone.
+
+### 34.3 What remains blocked, unchanged from §33.4/§33.9
+
+No blocker moved this pass — none of Gates 3-7 (tenant, password policy
+runtime testing, control 6, MFA, RBAC token testing) or the backup-timer
+install (Gate 11) could be executed without credentials this session was not
+given: the `JUVAL_IDP_API_KEY` (create tenant/application/roles/policy, test
+password/lockout/MFA behavior, mint tokens for the full RBAC matrix) and
+`sudo` (install the backup timer, run `backup.sh`, re-run `install.sh`,
+enumerate the UFW allow-list). Both are the same named blockers as §33.9,
+items 1 and 4. This is stated plainly rather than worked around: no proxy,
+shortcut, or credential-minting path exists that would not itself be a
+security regression.
+
+### 34.4 Status after this pass
+
+```
+FIVE-COMMIT AUDIT       = NO OVERCLAIM FOUND (all claims independently reproduced)
+INSTALLER DEFECT        = FOUND + FIXED (code only; NOT re-verified end-to-end -- needs user sudo on a fresh host)
+IDP_IMPLEMENTATION      = PARTIALLY_IMPLEMENTED (unchanged)
+IDP_RUNTIME             = INACTIVE (unchanged)
+TENANT_JUVAL            = NOT_CREATED (unchanged -- blocked: FusionAuth API key)
+CONTROLS 1-11           = NOT_VERIFIED (unchanged -- no tenant)
+CONTROL_6               = B - PARTIALLY_SATISFIED (unchanged)
+BACKUP (H-17)           = NOT_SCHEDULED (unchanged -- blocked: user sudo)
+MONITORING (H-15)       = VERIFIED, re-confirmed live this pass
+RF-01 / RF-02 / RF-03 / RF-04 / RF-05 = PARTIAL (unchanged)
+REAPPLICATION GATE      = BLOCKED (unchanged)
+AMAZON_COMPLIANCE_READINESS = NOT_READY (unchanged)
+```
+
+Correctness first: an installer defect that would have reproduced on any
+fresh machine is a real finding, and fixing it is real progress. It does not
+move a single Amazon control, because none of the controls were gated on
+`install.sh` — they are gated on the tenant, which is gated on a credential
+this session still does not have.
