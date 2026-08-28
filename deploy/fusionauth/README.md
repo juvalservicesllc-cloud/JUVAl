@@ -159,6 +159,54 @@ generated-password and `runtime-mode=production` guarantees are **unverified**
 (`SP_API_REGISTRATION_REMEDIATION.md` §33.2). Re-running the script is
 idempotent and reconciles the install to this runbook — recommended:
 
+### Installer defect found and fixed (2026-08-28)
+
+The manual install above was not a workaround of convenience — the original
+`install.sh` had a real bug that would have reproduced on any fresh machine.
+Root cause, confirmed against FusionAuth's own documentation:
+
+1. The script sets `fusionauth-app.runtime-mode=production`. FusionAuth's
+   docs: *"When in production runtime mode, maintenance mode will never
+   run."* Maintenance mode is what interactively builds the schema on a
+   development install — with it gone and no replacement configured, an
+   empty database stayed empty and the app could never start.
+2. The replacement for maintenance mode is Silent Mode
+   (`fusionauth-app.silent-mode`), but its *default* only becomes `true`
+   when `database.root.username` is also set — a superuser fallback
+   credential the script deliberately never wrote (it would have been an
+   unused secret, since `${DB_USER}` already owns its own database). The
+   script set neither the default's precondition nor the property itself, so
+   Silent Mode never ran either.
+3. With no automated path left, the first real install worked around this by
+   importing a schema dump with `psql` **as the `postgres` superuser**. That
+   left all 103 tables and 2 functions owned by `postgres` instead of
+   `fusionauth`, which then failed with `permission denied for table ...` on
+   every subsequent query — the second, compounding bug — until fixed by
+   re-importing so that database owner, `public` schema owner, all 103
+   tables and both functions are owned by `fusionauth`.
+
+**Fix, in `install.sh` step 2 and step 5**: the script now explicitly sets
+`fusionauth-app.silent-mode=true` (FusionAuth's own documented answer for a
+non-superuser/managed database) instead of adding root credentials, and
+makes `${DB_USER}` the owner of the `public` schema — not just the database —
+before FusionAuth ever connects, with `ON_ERROR_STOP=1` and a hard failure
+(never a silent guess) if a non-empty schema is found under the wrong owner.
+No external schema file is downloaded: Silent Mode uses FusionAuth's own
+package code to build the schema, which is already checksum-verified in step
+3, so it is a more authoritative source than a separately-hosted SQL dump
+would be. Static checks: `tests/compliance/test_fusionauth_install_script.py`.
+
+**Not yet re-verified end-to-end**: the agent that wrote this fix has no
+`sudo` on `juval-server` and could not run `install.sh` against a fresh
+database to confirm Silent Mode actually completes here. The current running
+instance was already fixed manually and is unaffected either way (step 5
+detects its existing config and leaves it alone, step 2's schema-ownership
+check is idempotent and confirms the existing state is already correct). The
+one thing this fix has not been proven against is a genuinely fresh machine —
+that would need `FUSIONAUTH_VERSION=1.69.0 WORK_DIR=/tmp/x sudo bash
+deploy/fusionauth/install.sh` against a throwaway host or VM, which is a user
+action.
+
 The agent has no `sudo` on `juval-server`; every step below is user-executed,
 as in every prior host-control session.
 
