@@ -2259,3 +2259,98 @@ Paste back the output of steps 2–6 (none contain secrets: no password, no
 JWT signing key, no API key) and this record will be updated from
 `BACKUP EXECUTION = FAILED` to `VERIFIED` only once that evidence exists —
 not before.
+
+## 37. H-17 backup/restore — closed locally, on-host only (2026-08-31)
+
+The operator re-ran the §36.5 privileged commands with the `233372e` fix in
+place and reported real success, including a second independent repetition
+of the restore sequence with identical results. Recorded as evidence, not a
+claim:
+
+### 37.1 Backup execution — VERIFIED
+
+```
+backup OK: fusionauth-20260831T173402Z.dump
+size: 281632 bytes, retention: 14 days
+destination: /var/backups/juval-fusionauth
+```
+
+`/var/backups/juval-fusionauth`: `postgres:postgres`, `0700`.
+`fusionauth-20260831T173402Z.dump`: `postgres:postgres`, `0600`, 281632 bytes.
+Both match the `233372e` fix exactly — the directory is no longer
+root-owned, and `pg_dump` (running as `postgres`) wrote successfully.
+
+The accompanying `fusionauth.properties-<STAMP>` copy is `fusionauth:root`,
+`0600` — this is `cp -p` (run as root, preserving the **source** file's
+ownership, `/usr/local/fusionauth/config/fusionauth.properties` being
+`fusionauth:root` per §33.2) doing exactly what it is documented to do, not
+a second defect. No change made — reviewed and left alone, as asked.
+
+### 37.2 Timer — VERIFIED ACTIVE (upgraded from §36.3)
+
+`juval-fusionauth-backup.timer`: loaded, enabled, active (waiting), next
+2026-09-01 03:38:18 UTC. The oneshot service correctly shows
+`inactive (dead)` between runs — that is normal `Type=oneshot` behavior, not
+a fault.
+
+Note for the record, not a contradiction: `journalctl --user -u
+juval-host-monitor.service` still showed `[WARN] fusionauth.backup ... does
+not exist yet` on its 17:15:41 UTC run — that run predates the 17:34:02 UTC
+backup by 19 minutes. The next scheduled run (17:45:41 UTC) is expected to
+clear it; this pass did not wait for or force that cycle, so H-19's
+freshness check against this specific backup remains unobserved rather than
+asserted.
+
+### 37.3 Isolated restore — VERIFIED, twice
+
+Scratch database `fusionauth_restore_test`, created and dropped by the
+operator, never touching the live `fusionauth` database:
+
+```
+pg_restore --dbname=fusionauth_restore_test --no-owner <dump>  → no errors
+SELECT count(*) FROM instance;  → 1
+SELECT count(*) FROM users;     → 1
+dropdb fusionauth_restore_test  → confirmed gone (existence query, no row)
+```
+
+Repeated a second time, independently, with identical `instance=1`/`users=1`
+counts — this is genuine reproducibility evidence, not a single lucky run.
+
+### 37.4 Status after this pass
+
+```
+BACKUP TIMER              = VERIFIED
+BACKUP EXECUTION          = VERIFIED
+BACKUP ARTIFACT           = VERIFIED (postgres:postgres, 0700/0600)
+BACKUP PERMISSIONS        = VERIFIED
+SCRATCH RESTORE           = VERIFIED (x2, reproducible)
+RESTORED-DATA INTEGRITY   = VERIFIED (minimal: row counts only, not
+                             field-level content — instance=1, users=1)
+SCRATCH CLEANUP           = VERIFIED
+H-17 (LOCAL)               = CLOSED — on-host backup/restore proven end-to-end
+```
+
+**Explicit scope limit, preserved rather than glossed over:** this closes
+**local, on-host** H-17 only. It is still true, unchanged from every prior
+pass, that:
+
+- these backups do **not** survive total loss of `juval-server` — no
+  off-host copy exists, and ADR-027 §"Expectativas de backup" treats an
+  unencrypted off-host copy as worse than none; an encrypted off-host
+  destination is an **open user decision**, not scheduled;
+- `install.sh` fresh-host end-to-end validation is still `NOT_VERIFIED`
+  (§34.2/§35.2 — needs a throwaway host, not attempted against production);
+- the public issuer/TLS boundary remains `BLOCKED_EXTERNAL` (Phase 2, ADR-031 §6);
+- Control 6 (name exclusion) remains `B — PARTIALLY_SATISFIED`, unchanged —
+  nothing in this pass touched password-policy or tenant configuration;
+- this is **local technical remediation**, not Amazon acceptance — RF-01…
+  RF-05 stay `PARTIAL` and the reapplication gate stays `BLOCKED` (§37 closes
+  one item inside RF-05's evidence, it does not move RF-05 itself, since
+  RF-05's classification already accounted for backup as one of several
+  open sub-items).
+
+`JUVAL_IDP_API_KEY` checked again this pass (environment only, value never
+displayed): **still not set.** This remains the sole blocker for tenant
+creation, password/lockout/MFA policy, RBAC roles, and the full OIDC/RBAC
+verification matrix — unchanged from every prior section. No further
+progress on RF-03/RF-04 is possible without it.
