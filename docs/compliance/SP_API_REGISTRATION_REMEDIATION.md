@@ -1991,3 +1991,103 @@ fresh machine is a real finding, and fixing it is real progress. It does not
 move a single Amazon control, because none of the controls were gated on
 `install.sh` — they are gated on the tenant, which is gated on a credential
 this session still does not have.
+
+## 35. Re-verification pass, 2026-08-31 — no state change, both blockers unchanged
+
+Continuation session, three days after §34. Mission: re-derive current
+Git/runtime truth independently (not by citing §33/§34), then continue
+remediation on everything technically reachable without the two credentials
+this project has never had. **No claim in §33/§34 was found stale or
+overclaimed. No Amazon control moved.**
+
+### 35.1 Fresh evidence, re-derived this pass (not re-cited)
+
+| Fact | Fresh evidence, 2026-08-31 |
+|---|---|
+| Git: `HEAD=7d7a00b`, 8 ahead / 0 behind `origin/master`, clean tree | `git status`, `git fetch origin`, `git rev-list --left-right --count HEAD...origin/master` — matches the historical checkpoint exactly, no divergence |
+| `fusionauth-app` active, `postgresql.service` active (wrapper) + `postgresql@16-main.service` active (the real cluster) | `systemctl status`, re-run. `fusionauth-app` uptime 4 days (since 2026-08-26 22:19 UTC), memory ~1014 MiB |
+| Listeners unchanged: `:9011`/`:9012` all-interfaces, `:5432` `127.0.0.1`-only | `ss -tlnp`, re-run |
+| UFW active, `DEFAULT_INPUT_POLICY="DROP"` (world-readable `/etc/default/ufw`), and **still observably dropping traffic**: 1,309 `[UFW BLOCK]` kernel log lines in the last 2 days (`journalctl -k`) | Re-read/re-run. `sudo ufw status verbose` (the allow-list itself) remains **not agent-verifiable** — `sudo -n` still returns "a password is required"; no cached credential in this session |
+| OIDC discovery/JWKS positive path against the real local issuer | Re-ran `tools/verify_oidc.py --issuer http://127.0.0.1:9011`: discovery, issuer match, JWKS, RS256, kid → all `PASS`, exit 0 |
+| Negative path against the real local issuer | Independently rebuilt `build_verifier()` (`juval.interfaces.api.auth`) with `JUVAL_AUTH_MODE=oidc` / `JUVAL_OIDC_ISSUER=http://127.0.0.1:9011` / a placeholder audience (audience is never reached by these three failures): missing token, garbage token, and a token signed with a locally-generated RSA key not published in FusionAuth's JWKS — all three → `401` (`HTTPException`), the foreign-key case failing inside `PyJWKClientError`, proving the backend fetched FusionAuth's **live** JWKS and found no matching `kid`. Matches d3d49dc/§34.1 exactly |
+| `JUVAL_AUTH_MODE` / `JUVAL_OIDC_*` not set anywhere in production config | Checked shell env, `fusionauth-app.service` environment (sudo-gated, inconclusive but no unit file at all references it), `railway.toml`, repo `.env*` files — no occurrence outside tests/tooling |
+| `JUVAL_IDP_API_KEY` not available this session | Checked shell env (`unset`), `~/.bashrc`/`~/.profile`/`~/.bash_profile` (no export), systemd unit files under `/etc/systemd/system` readable without sudo (none). Same blocker §33.4/§33.9/§34.3 names, unresolved |
+| Backend test suite | `.venv/bin/python -m pytest -q` → `366 passed, 7 skipped` — identical count to §34.1 |
+| `tools/compliance_check.py` | `9 pass, 1 warn` (the same pre-existing IRP role-placeholder warning), `0 fail` |
+| `pip-audit` | No known vulnerabilities (`juval` itself is correctly skipped — not a PyPI package) |
+| Secret scan | No secret-shaped strings in 385 files |
+| `tests/compliance/test_fusionauth_install_script.py` + `test_fusionauth_config.py` | 10/10 pass, re-run individually |
+| H-15/H-19 monitoring timer | `systemctl --user list-timers`: live, last run 16:13:41 UTC, next 16:43:41 UTC (~30 min cadence); `journalctl --user -u juval-host-monitor.service` shows real, varying PASS/WARN output across three consecutive runs (disk/memory/load/temperature/failed-units all `PASS`; `git.backup` and `fusionauth.backup` correctly `WARN` every run) |
+| H-17 backup — still not scheduled | No `juval-fusionauth-backup.{service,timer}` unit installed under `/etc/systemd/system/` (world-readable directory listing); `/var/backups/juval-fusionauth` does not exist. Confirms §33.4/§34.1 exactly — still needs user `sudo` |
+| Leftover `/tmp` schema artifact (§33.2/§7d7a00b) | Still present at `/tmp/fusionauth-schema-1.69.0/`, unchanged since 2026-08-26; not re-hashed again since 7d7a00b already recorded the mismatch and nothing in this pass reads that file |
+| TABLETOP-002 | Confirmed still `PREPARED — not run` in its own header (`docs/compliance/TABLETOP_002_PREPARED_SCENARIO.md`) |
+| Role names | `interfaces/api/auth.py::ROLE_PERMISSIONS` (`src/juval/interfaces/api/auth.py`) re-read directly: `viewer`/`operator`/`admin`, unchanged; `tests/compliance/test_fusionauth_config.py::test_required_roles_match_the_backend_exactly` still pins tenant roles to this file |
+
+### 35.2 What was NOT reachable this pass, same as §33.4/§33.9/§34.3
+
+Both named blockers are unchanged and neither moved:
+
+1. **`JUVAL_IDP_API_KEY`** — tenant `JUVAl`, application `JUVAl`, roles, password/lockout/MFA
+   policy, and the full RBAC token matrix (`tools/configure_fusionauth.py`,
+   `tools/verify_rbac.py`) all remain blocked on this single credential, which
+   only the operator can mint (FusionAuth admin UI → Settings → API Keys →
+   write access to Tenants and Applications) and which must never be pasted
+   into this chat or committed.
+2. **`sudo`** — UFW's actual allow-list (vs. only its default policy),
+   `fusionauth.properties` (to resolve the `:9012` listener question from
+   §33.3), the backup timer install + a real `backup.sh` run + an isolated
+   restore validation, and an end-to-end `install.sh` run against a fresh
+   database all remain blocked on root access this session was not given
+   (`sudo -n` → "a password is required", no `NOPASSWD` entry).
+
+No proxy, shortcut or credential-minting path exists for either that would
+not itself be a security regression, so none was attempted.
+
+### 35.3 Status after this pass
+
+```
+GIT                      = HEAD 7d7a00b, 8 ahead / 0 behind origin/master, clean
+FUSIONAUTH / POSTGRESQL  = unchanged from §33/§34, re-verified live
+NETWORK BOUNDARY         = unchanged: :5432 loopback-only VERIFIED,
+                           :9011/:9012 all-interfaces + UFW default-deny
+                           VERIFIED (1,309 kernel BLOCK lines / 2 days);
+                           actual allow-list still NOT_VERIFIED (needs sudo)
+API_KEY_AVAILABLE        = false (checked, not revealed)
+TENANT_JUVAL             = NOT_CREATED (unchanged)
+CONTROLS 1-11            = NOT_VERIFIED (unchanged, no tenant)
+CONTROL_6                = B - PARTIALLY_SATISFIED (unchanged)
+MFA                      = CAPABILITY_PRESENT / NOT_CONFIGURED / NOT_ENFORCED / NOT_ENROLLED (unchanged)
+OIDC POSITIVE PATH       = VERIFIED against local issuer (re-run, PASS)
+OIDC NEGATIVE PATHS      = VERIFIED against local issuer (re-run, 401/401/401)
+JUVAL_AUTH_MODE          = unset everywhere checked (unchanged)
+BACKUP (H-17)            = NOT_SCHEDULED (unchanged, blocked: user sudo)
+MONITORING (H-19)        = VERIFIED, live, ~30 min cadence (re-confirmed)
+INSTALLER FIX (52ed587)  = STILL NOT re-verified end-to-end (unchanged,
+                           blocked: user sudo against a fresh database)
+RF-01 / RF-02 / RF-03 /
+RF-04 / RF-05            = PARTIAL / PARTIAL / PARTIAL / PARTIAL / PARTIAL (unchanged)
+REAPPLICATION GATE       = BLOCKED (unchanged)
+```
+
+**No finding changed.** Three days of elapsed time changed nothing about the
+compliance state because nothing that requires the two named credentials was
+performed in that time — which is itself the expected, correct outcome, not a
+gap in this pass.
+
+### 35.4 Exact next actions — unchanged from §33.9/§34.3
+
+1. **Operator**, over the existing SSH forward: create a FusionAuth API key
+   (Settings → API Keys, write access to Tenants and Applications). Do not
+   paste it anywhere in this repository or into chat.
+2. **Operator**, on `juval-server`, with that key exported only in a shell
+   environment this agent's tooling can read (e.g. a `NOPASSWD`-free `sudo -v`
+   session or an env file with owner-only permissions) — never typed into
+   chat: `JUVAL_IDP_API_KEY=<key> python tools/configure_fusionauth.py`, then
+   `tools/verify_rbac.py` once the application exists.
+3. **User `sudo`**: run `sudo -v` in your own terminal to establish a cached
+   credential this session can use with `sudo -n`, so the agent can (a) read
+   `sudo ufw status verbose` and `fusionauth.properties`, (b) install the
+   backup timer and run `backup.sh` once, (c) attempt an isolated
+   fresh-database validation of `install.sh`.
+4. **User decision**, still open: the Phase 2 outbound tunnel for a public
+   HTTPS issuer (ADR-031 §6).
