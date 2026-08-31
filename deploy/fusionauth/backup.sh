@@ -33,8 +33,21 @@ fail() { printf '\nERROR: %s\n' "$*" >&2; exit 1; }
 
 [ "$(id -u)" -eq 0 ] || fail "run as root: sudo bash $0"
 command -v pg_dump >/dev/null || fail "pg_dump not found"
+id postgres >/dev/null 2>&1 || fail "postgres system user not found"
 
+# pg_dump below runs as the postgres OS user (runuser -u postgres), not root,
+# and writes its --file argument directly as that user -- so the destination
+# must be postgres-owned, not root-owned. This script itself runs as root
+# (checked above), so a plain `install -d` here would create a root:root
+# directory that `runuser -u postgres -- pg_dump --file=...` cannot write
+# into ("Permission denied"), and the systemd unit hits the same failure
+# (no User= override -- it also runs as root). Ownership/mode are set
+# explicitly and unconditionally on every run, not left to `install -d`'s
+# existing-directory behaviour, so a directory left root-owned by a prior
+# broken run self-heals instead of failing again.
 install -d -m 0700 "$DEST"
+chown postgres:postgres "$DEST"
+chmod 0700 "$DEST"
 
 dump="${DEST}/fusionauth-${STAMP}.dump"
 runuser -u postgres -- pg_dump --format=custom --compress=9 \

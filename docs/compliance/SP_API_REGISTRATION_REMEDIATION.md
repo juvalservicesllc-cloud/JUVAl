@@ -2091,3 +2091,171 @@ gap in this pass.
    fresh-database validation of `install.sh`.
 4. **User decision**, still open: the Phase 2 outbound tunnel for a public
    HTTPS issuer (ADR-031 §6).
+
+## 36. H-17 backup runtime defect — found via real execution, fixed, not yet re-verified (2026-08-31)
+
+The operator ran the §35.4 privileged commands from a real SSH TTY (this
+session has no TTY and cannot obtain interactive `sudo` — confirmed again
+this pass). Two of the four items produced genuine, useful evidence; the
+third **failed**, and that failure is a real product defect, not a
+transient error.
+
+### 36.1 UFW allow-list — VERIFIED
+
+```
+Status: active
+Logging: on (low)
+Default: deny (incoming), allow (outgoing), disabled (routed)
+
+ALLOW: 22/tcp (OpenSSH, IPv4+IPv6), 5173/tcp (192.168.0.0/24),
+       8000/tcp (192.168.0.0/24)
+```
+
+No `allow` rule exists for `9011`, `9012`, or `5432`. This closes the one
+piece of the network-boundary claim that every prior pass had to leave as
+"default policy confirmed, allow-list not agent-verifiable" — the allow-list
+itself is now operator-confirmed and matches ADR-027/ADR-031/README exactly.
+
+### 36.2 `fusionauth.properties` (non-secret fields only) — VERIFIED
+
+```
+fusionauth-app.runtime-mode=production
+fusionauth-app.memory=768M
+search.type=database
+```
+
+No explicit `http-port`/`https-port`/`fusionauth-app.url` property is set —
+`:9011`/`:9012` are FusionAuth 1.69.0 DEB package defaults, not a
+configuration artifact. Confirms §33.3's open question: documentation gap,
+not a misconfiguration. `runtime-mode=production` and `memory=768M` match
+`install.sh`'s intended values (`§34.2`/step 5) and the values §33.2 could
+not previously confirm without `sudo`.
+
+### 36.3 Backup timer install — VERIFIED ACTIVE; first execution — FAILED
+
+The operator installed the units exactly as documented and the timer is
+live:
+
+```
+juval-fusionauth-backup.timer: loaded, enabled, active (waiting)
+  triggers juval-fusionauth-backup.service
+  next: 2026-09-01 03:38:18 UTC
+```
+
+**Backup timer = VERIFIED ACTIVE.**
+
+Running `sudo bash deploy/fusionauth/backup.sh` manually then **failed**:
+
+```
+pg_dump: error: could not open output file
+"/var/backups/juval-fusionauth/fusionauth-20260831T171636Z.dump":
+Permission denied
+```
+
+`/var/backups/juval-fusionauth` existed as `drwx------ root root`. No dump
+was written. **Backup execution = FAILED. Backup artifact = NOT_CREATED.**
+The service unit is `inactive (dead)` — it has never completed a successful
+run.
+
+**Root cause, confirmed by reading the script rather than guessed:**
+`backup.sh` requires root (`[ "$(id -u)" -eq 0 ]`) and, before this fix, ran
+`install -d -m 0700 "$DEST"` with no explicit owner — under `sudo`, that
+creates the directory owned by root. The actual dump write happens as
+`runuser -u postgres -- pg_dump --file="$dump" ...` — i.e. the `postgres` OS
+user opens the output file directly, not root. A root:root `0700` directory
+is unwritable by any other user, `postgres` included, so `pg_dump` fails with
+exactly the `Permission denied` reproduced above.
+
+The systemd path was checked for the same defect rather than assumed safe:
+`tools/systemd/juval-fusionauth-backup.service` has **no `User=`
+directive**, so systemd also runs `ExecStart` as root by default — the timer
+firing at 03:38 UTC would have hit the identical failure. This was a defect
+reachable through both the documented manual path and the scheduled path,
+not a one-off invocation mistake.
+
+**Fix** (`deploy/fusionauth/backup.sh`): after `install -d -m 0700 "$DEST"`,
+explicitly and unconditionally `chown postgres:postgres "$DEST"` and
+`chmod 0700 "$DEST"` — every run, not only on first creation, because `install
+-d` does not retroactively fix ownership on a directory that already exists
+(confirmed against `install (GNU coreutils) 9.4`'s own documented behavior).
+This self-heals the exact broken `root:root` directory already sitting on
+`juval-server` right now, without a manual `chown`/`rm -rf` workaround. Also
+added a preflight check that the `postgres` OS user exists, failing loudly
+before any write is attempted rather than deep inside `pg_dump`. Least
+privilege preserved: `0700`, no group/world access, no `777`, no broad
+`chmod -R`; `postgres` owns the dump path it actually writes to, root
+retains implicit access (DAC override) for the config-file copy and
+retention cleanup it performs directly.
+
+Seven new static tests in `tests/compliance/test_fusionauth_backup_script.py`
+pin: valid bash, the `chown`+`chmod` fix present, the fix runs before
+`pg_dump`, the fix is unconditional (no `if`/`[` guard between directory
+creation and the fix — so it self-heals rather than only helping on a
+first-time create), no `777`/`chmod -R`, the `postgres`-user preflight
+check, and that the service unit still has no `User=` override (documenting
+*why* root-owned-by-default is correct given `backup.sh`'s own privilege
+drop, rather than silently "fixing" it by adding `User=postgres`, which
+would break the config-file copy and retention cleanup that must run as
+root). Full suite: `373 passed, 7 skipped` (was 366 — the 7 new tests).
+`compliance_check.py`: `9 pass, 1 warn, 0 fail`, unchanged. Secret scan:
+clean, 386 files.
+
+**Restore = NOT_ATTEMPTED.** The operator correctly declined to run the
+scratch-database restore validation against a backup that does not exist —
+recorded here so no restore evidence is ever fabricated or implied.
+
+### 36.4 Status after this pass
+
+```
+UFW ALLOW-LIST           = VERIFIED (operator-confirmed, matches docs exactly)
+FUSIONAUTH PROPERTIES    = VERIFIED (non-secret fields; :9012 is a package
+                            default, not misconfiguration)
+BACKUP TIMER             = VERIFIED ACTIVE (installed, enabled, next-run scheduled)
+BACKUP EXECUTION         = FAILED (2026-08-31, real Permission denied,
+                            reproduced from actual runtime — not simulated)
+BACKUP ARTIFACT          = NOT_CREATED
+BACKUP FIX               = IMPLEMENTED (deploy/fusionauth/backup.sh,
+                            chown+chmod, self-healing, idempotent) —
+                            NOT YET RE-VERIFIED against the live host
+RESTORE                  = NOT_ATTEMPTED (correctly — no valid backup exists)
+JUVAL_IDP_API_KEY        = still not available (unchanged)
+```
+
+This is a real regression, found by actually running the script against
+production infrastructure rather than trusting the prior code review
+(§33.7's file list, §34 did not exercise this path). Do not cite backup as
+`VERIFIED` — only the timer's *installation* is; execution is not, until the
+operator re-runs it and reports success.
+
+### 36.5 Exact next privileged commands — for the operator to run and report back
+
+```bash
+# 1. Deploy the corrected script (no unit changes needed — same units, fixed script)
+cd /home/juval/JUVAl/APP
+git log -1 --oneline deploy/fusionauth/backup.sh   # confirm the fix commit is present
+
+# 2. Run one real backup with the corrected script
+sudo bash deploy/fusionauth/backup.sh
+
+# 3. Verify artifact ownership/mode/size
+sudo ls -la /var/backups/juval-fusionauth
+
+# 4. Verify service/timer status
+sudo systemctl status juval-fusionauth-backup.service juval-fusionauth-backup.timer --no-pager
+
+# 5. Isolated scratch-database restore (never touches the live `fusionauth` DB)
+LATEST=$(sudo -u postgres bash -c 'ls -t /var/backups/juval-fusionauth/fusionauth-*.dump | head -1')
+sudo -u postgres createdb fusionauth_restore_test
+sudo -u postgres pg_restore --dbname=fusionauth_restore_test --no-owner "$LATEST"
+
+# 6. Verify instance/users queries against the scratch database
+sudo -u postgres psql -d fusionauth_restore_test -c "SELECT count(*) FROM instance; SELECT count(*) FROM users;"
+
+# 7. Drop the scratch database
+sudo -u postgres dropdb fusionauth_restore_test
+```
+
+Paste back the output of steps 2–6 (none contain secrets: no password, no
+JWT signing key, no API key) and this record will be updated from
+`BACKUP EXECUTION = FAILED` to `VERIFIED` only once that evidence exists —
+not before.
