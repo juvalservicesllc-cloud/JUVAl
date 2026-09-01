@@ -2354,3 +2354,195 @@ displayed): **still not set.** This remains the sole blocker for tenant
 creation, password/lockout/MFA policy, RBAC roles, and the full OIDC/RBAC
 verification matrix — unchanged from every prior section. No further
 progress on RF-03/RF-04 is possible without it.
+
+## 38. Tenant `JUVAl` bootstrapped, read-back verified; RBAC blocked on `jwt/vend` (2026-09-01)
+
+`JUVAL_IDP_API_KEY` was present in the environment this pass (never printed,
+never persisted). `tools/configure_fusionauth.py` was executed for real
+against the local instance for the first time — the blocker §33.4/§33.9
+named is now cleared for everything the approved bootstrap ACL covers.
+
+### 38.1 Two tool defects found and fixed before any write
+
+Neither required broadening the approved bootstrap ACL (`GET/POST /api/tenant`,
+`PATCH /api/tenant/{id}`, `GET/POST /api/application`, `PATCH/GET
+/api/application/{id}`, `POST /api/application/{id}/role` — no `DELETE`, no
+`PUT`, no Key Manager, no `/api/user*`/`/api/login`/`/api/two-factor*`):
+
+1. **Preflight `GET /api/status` 401'd with the key attached.** The tool sent
+   `Authorization: <key>` on every call including the health preflight.
+   FusionAuth's granular API-key permissions reject a key lacking an explicit
+   grant for that specific endpoint — and `/api/status` is not, and should not
+   be, in the approved ACL (it needs no key at all; an unauthenticated
+   `curl .../api/status` → `{"status":"Ok"}` throughout this pass). Fixed by
+   adding `Client.get_public()`, an unauthenticated GET used only for that one
+   preflight call. No permission added — the fix is sending *fewer*
+   credentials, not more.
+2. **`POST /api/application` → `400 [TenantIdRequired]`.** This bootstrap key
+   is not bound to a single tenant (it must not be, since it also creates
+   tenants), so FusionAuth requires the tenant made explicit via
+   `X-FusionAuth-TenantId` for tenant-scoped writes. Confirmed by direct `curl`
+   before patching: `GET /api/application` scoped to the new tenant returned
+   only that tenant's (empty) application list plus FusionAuth's own
+   tenant-independent `Tenant manager` app, never `Default`'s applications.
+   Fixed by threading `tenant_id` through `Client`/`ensure_application`/
+   `ensure_roles` and setting that header on the tenant-scoped calls. This is
+   request routing, not a new permission — the ACL's `POST /api/application`
+   grant already covers the call; it was just missing the tenant context
+   FusionAuth needs to place it.
+
+Both fixes are in `tools/configure_fusionauth.py` only. `tests/compliance/
+test_fusionauth_config.py` (5 tests, role-name and password-baseline pins)
+re-run clean after each change.
+
+### 38.2 A pre-existing, unrelated application noted — not touched
+
+`GET /api/application` (before scoping) listed an application named `Juval`
+(lowercase `l`) under the `Default` tenant, id `667d95f6-bfb2-4f5f-
+beff-d00f068064b3`, alongside FusionAuth's own `Tenant manager` and
+`FusionAuth` applications. `find_by_name()` matches the exact string `JUVAl`
+(capital `l`), so this was never a collision risk, but it is recorded here so
+a future reader does not mistake it for this bootstrap's output. Not created,
+modified or deleted by this pass — `Default` tenant confirmed untouched
+except by the read-only `GET /api/application`/`GET /api/tenant` calls every
+prior pass has also made.
+
+### 38.3 Bootstrap executed — CONFIGURED, then READ-BACK VERIFIED
+
+Ran `tools/configure_fusionauth.py` (no `--dry-run`) once, then a second time
+to confirm idempotency (second run: every step reported "exists", zero
+writes).
+
+| Object | CONFIGURED | READ-BACK VERIFIED | BEHAVIORALLY VERIFIED |
+|---|---|---|---|
+| Tenant `JUVAl` (id `5fcaaf07-8832-491a-a6e7-35d348a591b6`) | yes | yes — `GET /api/tenant` lists it separately from `Default` (`0215a306-c40e-4c46-8686-5825b4bdd53a`) | no |
+| Password policy (controls 1–5, 7) | yes | yes — `tools/verify_oidc.py --tenant-policy`: `[JUVAl] minLength/requireMixedCase/requireNumber/requireNonAlpha/password history >=10` all `PASS` (actual values equal template: `12`/`True`/`True`/`True`/`10`) | no |
+| Min/max password age (controls 8, 9) | yes | yes — `[JUVAl] minimum password age >=1d` / `maximum password age <=365d` both `PASS` (`86400`s / `365`d) | no |
+| Lockout (control 11) | yes | yes — `[JUVAl] lockout <=10 attempts` `PASS` (`tooManyAttempts=10`) | no |
+| Tenant MFA | yes | yes — direct `GET /api/tenant/{id}`: `multiFactorConfiguration.loginPolicy=Required`, `authenticator.enabled=True`, `email.enabled=False`, `sms.enabled=False` — matches the Community-only template exactly | no (no user has enrolled; `loginPolicy=Required` only *challenges* a user who has a method) |
+| Application `JUVAl` (id `84f077a0-b2b0-4655-8168-082b2233d029`) | yes | yes — `GET /api/application/{id}`: `name=JUVAl`, `tenantId` matches the tenant above | no |
+| OAuth grants | yes | yes — same read: `enabledGrants=[authorization_code, refresh_token]` (no implicit, no client-credentials), `proofKeyForCodeExchangePolicy=Required`, `requireClientAuthentication=False`, `generateRefreshTokens=True` | n/a — no browser login flow exists yet to exercise it (ADR-031 §"Frontera de red") |
+| Roles `viewer`/`operator`/`admin` | yes | yes — same read: `roles=[admin, operator, viewer]`, matching `interfaces/api/auth.py::ROLE_PERMISSIONS` exactly (pinned by the compliance test) | no |
+| Control 6 (name exclusion) | unchanged | `NOT_VERIFIED` (`tools/verify_oidc.py` reports it explicitly as `B — PARTIALLY_SATISFIED`, not a pass) — **still not closed by this bootstrap** | no |
+| `[Default]` tenant password rows | not touched | `verify_oidc.py` reports them `FAIL` against the Amazon baseline (`minLength=8`, no mixed case, etc.) — **expected**: `Default` is reserved for FusionAuth administration (ADR-031) and was never in scope for this policy | n/a |
+
+Issuer on the `JUVAl` tenant: `http://127.0.0.1:9011` (confirmed by the same
+read-back). Local, as required — Phase 2's public HTTPS issuer remains
+`BLOCKED_EXTERNAL`, and `configure_fusionauth.py` prints an explicit warning
+that this issuer value is configuration evidence only.
+
+### 38.4 RBAC verification — stopped before execution, ACL expansion needed
+
+`tools/verify_rbac.py` is the only remaining tool in the chain, and it
+requires `POST /api/jwt/vend` (see its module docstring: it mints RS256
+tokens with controlled `roles`/`aud`/`iss` claims, signed by the tenant's real
+key, then asserts the backend's status-code matrix against them). That
+endpoint is **not** in the approved bootstrap ACL. Per the operator's explicit
+instruction for this pass, this was **not run**, and the ACL was **not**
+broadened. Reported here, not executed:
+
+```
+ACL_EXPANSION_REQUIRED
+POST /api/jwt/vend
+```
+
+Why it is needed: it is the only way to obtain a genuine, FusionAuth-signed
+token with a chosen role set and audience without a real browser OIDC login
+flow, which does not exist for this application yet (no `/oauth2/*` exposed,
+ADR-031 §"Frontera de red"). Without it, RF-04's *positive* path (does a
+`viewer`/`operator`/`admin` token actually get `200`/`403` as designed) stays
+`NOT_VERIFIED` — only the *negative* path (missing/garbage/foreign-key
+tokens → `401`, proven in §33.1 against synthetic tokens, no `jwt/vend`
+needed) is verified. No other permission is required beyond this single
+endpoint — `verify_rbac.py` calls nothing else on the IdP; every other request
+in its matrix targets the JUVAl **backend**, not FusionAuth.
+
+### 38.5 Behavioral gap — password / lockout / MFA / Control 6
+
+None of §38.3's rows above `BEHAVIORALLY VERIFIED` are proof the *runtime*
+enforces what the tenant object now says. That needs disposable-user testing
+against endpoints outside today's ACL, none of which were invented or called
+this pass:
+
+| Behavior | Would need | Exact endpoint(s) |
+|---|---|---|
+| Password accepted/rejected per policy | Create a disposable user, attempt registration/password-set with passwords that violate each rule one at a time | `POST /api/user/registration` (create + register), or `POST /api/user` + `PUT /api/user/{id}` — needs `/api/user*`, not currently granted |
+| Lockout after N failed attempts | Repeated failed login against a disposable user, then confirm the account is `Locked` | `POST /api/login` (repeated, expect success→failure transition), `GET /api/user/{id}` to read `state`/lockout fields — needs `/api/login` + `/api/user*`, not currently granted |
+| MFA enrollment/challenge | Enroll a TOTP method on a disposable user, confirm login demands the second factor | `POST /api/two-factor/{userId}/secret` or `POST /api/user/{id}/two-factor` (enroll), `POST /api/login` (expect a two-factor challenge response), `POST /api/two-factor/login` (complete it) — needs `/api/two-factor*` + `/api/user*` + `/api/login`, none currently granted |
+| Control 6 (name-component rejection) | Attempt a password containing the disposable user's `firstName`/`lastName`, confirm FusionAuth's native check (login-Id only) does **not** catch it, keeping the classification honest at `B — PARTIALLY_SATISFIED` rather than silently "testing around" the gap | Same `/api/user*` + registration endpoints as the password row, plus explicit assertion that a name-based (not login-Id-based) password is *not* rejected — this is what keeps Control 6 `B`, not what would close it |
+
+None of this was implemented or ACL-broadened this pass — it was out of scope
+(no defect blocked the approved flow that this tooling would fix) and
+explicitly deferred per instruction. It is recorded as a precise plan so a
+future pass with the right ACL does not have to re-derive it.
+
+### 38.6 Tests, compliance, secrets, Golden fingerprint
+
+```
+tests/compliance/test_fusionauth_config.py   5 passed (before and after the fix)
+full suite (.venv pytest -q)                 373 passed, 7 skipped, 0 failed
+tools/compliance_check.py                    9 pass, 1 warn (pre-existing IRP
+                                              role-placeholder item, unrelated
+                                              to identity work), 0 fail
+  deps.audit (pip-audit)                     PASS — no known vulnerabilities
+  secret_scan                                PASS — 386 files, no secret-shaped
+                                              string found (JUVAL_IDP_API_KEY
+                                              never touched a file)
+demo/ fingerprint                            unchanged — `git status --porcelain
+                                              -- demo/` empty throughout; no
+                                              write ever targeted demo/,
+                                              frontend/ or frontend-next/
+```
+
+### 38.7 Status after this pass
+
+```
+FusionAuth instance     = INSTALLED + RUNNING (unchanged)
+IDP_SELECTION           = FUSIONAUTH_SELECTED (ADR-028, unchanged)
+IDP_HOSTING             = SELF_HOSTED_JUVAL_SERVER (ADR-031, unchanged)
+IDP_IMPLEMENTATION      = PARTIALLY_IMPLEMENTED  <-- tenant/app/roles/policy
+                          now exist and read-back verify; still no behavioral
+                          proof, no public issuer, no RBAC positive path
+IDP_RUNTIME             = INACTIVE (JUVAL_AUTH_MODE unset — unchanged)
+TENANT_JUVAL            = CREATED, READ-BACK VERIFIED  <-- was NOT_CREATED
+APPLICATION_JUVAL       = CREATED, READ-BACK VERIFIED  <-- was NOT_CREATED
+ROLES (viewer/operator/admin) = CREATED, READ-BACK VERIFIED  <-- was NOT_CREATED
+PASSWORD/LOCKOUT/AGE/MFA POLICY = CONFIGURED, READ-BACK VERIFIED  <-- was NOT_APPLIED
+CONTROLS 1-5,7,8,9,11   = READ-BACK VERIFIED (still not BEHAVIORALLY VERIFIED)
+CONTROL_6               = B - PARTIALLY_SATISFIED (unchanged — not closed by this pass)
+MFA                     = CONFIGURED / NOT_ENFORCED (no user enrolled) / NOT_ENROLLED / NOT_TESTED
+RF-03                   = PARTIALLY_IMPLEMENTED / NOT_VERIFIED (positive path)
+                          <-- configuration evidence now exists; still not
+                          behavioral evidence
+RF-04                   = PARTIALLY_IMPLEMENTED / negative path VERIFIED
+                          (unchanged, §33) / positive path NOT_VERIFIED,
+                          BLOCKED on POST /api/jwt/vend ACL expansion
+RBAC MATRIX (tools/verify_rbac.py) = BLOCKED — ACL_EXPANSION_REQUIRED:
+                          POST /api/jwt/vend (see §38.4)
+PUBLIC ISSUER (Phase 2) = BLOCKED_EXTERNAL (unchanged — no hostname invented)
+JUVAL_AUTH_MODE         = UNSET (unchanged — not enabled this pass)
+BACKUP (H-17)           = CLOSED, on-host only (unchanged, §37)
+REAPPLICATION GATE      = BLOCKED (unchanged)
+AMAZON_COMPLIANCE_READINESS = NOT_READY (unchanged — configuration is not
+                          Amazon acceptance)
+```
+
+### 38.8 Exact next actions
+
+1. **User decision**: approve or reject expanding the bootstrap key's ACL by
+   exactly `POST /api/jwt/vend` (§38.4). Nothing else is needed for
+   `tools/verify_rbac.py` to run its full matrix against the local issuer.
+2. Once approved: `JUVAL_IDP_API_KEY=<key> python tools/verify_rbac.py
+   --issuer http://127.0.0.1:9011 --audience 84f077a0-b2b0-4655-8168-082b2233d029
+   --backend <running backend URL>` — needs a backend process running with
+   `JUVAL_AUTH_MODE=oidc` pointed at the local issuer, which is separate from
+   enabling it in production.
+3. **User decision**: Phase 2 outbound tunnel for a public HTTPS issuer
+   (ADR-031 §6) — unchanged, still the gate before `JUVAL_AUTH_MODE=oidc` on
+   Railway can even be considered.
+4. Disposable-user behavioral testing (§38.5) needs its own ACL decision
+   (`/api/user*`, `/api/login`, `/api/two-factor*`) — not requested this pass,
+   deliberately not pre-built.
+5. Control 6 stays `B — PARTIALLY_SATISFIED` until either a disclosed
+   compensating control is adopted or Amazon answers the clarification in
+   §21 — this bootstrap does not and cannot close it.
