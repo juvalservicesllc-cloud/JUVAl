@@ -2752,3 +2752,141 @@ JUVAL_AUTH_MODE          = UNSET (unchanged — no persistent env change)
 REAPPLICATION GATE       = BLOCKED (unchanged — Amazon acceptance remains
                           external; this is local technical evidence only)
 ```
+
+## 41. Behavioral identity verification: tool built and tested, ACL matrix derived — no live write this pass (2026-09-01)
+
+Prepared (not executed) the next verification: real password/lockout/MFA/
+Control-6 behavior against disposable `JUVAl`-tenant FusionAuth users. Per
+explicit instruction, the existing `JUVAl Bootstrap` key was **not**
+broadened; the design targets a new, separate, least-privilege key
+(`JUVAl Identity Verification`) that the operator creates manually after
+reviewing the ACL matrix below. **No FusionAuth write of any kind occurred
+this pass** — no user created, no login attempted, no MFA secret generated,
+no runtime state touched.
+
+### 41.1 Endpoint research — authoritative, not memory
+
+FusionAuth's own OpenAPI specification (`https://github.com/FusionAuth/
+fusionauth-openapi`, `info.version: 1.69.0` — confirmed to match the
+deployed instance version exactly, not assumed) was fetched and read
+directly rather than relying on prose docs or client-library bindings
+(which turned out to disagree with it in places — see below). Two findings
+worth recording because they overturn an initial, reasonable-looking
+assumption:
+
+1. **Lockout is not a field on `GET /api/user/{userId}`.** The `User`
+   schema carries no lock/expiry field at all. The correct read is
+   `GET /api/user/action?userId={id}&preventingLogin=true`
+   (`operationId: retrieveUserActioning`), which returns `ActionResponse.
+   actions[]` of `UserActionLog` — empty when not locked, and when locked,
+   each entry's `expiry` field is the unlock timestamp. This is a smaller,
+   more precise ACL requirement than the presumed `GET /api/user/{id}`.
+2. **`GET /api/two-factor/secret` cannot be used by this tool at all.**
+   Its OpenAPI operation (`generateTwoFactorSecretUsingJWTWithId`)
+   overrides the spec's global `ApiKeyAuth` security scheme with
+   `BearerAuth` — it authenticates with an end user's own JWT, not an API
+   key. Since a TOTP secret is just cryptographically random bytes, the
+   tool generates one locally (stdlib `os.urandom` + Base32) instead —
+   equivalent, and it removes a whole endpoint from the requested ACL.
+
+An older Elixir client-library reference (`hexdocs.pm/fusion_auth`) was
+also checked and found to disagree with the current spec on the TOTP-enroll
+path (it showed a deprecated pre-1.26 shape); the OpenAPI spec, being
+generated from FusionAuth's own server and version-pinned to 1.69.0, was
+treated as authoritative over it.
+
+### 41.2 Tool implementation
+
+`tools/verify_identity_behavior.py` (new). Structure and safety controls,
+each required by the task and enforced in code rather than only by
+convention:
+
+- **fails closed on targeting**: `verify_targeting()` reads back
+  `GET /api/application/{id}` and refuses to proceed unless
+  `name == "JUVAl"` and `tenantId` matches the operator-supplied tenant id
+  exactly — no default tenant/application id exists anywhere in the tool;
+- **never issues `DELETE`**: `Client.request()` raises before ever
+  constructing such a request, so no future edit can silently add one;
+  cleanup is deliberately not deletion — every disposable user is tagged
+  (`user.data`) with the tool name, the case it was created for, and a
+  timestamp, and uses an unmistakably synthetic `firstName`/`lastName`, so
+  it reads as an inert, clearly-labeled fixture rather than a live
+  credential once the process exits (its password is held only in a local
+  variable for the duration of its own check, never logged);
+- **two independent gates before any live write**: `--execute` on the
+  command line *and* `JUVAL_IDENTITY_VERIFICATION_CONFIRM=yes-run-live-writes`
+  in the environment. The default (`--dry-run`, and the bare invocation) makes
+  zero network calls — proven by a unit test that replaces `urlopen` with a
+  function that raises `AssertionError` if called at all;
+- **secret hygiene**: `JUVAL_IDP_API_KEY` from the environment only, never
+  an argument; passwords/TOTP secrets/TOTP codes/tokens never appear in a
+  `Finding.detail`, a print, or an exception message — proven by a unit
+  test that plants a marker password and asserts it never surfaces in any
+  finding;
+- **structured output**: every case renders as `PASS`/`FAIL`/`BLOCKED`/
+  `NOT_TESTED` with a non-secret detail string; a policy-violating password
+  that is unexpectedly *accepted*, or a locked account whose correct
+  password unexpectedly succeeds, is classified `FAIL`, not silently
+  reclassified — proven by two dedicated unit tests that script exactly
+  those anomalies and assert the tool catches them;
+- **Control 6 classification is structurally pinned**: `run_control6_tests`
+  always reports `PARTIALLY_SATISFIED/B` in its detail text regardless of
+  whether FusionAuth accepts or rejects the test password — a unit test
+  runs the function against both outcomes and asserts the wording never
+  changes;
+- **partial-execution safety**: if disposable-user creation or application
+  registration fails, the affected test group stops and reports `BLOCKED`
+  rather than continuing with calls that would reference a nonexistent
+  user id.
+
+`tests/unit/test_verify_identity_behavior.py` (new, 32 tests, all against
+a scripted fake `urlopen` — no live FusionAuth call anywhere in the test
+file): exact endpoint/method/body construction for every operation, tenant
+header inclusion and omission, fail-closed targeting (wrong application
+name, wrong tenant id, non-200), TOTP determinism, password positive/
+negative classification including the "wrongly accepted" failure case, the
+full lockout+MFA sequence including the "lock bypassed" failure case,
+Control-6 classification stability, CLI safety gating, and a full-run
+assertion that only the seven approved endpoint prefixes are ever touched
+and `DELETE`/`PUT`/`PATCH` are never used.
+
+### 41.3 ADR-032 — credential lifecycle scoping (new, Aceptada)
+
+`docs/adr/ADR-032-fusionauth-credential-lifecycle-scoping.md` records, as
+an accepted decision (the pattern the user already instructed across two
+consecutive sessions — this ADR transcribes it, it does not propose
+something new), that FusionAuth is operated with **separate least-
+privilege API keys per lifecycle stage** — bootstrap, verification,
+runtime (the last needs no key at all, only the public JWKS) — never one
+key whose ACL grows over time. It does not create or change any key or
+ACL itself.
+
+### 41.4 Status after this pass
+
+```
+IDENTITY VERIFICATION TOOL   = IMPLEMENTED, UNIT-TESTED (32/32 passing,
+                              mocked FusionAuth, zero live calls)
+IDENTITY VERIFICATION KEY    = NOT_CREATED (operator action, next step)
+LIVE BEHAVIORAL EXECUTION    = NOT_ATTEMPTED this pass (explicitly out of
+                              scope)
+PASSWORD BEHAVIORAL          = NOT_VERIFIED (unchanged)
+LOCKOUT BEHAVIORAL           = NOT_VERIFIED (unchanged)
+MFA BEHAVIORAL               = NOT_VERIFIED (unchanged)
+CONTROL_6                    = B - PARTIALLY_SATISFIED (unchanged)
+ADR-032                      = Aceptada (new — credential lifecycle
+                              scoping, no key/ACL changed by it)
+```
+
+### 41.5 Exact next action
+
+**Operator**, in the FusionAuth admin UI: create a new API key named
+`JUVAl Identity Verification` with exactly the seven endpoint grants in
+§"EXACT FUSIONAUTH ACL MATRIX" of the 2026-09-01 session report (`POST
+/api/user`, `GET /api/application`, `POST /api/user/registration`, `POST
+/api/login`, `POST /api/user/two-factor`, `POST /api/two-factor/login`,
+`GET /api/user/action` — no `/api/tenant*`, no `DELETE`/`PUT`/`PATCH`, no
+Key Manager). Export it as `JUVAL_IDP_API_KEY` alongside
+`JUVAL_IDP_TENANT_ID`/`JUVAL_IDP_APPLICATION_ID`, then a future session can
+run `tools/verify_identity_behavior.py --dry-run` first, and only with
+explicit approval `--execute` with `JUVAL_IDENTITY_VERIFICATION_CONFIRM=
+yes-run-live-writes`.
