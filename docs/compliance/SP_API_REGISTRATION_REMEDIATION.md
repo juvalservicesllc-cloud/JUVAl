@@ -2890,3 +2890,148 @@ Key Manager). Export it as `JUVAL_IDP_API_KEY` alongside
 run `tools/verify_identity_behavior.py --dry-run` first, and only with
 explicit approval `--execute` with `JUVAL_IDENTITY_VERIFICATION_CONFIRM=
 yes-run-live-writes`.
+
+## 42. Live behavioral run attempted; `JUVAl Identity Verification` key rejects every write endpoint — behavioral verification still BLOCKED (2026-09-01)
+
+The operator created the `JUVAl Identity Verification` API key (§41.5) and a
+live run was authorized and attempted with both safety gates
+(`--execute` **and** `JUVAL_IDENTITY_VERIFICATION_CONFIRM=yes-run-live-writes`).
+The run reached FusionAuth but could not perform a single behavioral check:
+every endpoint the tool needs except `GET /api/application` returns `401`.
+**No FusionAuth or JUVAl state changed this pass** — no disposable user was
+created (every `POST /api/user` was rejected at the authorization layer,
+before any user record), no login succeeded, no MFA secret was enrolled,
+no lockout was triggered, `JUVAL_AUTH_MODE` was never set.
+
+### 42.1 What was attempted
+
+- Pre-flight: HEAD `5f1bc37`, 18 ahead / 0 behind `origin/master`, working
+  tree clean, `frontend/` `frontend-next/` `demo/` untouched. `GET
+  /api/status` → `{"status":"Ok"}`. Tenant/application ids in the
+  environment matched `5fcaaf07-...` / `84f077a0-...` exactly.
+- Dry run (`--dry-run`, zero network calls): printed the planned sequence,
+  targets resolved correctly.
+- Independent target validation: `GET /api/application/84f077a0-...` →
+  `200`, `name="JUVAl"`, `tenantId="5fcaaf07-..."`, roles exactly
+  `["admin","operator","viewer"]`. Fail-closed targeting **passed** — the
+  Default tenant was never in scope.
+- Live run (`--execute`): `verify_targeting()` passed (it only needs `GET
+  /api/application`), then every subsequent call failed `401`.
+
+### 42.2 Diagnosis — read-only, no ACL broadened
+
+| Probe (same key, same moment) | Result |
+|---|---|
+| `GET /api/application/{id}` (targeting) | `200` — key is valid, this one grant is in effect |
+| `POST /api/user` (well-formed disposable user, `Authorization` + `X-FusionAuth-TenantId`) | `401`, **empty body** |
+| `GET /api/user/action?userId=...&preventingLogin=true` | `401`, empty body |
+
+An `HTTP 401` with an empty body on a well-formed request is FusionAuth's
+signature for **"this API key has no permission for this endpoint"** — it
+rejects at the authorization layer before parsing the request body (a key
+that had the permission but sent a bad payload would get `400` + a JSON
+`fieldErrors` object). `POST /api/login`, `POST /api/user/registration`,
+`POST /api/user/two-factor` and `POST /api/two-factor/login` were not
+probed further after the `STOP` rule triggered, but the tool's own run
+confirms the same `401` on `POST /api/user`, which every one of them
+depends on (no user to log in, register, or enrol).
+
+The tool behaved correctly under the failure: password cases P-02…P-06
+and Control-6 C6-01/C6-02 show `PASS`/`rejected` **only** because the tool
+compared "was the user created?" and got "no" — but the "no" is a `401`
+auth rejection, **not** a password-policy or name-check rejection. None of
+those are behavioral evidence and none are recorded as such below. P-01
+(expected the user to be created) correctly surfaced as `FAIL`; M-01 and
+the lockout/MFA sequence correctly surfaced as `BLOCKED`.
+
+### 42.3 ACL discrepancy — effectiveness, not scope
+
+This is **not** a new `ACL_EXPANSION_REQUIRED`: the six write/read rows
+the tool needs were already on the operator-approved matrix (§41, ADR-032).
+As in §39, an approved grant is simply not observably in effect on the key
+this session holds. Reported in the requested format for the operator:
+
+```
+ACL_EXPANSION_REQUIRED : NO (scope unchanged) — grant-not-effective, as §39
+METHOD / RUNTIME PATH  : POST /api/user                     → 401 (empty body)
+                         GET  /api/user/action              → 401 (empty body)
+                         POST /api/user/registration/{id}   → not reached (depends on POST /api/user)
+                         POST /api/login                    → not reached
+                         POST /api/user/two-factor/{id}     → not reached
+                         POST /api/two-factor/login         → not reached
+EXPECTED ACL ROW       : the six non-GET-application rows of the §41 / ADR-032 matrix
+HTTP STATUS            : 401, empty body (authorization-layer reject)
+PURPOSE                : create disposable JUVAl-tenant users and exercise
+                         password / lockout / MFA / Control-6 behavior
+WORKING GRANT          : GET /api/application/{id} only
+```
+
+Candidate explanations, none distinguishable from this side without
+`/api/key*` (explicitly not granted, not requested): the endpoints were
+not added to the key, were added with the wrong method, the endpoint
+strings do not exactly match (`/api/user`, `/api/user/registration`,
+`/api/user/two-factor`, `/api/login`, `/api/two-factor/login`,
+`/api/user/action`), or the key value exported as `JUVAL_IDP_API_KEY` is a
+different key than the one the grants were saved on.
+
+### 42.4 Behavioral matrices — every case still unverified
+
+| Case | Classification | Note |
+|---|---|---|
+| P-01 compliant password accepted | **BLOCKED** | tool reported FAIL; cause is the `401`, not a policy defect |
+| P-02 min-length rejected | **NOT_TESTED** | `401` is not a policy rejection |
+| P-03 missing mixed case (lower) rejected | **NOT_TESTED** | same |
+| P-04 missing mixed case (upper) rejected | **NOT_TESTED** | same |
+| P-05 missing digit rejected | **NOT_TESTED** | same |
+| P-06 missing special char rejected | **NOT_TESTED** | same |
+| P-07 minimum password age | **NOT_TESTED** | not single-pass testable (§41.2); ACL also blocks it |
+| P-08 password history / reuse | **NOT_TESTED** | needs self-service change-password flow, outside ACL |
+| L-01 valid creds before lockout | **BLOCKED** | user never created |
+| L-02 sub-threshold failures don't lock | **BLOCKED** | same |
+| L-03 threshold (`tooManyAttempts=10`) locks | **BLOCKED** | same |
+| L-04 valid creds cannot bypass active lock | **BLOCKED** | same |
+| L-05 `GET /api/user/action` lock read-back | **BLOCKED** | endpoint itself returns `401` |
+| M-01 never-enrolled user under `loginPolicy=Required` | **BLOCKED** | user never created |
+| M-02 local TOTP generation | **BLOCKED** | reached only after enrolment setup, never reached |
+| M-03 TOTP enrolment | **BLOCKED** | `POST /api/user/two-factor` never reached |
+| M-04 MFA challenge returned (`242`+`twoFactorId`) | **BLOCKED** | same |
+| M-05 invalid TOTP rejected | **BLOCKED** | same |
+| M-06 valid TOTP accepted | **BLOCKED** | same |
+| M-07 token issued only after second factor | **BLOCKED** | same |
+| C6-01 password contains synthetic firstName | **NOT_TESTED** | `401`, not a name-check rejection; classification stays **B / PARTIALLY_SATISFIED** |
+| C6-02 password contains synthetic lastName | **NOT_TESTED** | same |
+
+Control 6 is **not** promoted and its evidence basis is unchanged.
+
+### 42.5 Status after this pass
+
+```
+IDENTITY VERIFICATION TOOL   = IMPLEMENTED, UNIT-TESTED (32/32), dry-run
+                              and live-gate behavior verified in situ
+IDENTITY VERIFICATION KEY    = CREATED but MIS-SCOPED — only
+                              GET /api/application is in effect; all six
+                              other required rows return 401
+LIVE BEHAVIORAL EXECUTION    = ATTEMPTED, BLOCKED at the IdP ACL layer
+PASSWORD BEHAVIORAL          = NOT_VERIFIED (unchanged)
+LOCKOUT BEHAVIORAL           = NOT_VERIFIED (unchanged)
+MFA BEHAVIORAL               = NOT_VERIFIED (unchanged)
+CONTROL_6                    = B - PARTIALLY_SATISFIED (unchanged, not promoted)
+SYNTHETIC USERS CREATED      = 0 (every POST /api/user rejected pre-record)
+JUVAL_AUTH_MODE              = UNSET (unchanged)
+REAPPLICATION GATE           = BLOCKED (unchanged — local evidence only,
+                              no Amazon acceptance claimed)
+```
+
+### 42.6 Exact next action
+
+**Operator**, in the FusionAuth admin UI (Settings → API Keys → the
+`JUVAl Identity Verification` key → Endpoints): confirm all seven rows are
+present with the right method —
+`GET /api/application`, `POST /api/user`, `POST /api/user/registration`,
+`POST /api/login`, `POST /api/user/two-factor`, `POST /api/two-factor/login`,
+`GET /api/user/action` — confirm the key is tenant-scoped to `JUVAl`, and
+confirm the value exported as `JUVAL_IDP_API_KEY` is that exact key. Then a
+future session re-runs `tools/verify_identity_behavior.py --dry-run`, then
+`--execute` with the confirmation env var. No repository or tooling change
+is needed on this side — `tools/verify_identity_behavior.py` sends exactly
+the documented request shapes and its 32 unit tests still pass.
