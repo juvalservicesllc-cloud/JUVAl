@@ -2645,3 +2645,110 @@ value is exported as `JUVAL_IDP_API_KEY` in the shell this session used, and
 save again if anything looks wrong. Then re-run `tools/verify_rbac.py` with
 the same arguments as §39.1 — no repository or tooling change is needed on
 this side.
+
+## 40. RBAC positive path BEHAVIORALLY_VERIFIED against a real FusionAuth-signed token (2026-09-01)
+
+The operator manually re-checked the bootstrap key's ACL in the FusionAuth
+admin UI and confirmed `POST /api/jwt/vend` enabled. This pass retested it and
+it now works — §39's diagnosis (grant not observably in effect) is resolved;
+no cause was ever determined from this side, and none needed to be, since the
+fix was entirely on the FusionAuth admin-UI side.
+
+### 40.1 `jwt/vend` retest
+
+`POST /api/jwt/vend` with a minimal admin-role claim set → `HTTP 200`, body
+723 bytes, top-level key `token` present (value never printed or persisted;
+only its key name and byte length were inspected).
+
+### 40.2 Full RBAC matrix — `tools/verify_rbac.py`, unmodified
+
+Run against a temporary local backend (`JUVAL_AUTH_MODE=oidc`,
+`JUVAL_OIDC_ISSUER=http://127.0.0.1:9011`,
+`JUVAL_OIDC_AUDIENCE=84f077a0-b2b0-4655-8168-082b2233d029`, bound to
+`127.0.0.1:8000` only, stopped immediately after each run):
+
+| Role / case | `GET /api/v1/runs` | `GET .../verify-rbac-none/download` | Classification |
+|---|---|---|---|
+| admin | `200` | `404` (unknown execution id — reached the handler, past RBAC) | **BEHAVIORALLY_VERIFIED** |
+| operator | `200` | `404` (same) | **BEHAVIORALLY_VERIFIED** |
+| viewer | `200` | `403` (RUNS_EXPORT correctly denied) | **BEHAVIORALLY_VERIFIED** |
+| no-roles | `403` | `403` | **BEHAVIORALLY_VERIFIED** |
+| wrong audience | `401` | not tested (single-check case in the tool) | **BEHAVIORALLY_VERIFIED** |
+| wrong issuer | `401` | not tested | **BEHAVIORALLY_VERIFIED** |
+| expired (ttl=1s, checked after 2s sleep) | `401` | not tested | **BEHAVIORALLY_VERIFIED** |
+| unknown/invalid role name | — | — | **NOT_TESTED** — `verify_rbac.py`'s matrix does not include this case (only `tests/integration/test_api_auth.py::test_valid_token_with_unknown_role_gets_no_permissions`, a synthetic-key test, covers it) |
+
+**One correction to the first attempt this pass, recorded for accuracy:** the
+backend was first started without `JUVAL_EXECUTION_STORE`/
+`JUVAL_EXECUTION_DB_PATH` configured, so `GET /api/v1/runs` returned `500` for
+every authorized role (`_require_execution_run_store()` in `main.py` fails
+closed by design when unconfigured — not an auth defect: the `401`/`403` rows
+for unauthenticated/no-roles/wrong-aud/iss/expired cases were correct in that
+same run, proving the RBAC boundary already gated the handler correctly
+before the store was even reached). `verify_rbac.py`'s own check is
+`status not in (401, 403)`, so it silently accepted the `500` as "not
+blocked by auth" without asserting `200` specifically — a known coarseness
+in the tool, not a defect worth fixing this pass since a corrected run
+producing genuine `200`s was trivial to obtain by pointing
+`JUVAL_EXECUTION_DB_PATH` at a scratch SQLite file (deleted after the run,
+never committed, contained no production data). The table above is from
+that corrected, clean run.
+
+### 40.3 TOKEN VALIDATION vs. RBAC AUTHORIZATION, kept separate
+
+- **TOKEN VALIDATION** (issuer, audience, RS256 signature via the real JWKS,
+  expiry) — proven by the wrong-audience/wrong-issuer/expired rows, each
+  `401` before any permission check runs.
+- **RBAC AUTHORIZATION** (`require(permission)`, server-side, per §"RBAC
+  CONTRACT" in the prior pass's report) — proven by the role-differentiated
+  `200`/`403` rows: `viewer` reads but cannot export; `no-roles` (validation
+  passes, zero permissions) cannot do either; `operator`/`admin` can do both.
+
+### 40.4 Security boundary — explicit
+
+**FusionAuth-signed backend RBAC boundary: BEHAVIORALLY_VERIFIED.** This
+proves the chain FusionAuth token signature/claims → JUVAl token validation
+→ JUVAl RBAC enforcement, against a real issuer and a real running backend,
+for every case `tools/verify_rbac.py` implements.
+
+**It does NOT prove**, and this pass produced no evidence of:
+- actual user login (no `/api/login` call was made — `jwt/vend` mints a
+  token directly, bypassing any credential check);
+- password policy behavioral enforcement — unchanged, `NOT_VERIFIED`;
+- lockout — unchanged, `NOT_VERIFIED`;
+- MFA — unchanged, `NOT_VERIFIED`;
+- Control 6 — unchanged, `B — PARTIALLY_SATISFIED`.
+
+These remain exactly the gap already itemized in §38.5/§39, unmoved by this
+pass.
+
+### 40.5 Tests, compliance, secrets, Golden fingerprint
+
+```
+targeted (compliance + auth)   42 passed (unchanged)
+full suite                     373 passed, 7 skipped, 0 failed (unchanged)
+compliance_check.py            9 pass, 1 warn (pre-existing, unrelated), 0 fail
+secret_scan / deps.audit       PASS (unchanged)
+demo/ frontend/ frontend-next/ unchanged — git status empty throughout
+```
+
+### 40.6 Status after this pass
+
+```
+RBAC POSITIVE PATH       = BEHAVIORALLY_VERIFIED  <-- was NOT_VERIFIED/BLOCKED
+RBAC NEGATIVE PATH       = VERIFIED (unchanged, synthetic tokens, §33.1)
+RF-04 (least privilege)  = PARTIALLY_IMPLEMENTED / runtime enforcement
+                          BEHAVIORALLY_VERIFIED against the real issuer
+                          (both positive and negative paths now proven;
+                          "PARTIALLY_IMPLEMENTED" persists only because
+                          RF-04's own classification also folds in the
+                          still-local, non-public issuer)
+RF-03                    = PARTIALLY_IMPLEMENTED, unchanged (password/
+                          lockout/MFA config exists, none of it
+                          behaviorally verified)
+CONTROL_6                = B - PARTIALLY_SATISFIED (unchanged)
+PUBLIC ISSUER (Phase 2)  = BLOCKED_EXTERNAL (unchanged)
+JUVAL_AUTH_MODE          = UNSET (unchanged — no persistent env change)
+REAPPLICATION GATE       = BLOCKED (unchanged — Amazon acceptance remains
+                          external; this is local technical evidence only)
+```
