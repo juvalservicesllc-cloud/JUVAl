@@ -2546,3 +2546,102 @@ AMAZON_COMPLIANCE_READINESS = NOT_READY (unchanged — configuration is not
 5. Control 6 stays `B — PARTIALLY_SATISFIED` until either a disclosed
    compensating control is adopted or Amazon answers the clarification in
    §21 — this bootstrap does not and cannot close it.
+
+## 39. `jwt/vend` ACL approved; endpoint still rejects the key — RBAC positive path remains blocked (2026-09-01)
+
+The user approved exactly `POST /api/jwt/vend` in addition to the existing
+bootstrap ACL (§38.4 item 1). This pass attempted to use it and could not.
+**No FusionAuth or JUVAl state changed this pass** — every call below either
+failed with `401` (vends nothing) or was a read-only `GET`.
+
+### 39.1 What was attempted
+
+A backend instance was started locally and temporarily
+(`JUVAL_AUTH_MODE=oidc`, `JUVAL_OIDC_ISSUER=http://127.0.0.1:9011`,
+`JUVAL_OIDC_AUDIENCE=84f077a0-b2b0-4655-8168-082b2233d029`,
+`--host 127.0.0.1 --port 8000`, never `0.0.0.0` — loopback only, no UFW
+change) and confirmed enforcing (`GET /api/v1/runs` with no token → `401`).
+`tools/verify_rbac.py --issuer http://127.0.0.1:9011 --audience
+84f077a0-b2b0-4655-8168-082b2233d029 --backend http://127.0.0.1:8000` was then
+run. It failed at the first step: `could not mint tokens via jwt/vend: HTTP
+Error 401`. The backend process was stopped immediately after (`TaskStop`,
+confirmed by a subsequent connection-refused probe) — it was never left
+running.
+
+### 39.2 Diagnosis — read-only, within the approved endpoint only
+
+All of the following are `POST /api/jwt/vend` with the same key; no other
+endpoint or method was probed:
+
+| Probe | Result |
+|---|---|
+| Well-formed claims (`iss`/`aud`/`sub`/`roles`), with `Authorization` | `401`, empty body |
+| Same, plus `X-FusionAuth-TenantId: 5fcaaf07-...` | `401`, empty body (rules out the §38.1 tenant-scoping defect recurring here) |
+| Malformed body (`{}`), with `Authorization` | `401`, empty body — **identical** to the well-formed case |
+| Well-formed claims, **no** `Authorization` header at all | `401`, empty body — **identical** to the authenticated case |
+| Retry after 5s | `401`, unchanged (rules out a config-propagation delay) |
+| Sanity check: `GET /api/tenant` with the same key, same moment | `200` — the key is valid and still works for the previously-approved ACL |
+
+A malformed request that still 401s identically to a well-formed one, and an
+authenticated request that 401s identically to an unauthenticated one, is
+FusionAuth's signature for **"this API key has no permission for this
+endpoint"** — it rejects at the authorization layer before ever parsing the
+request body. A key that had the permission but sent a bad payload would
+instead get a `400` with a JSON validation error.
+
+### 39.3 Classification (Phase 5 categories)
+
+This is **not**:
+- an application configuration defect (the application/tenant/roles are
+  correctly configured and independently read back, §38.3);
+- a FusionAuth token-claim defect (no token was ever issued to inspect);
+- a backend verification defect (the backend was up, enforcing, and never
+  reached — the failure is entirely upstream, at the IdP call);
+- a test/tool defect (`tools/verify_rbac.py` sends exactly the documented
+  `POST /api/jwt/vend` request shape; the §38.1-style header fix does not
+  apply here — adding `X-FusionAuth-TenantId` made no difference).
+
+It **is** an ACL-state discrepancy: the permission the user reports as
+granted is not observably in effect on the key this session holds, by every
+external test available under the current ACL (no `/api/key*` access exists
+to read the key's permission list directly and confirm one way or the other
+— that endpoint is explicitly not granted, and was not requested here).
+
+**No broader ACL was requested or used.** This is not a new
+`ACL_EXPANSION_REQUIRED` — the already-approved endpoint simply did not
+behave as granted when tested. The candidate explanations that do not need
+a repository code change: the grant was saved on a different key than the
+one in `JUVAL_IDP_API_KEY`; the grant did not save; or the endpoint string
+registered in FusionAuth's admin UI does not exactly match `/api/jwt/vend`.
+None of these are things this session can distinguish without an endpoint
+outside the approved ACL, so they are left to the operator to check
+directly in the FusionAuth admin UI (API Keys → the bootstrap key →
+Endpoints).
+
+### 39.4 Status after this pass
+
+```
+RBAC NEGATIVE PATH       = VERIFIED (unchanged, §33.1 — synthetic tokens,
+                            37 tests, tests/integration/test_api_auth.py)
+RBAC POSITIVE PATH       = NOT_VERIFIED, BLOCKED (unchanged in substance;
+                            the blocker moved from "ACL not granted" to
+                            "granted ACL not observably in effect")
+TENANT_JUVAL / APPLICATION_JUVAL / ROLES = unchanged from §38 (nothing
+                            written this pass)
+JUVAL_AUTH_MODE          = UNSET (unchanged — the local test process that
+                            set it for one request cycle was stopped,
+                            never the persistent environment)
+RF-03 / RF-04            = PARTIALLY_IMPLEMENTED, unchanged from §38
+CONTROL_6                = B - PARTIALLY_SATISFIED (unchanged — not
+                            touched by this pass)
+```
+
+### 39.5 Exact next action
+
+**Operator**, in the FusionAuth admin UI: open the bootstrap API key under
+Settings → API Keys, confirm `POST /api/jwt/vend` is listed under its
+Endpoints with the POST method checked, confirm it is the same key whose
+value is exported as `JUVAL_IDP_API_KEY` in the shell this session used, and
+save again if anything looks wrong. Then re-run `tools/verify_rbac.py` with
+the same arguments as §39.1 — no repository or tooling change is needed on
+this side.
