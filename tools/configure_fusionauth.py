@@ -83,11 +83,27 @@ class Client:
         self._api_key = api_key
         self._dry_run = dry_run
 
-    def _request(self, method: str, path: str, body: Optional[dict] = None) -> Any:
+    def _request(
+        self,
+        method: str,
+        path: str,
+        body: Optional[dict] = None,
+        *,
+        authenticated: bool = True,
+        tenant_id: Optional[str] = None,
+    ) -> Any:
         url = f"{self._base}{path}"
         data = json.dumps(body).encode() if body is not None else None
         request = urllib.request.Request(url, data=data, method=method)
-        request.add_header("Authorization", self._api_key)
+        if authenticated:
+            request.add_header("Authorization", self._api_key)
+        if tenant_id:
+            # This key is not bound to a single tenant (it can also create
+            # tenants), so tenant-scoped resources -- applications, roles --
+            # need the tenant made explicit or FusionAuth returns
+            # [TenantIdRequired]. No extra ACL permission: this only routes
+            # the request to the tenant whose id the caller already has.
+            request.add_header("X-FusionAuth-TenantId", tenant_id)
         request.add_header("Accept", "application/json")
         if data is not None:
             request.add_header("Content-Type", "application/json")
@@ -101,14 +117,24 @@ class Client:
         except (urllib.error.URLError, TimeoutError) as exc:
             raise ConfigError(f"{method} {path} -> {type(exc).__name__}: {exc}") from exc
 
-    def get(self, path: str) -> Any:
-        return self._request("GET", path)
+    def get(self, path: str, *, tenant_id: Optional[str] = None) -> Any:
+        return self._request("GET", path, tenant_id=tenant_id)
 
-    def write(self, method: str, path: str, body: dict) -> Any:
+    def get_public(self, path: str) -> Any:
+        """GET without the API key, for endpoints the approved ACL does not cover.
+
+        `/api/status` is unauthenticated by design; FusionAuth's granular API-key
+        permissions reject it with 401 if a key lacking that specific endpoint
+        permission is attached (least privilege -- CLAUDE.md SS4). Sending no key
+        here matches how the endpoint is meant to be used and needs no ACL grant.
+        """
+        return self._request("GET", path, authenticated=False)
+
+    def write(self, method: str, path: str, body: dict, *, tenant_id: Optional[str] = None) -> Any:
         if self._dry_run:
             print(f"    DRY-RUN would {method} {path}")
             return {}
-        return self._request(method, path, body)
+        return self._request(method, path, body, tenant_id=tenant_id)
 
 
 def _strip_underscored(value: Any) -> Any:
@@ -171,7 +197,7 @@ def ensure_tenant(client: Client, issuer: str) -> dict:
 
 
 def ensure_application(client: Client, tenant_id: str) -> dict:
-    applications = client.get("/api/application").get("applications", [])
+    applications = client.get("/api/application", tenant_id=tenant_id).get("applications", [])
     existing = find_by_name(applications, APPLICATION_NAME)
 
     # Least privilege (CLAUDE.md §4). The PWA has no browser login flow today
@@ -198,7 +224,9 @@ def ensure_application(client: Client, tenant_id: str) -> dict:
                 "client id / aud)."
             )
         app_id = existing["id"]
-        client.write("PATCH", f"/api/application/{app_id}", {"application": {"oauthConfiguration": oauth}})
+        client.write(
+            "PATCH", f"/api/application/{app_id}", {"application": {"oauthConfiguration": oauth}}, tenant_id=tenant_id
+        )
         return {"id": app_id}
 
     print(f"  creating application '{APPLICATION_NAME}' under tenant {tenant_id}")
@@ -206,18 +234,19 @@ def ensure_application(client: Client, tenant_id: str) -> dict:
         "POST",
         "/api/application",
         {"application": {"name": APPLICATION_NAME, "tenantId": tenant_id, "oauthConfiguration": oauth}},
+        tenant_id=tenant_id,
     )
     app_id = created.get("application", {}).get("id", "<dry-run>")
     print(f"  application '{APPLICATION_NAME}' created: {app_id}")
     return {"id": app_id}
 
 
-def ensure_roles(client: Client, app_id: str) -> None:
+def ensure_roles(client: Client, app_id: str, tenant_id: str) -> None:
     if app_id == "<dry-run>":
         for role in REQUIRED_ROLES:
             print(f"    DRY-RUN would ensure role '{role}'")
         return
-    application = client.get(f"/api/application/{app_id}").get("application", {})
+    application = client.get(f"/api/application/{app_id}", tenant_id=tenant_id).get("application", {})
     have = {role.get("name") for role in application.get("roles", [])}
     for role in REQUIRED_ROLES:
         if role in have:
@@ -228,6 +257,7 @@ def ensure_roles(client: Client, app_id: str) -> None:
             "POST",
             f"/api/application/{app_id}/role",
             {"role": {"name": role, "isDefault": False, "isSuperRole": False}},
+            tenant_id=tenant_id,
         )
 
 
@@ -263,14 +293,14 @@ def main() -> int:
     client = Client(args.base, api_key, args.dry_run)
 
     try:
-        if client.get("/api/status").get("status") != "Ok":
+        if client.get_public("/api/status").get("status") != "Ok":
             raise ConfigError("instance did not report status Ok")
         client.get("/api/tenant")  # 401 here means the API key is bad
         print("preflight: instance up, API key accepted\n")
 
         tenant = ensure_tenant(client, issuer)
         application = ensure_application(client, tenant["id"])
-        ensure_roles(client, application["id"])
+        ensure_roles(client, application["id"], tenant["id"])
     except ConfigError as exc:
         print(f"\nFAILED: {exc}", file=sys.stderr)
         return 1
