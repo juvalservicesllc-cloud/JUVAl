@@ -3035,3 +3035,172 @@ future session re-runs `tools/verify_identity_behavior.py --dry-run`, then
 `--execute` with the confirmation env var. No repository or tooling change
 is needed on this side — `tools/verify_identity_behavior.py` sends exactly
 the documented request shapes and its 32 unit tests still pass.
+
+## 43. IV3 401: the §39.2 discriminator was never reproduced — authentication and authorization are still indistinguishable (2026-09-07)
+
+Three API keys (IV1, IV2, IV3) and five creation attempts have now been spent
+against the same symptom, on the reading that the 401 is an **authorization**
+failure — a granted endpoint permission that is not in effect. This pass shows
+that reading was never established for IV3, and that the evidence collected so
+far is equally consistent with an **authentication** failure.
+
+**No FusionAuth, database, key or frontend state changed this pass.** Every
+action below was read-only or confined to new files under `tools/` and
+`tests/unit/`.
+
+### 43.1 The inference gap
+
+§39.2 concluded "this API key has no permission for this endpoint" from a
+401 that was byte-identical for well-formed, malformed and *unauthenticated*
+requests. That inference is only valid because of the last row of its own
+table:
+
+| Probe | Result |
+|---|---|
+| Sanity check: `GET /api/tenant` with the same key, same moment | `200` |
+
+That row proves the key value authenticated. Without it, the identical
+evidence supports "the presented key is not recognised at all" just as well:
+FusionAuth returns the same empty-body 401 in both cases, so the response
+carries no information about which layer rejected the request.
+
+**The IV3 investigation has no equivalent row.** Every IV3 probe on record
+(§42.2, §42.4, and the post-resave retest) returned 401. No IV3 request has
+ever produced a non-401 status, so nothing yet shows that the key value the
+caller holds authenticates at all.
+
+### 43.2 Measured: a known-invalid key is indistinguishable from IV3
+
+`tools/diagnose_api_key_401.py` was run against the live instance with a
+deliberately invalid, non-secret control value:
+
+```
+no Authorization header                        -> 401
+deliberately invalid key                       -> 401
+GET  /api/application/{id}                     -> 401
+GET  /api/user/action?userId=<absent>          -> 401
+POST /api/user (empty body)                    -> 401
+POST /api/user/registration (empty body)       -> 401
+POST /api/user/two-factor/<absent>             -> 401
+POST /api/login (absent loginId)               -> 401
+GET  /api/tenant (NOT granted -- control)      -> 401
+```
+
+This is the **same signature** the operator observed with IV3. A key known to
+be invalid and a key believed to be valid-but-unenforced produce identical
+output on every endpoint. The 401s recorded for IV3 therefore do not
+discriminate between the two, and §42's status line
+(`CREATED but MIS-SCOPED — only GET /api/application is in effect`) is not
+supported by evidence that excludes a bad credential.
+
+### 43.3 What *is* proven about the server side
+
+All independently verified, three sources agreeing:
+
+| Source | IV3 `03239bf9-...` |
+|---|---|
+| Admin UI | tenant `JUVAl`, Not Retrievable, Key Manager off, expiry 2026-09-09 12:00Z, six grants |
+| Audit Log (entry #18 JSON, both sides of the re-save) | byte-identical apart from `lastUpdateInstant`; `permissions.endpoints` exactly the six required rows; `retrievable:false`; `tenantId:5fcaaf07-...` |
+| `authentication_keys` row | same `tenants_id`, same `permissions` JSON, `key_manager:false`, `key_format:1` |
+
+Expiry re-checked this pass against the system clock: `2026-09-07 17:28Z` is
+before `2026-09-09 12:00Z`, so IV3 is **not** expired. The server-side record
+is correct by every reading available. The one Edit→Save performed under
+§42-era authorization changed nothing semantically, which is exactly why it
+changed no behaviour — it is not evidence of a FusionAuth defect.
+
+### 43.4 Corroborated capture-contamination vector
+
+The Audit Log records IV3's own name as `"JUVAL Identity Verification 3 "` —
+**with a trailing space** — and its description likewise. The capture path
+from the FusionAuth admin UI to the operator's clipboard demonstrably carries
+stray whitespace. IV3 is *Not Retrievable*: its value is displayed exactly
+once, before Save, and can never be re-read, so a capture defect is
+unrecoverable and silent, and every subsequent request fails identically to a
+wrong key. A carriage return additionally survives `read -s`, because `\r` is
+not in the default `IFS`.
+
+This is a corroborated mechanism, not a confirmed cause. It is untested
+because testing it requires the key value, which this session must not hold.
+
+### 43.5 Hypothesis matrix
+
+| # | Hypothesis | Verdict |
+|---|---|---|
+| H1 | Persisted domain object incorrect | **ELIMINATED** — audit JSON + DB row + UI agree |
+| H2 | Endpoint permissions not saved | **ELIMINATED** — same three sources |
+| H3 | Wrong tenant association | **ELIMINATED** |
+| H4 | Expiration / disabled | **ELIMINATED** — re-verified against the clock this pass |
+| H5 | Wrong `Authorization` syntax | **ELIMINATED** — raw key, no `Bearer` |
+| H6 | Wrong runtime / proxy | **ELIMINATED** — one process (PID 25656, up since 2026-08-26), direct loopback |
+| H7 | Effective configuration | **WEAKENED** — no rate limiting, no proxy trust, Event Log empty |
+| H8 | Secondary DB persistence | **WEAKENED** — only `authentication_keys` matches; no divergence found |
+| H9 | FusionAuth 1.69.0 enforcement defect | **UNRESOLVED, NOT SUPPORTED** — requires six independently-stored grants to be unenforced simultaneously; no supporting evidence, and §43.2 shows the observation does not require it |
+| H9b | Tenant-scoping specifically | **NOT SUPPORTED** — §42.2 records IV1 (tenant-scoped) returning `200` on `GET /api/application/{id}` |
+| H10 | Wrong / stale / malformed operator-held secret | **LEADING, UNCONFIRMED** — explains every observation with one fault; corroborated by §43.4; the saved bootstrap secret's 401 is consistent with it (three bootstrap rows exist and the held value is not proven to be `de00c6d3`, whose expiry is still unread) |
+| H11 | Runtime cache / index state | **UNRESOLVED** — no supporting evidence; no restart has occurred since 2026-08-26 |
+
+Parsimony favours H10, which is a reason to test it first, not a reason to
+declare it. **Root cause remains NOT CONFIRMED.**
+
+### 43.6 Tooling added
+
+`tools/diagnose_api_key_401.py` (+ `tests/unit/test_diagnose_api_key_401.py`,
+27 tests) reproduces the missing §39.2 row systematically. It probes all six
+granted endpoints with requests shaped so that a working key yields a
+**non-401** (`200`, `400` or `404`), alongside three controls: no header, a
+known-invalid key, and a not-granted endpoint. Every body is deliberately
+invalid or targets a freshly generated UUID, so no probe can create, modify
+or delete identity state. It also names the *class* of any malformation in
+the supplied value (surrounding whitespace, CR, non-ASCII) and retries once
+sanitised. It reads the key from `JUVAL_IDP_API_KEY` only, never from an
+argument, and never prints the value, its length, hash, fingerprint, prefix
+or suffix — asserted by four dedicated tests.
+
+### 43.7 Status after this pass
+
+```
+ROOT CAUSE                   = NOT CONFIRMED
+IV3 SERVER-SIDE RECORD       = CORRECT (UI + Audit Log + DB agree, not expired)
+AUTHN vs AUTHZ               = NOT YET DISCRIMINATED — no IV3 request has
+                               ever returned a non-401 status
+§42 "MIS-SCOPED" CLASSIFICATION = WITHDRAWN as unsupported; the evidence does
+                               not exclude a bad credential
+LEADING HYPOTHESIS           = H10 (malformed/incorrect held secret),
+                               corroborated but UNTESTED
+FUSIONAUTH DEFECT CLAIMED    = NO
+KEYS CREATED / DELETED / MODIFIED = 0 this pass
+LIVE BEHAVIORAL EXECUTION    = still BLOCKED (correctly — a 401 tests no
+                               password, lockout or MFA policy)
+PASSWORD / LOCKOUT / MFA     = NOT_VERIFIED (unchanged)
+CONTROL_6                    = B - PARTIALLY_SATISFIED (unchanged, not promoted)
+SYNTHETIC USERS CREATED      = 0
+JUVAL_AUTH_MODE              = UNSET (unchanged)
+REAPPLICATION GATE           = BLOCKED (unchanged)
+```
+
+### 43.8 Exact next action
+
+**Operator**, in the shell that holds the IV3 value — no admin UI step, no
+key change, no new key:
+
+```bash
+read -s -p "IV3 API key: " JUVAL_IDP_API_KEY; echo; export JUVAL_IDP_API_KEY
+.venv/bin/python tools/diagnose_api_key_401.py \
+    --application-id 84f077a0-b2b0-4655-8168-082b2233d029
+unset JUVAL_IDP_API_KEY
+```
+
+The output prints only endpoint names and status codes. Two outcomes:
+
+* **any granted endpoint returns non-401** — the key authenticates; H10 is
+  eliminated and the remaining 401s are genuinely authorization, which would
+  be the first real support H9 has ever had.
+* **all six return 401** — matching §43.2's known-invalid-key signature, with
+  the ACL proven persisted. H10 becomes the operative explanation and the
+  correct remedy is to re-capture the credential, not to rotate, re-scope or
+  re-save the key again.
+
+Only after a non-401 is obtained does `tools/verify_identity_behavior.py`
+become meaningful; running it now would classify a transport failure as a
+password-policy result.
