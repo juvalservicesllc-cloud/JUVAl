@@ -316,6 +316,29 @@ def read_lockout_state(client: Client, *, user_id: str) -> tuple[int, dict]:
 # --- Test groups -----------------------------------------------------------
 
 
+#: HTTP statuses that mean the API key was refused before the request was
+#: evaluated. They are infrastructure failures, never behavioral evidence.
+UNAUTHORIZED_STATUSES = (401, 403)
+
+
+def unauthorized(status: int) -> bool:
+    """True if `status` means the request never reached the behavior under test.
+
+    FusionAuth answers a bad credential, a bad TOTP code or an unknown user
+    with `404`. It reserves `401`/`403` for API-key authentication and
+    authorization failures. So a `401` says nothing whatsoever about a
+    password rule, a lockout, or an MFA challenge -- the policy was never
+    consulted.
+
+    Any case that scores "the request did not succeed, therefore the policy
+    rejected it" MUST call this first, or an authorization refusal is
+    laundered into behavioral evidence. `SP_API_REGISTRATION_REMEDIATION.md`
+    §42.2 recorded exactly that happening to P-02..P-06 and C6-01/C6-02, and
+    §47.5 to M-05 and L-04.
+    """
+    return status in UNAUTHORIZED_STATUSES
+
+
 def run_password_tests(client: Client) -> list[Finding]:
     findings: list[Finding] = []
 
@@ -329,6 +352,18 @@ def run_password_tests(client: Client) -> list[Finding]:
     ]
     for case_id, label, password, expect_accept in cases:
         status, body = create_disposable_user(client, case_id=case_id, password=password)
+        if unauthorized(status):
+            # "The user was not created" here means the API key was refused,
+            # not that the password policy rejected the password.
+            findings.append(
+                Finding(
+                    case_id,
+                    Status.BLOCKED,
+                    f"{label}: status={status} on POST /api/user -- refused at the "
+                    "authorization layer; the password policy was never evaluated",
+                )
+            )
+            continue
         accepted = status == 200
         if accepted == expect_accept:
             findings.append(Finding(case_id, Status.PASS, f"{label}: status={status} (as expected)"))
@@ -387,6 +422,15 @@ def run_mfa_enforcement_observation(client: Client, application_id: str) -> list
         return [Finding("M-01", Status.BLOCKED, f"application registration failed: status={reg_status}")]
 
     status, body = login(client, login_id=login_id, password=password, application_id=application_id)
+    if unauthorized(status):
+        return [
+            Finding(
+                "M-01",
+                Status.BLOCKED,
+                f"status={status} on POST /api/login -- refused at the authorization "
+                "layer; tenant MFA enforcement was never exercised",
+            )
+        ]
     has_two_factor_id = "twoFactorId" in body
     return [
         Finding(
@@ -446,7 +490,6 @@ def run_lockout_and_mfa_sequence(client: Client, application_id: str, *, too_man
     # response as "not 200, therefore the wrong code was rejected" would launder
     # an authorization failure into behavioral evidence -- the exact error this
     # investigation exists to avoid. See SP_API_REGISTRATION_REMEDIATION.md §47.
-    UNAUTHORIZED = (401, 403)
     two_factor_unauthorized = False
 
     if not two_factor_id:
@@ -457,7 +500,7 @@ def run_lockout_and_mfa_sequence(client: Client, application_id: str, *, too_man
         status, _ = complete_two_factor_login(
             client, two_factor_id=two_factor_id, code=wrong_totp_code(secret)
         )
-        if status in UNAUTHORIZED:
+        if unauthorized(status):
             two_factor_unauthorized = True
             findings.append(
                 Finding(
@@ -505,7 +548,7 @@ def run_lockout_and_mfa_sequence(client: Client, application_id: str, *, too_man
                     client, two_factor_id=two_factor_id_2, code=totp_code(secret)
                 )
                 token_issued = "token" in body
-                if status in UNAUTHORIZED:
+                if unauthorized(status):
                     findings.append(
                         Finding(
                             "M-06",
@@ -562,7 +605,7 @@ def run_lockout_and_mfa_sequence(client: Client, application_id: str, *, too_man
 
     # L-04: correct credentials while locked must NOT bypass the lock.
     status, body = login(client, login_id=login_id, password=password, application_id=application_id)
-    if status in (401, 403):
+    if unauthorized(status):
         # Rejected before the credential was ever evaluated. FusionAuth answers
         # a bad credential with 404, not 401, so a 401 here is the API key
         # lacking POST /api/login -- it is not evidence that the lock held.
@@ -610,6 +653,16 @@ def run_control6_tests(client: Client) -> list[Finding]:
         status, _ = create_disposable_user(
             client, case_id=case_id, password=password, first_name=first_name, last_name=last_name
         )
+        if unauthorized(status):
+            findings.append(
+                Finding(
+                    case_id,
+                    Status.BLOCKED,
+                    f"{label}: status={status} on POST /api/user -- refused at the "
+                    "authorization layer; the name check was never evaluated",
+                )
+            )
+            continue
         accepted = status == 200
         findings.append(
             Finding(

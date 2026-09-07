@@ -625,3 +625,84 @@ def test_l04_blocked_not_passed_when_login_is_unauthorized(monkeypatch, status):
     by_id = {f.case_id: f for f in findings}
     assert by_id["L-04"].status == vib.Status.BLOCKED
     assert by_id["L-04"].status != vib.Status.PASS
+
+
+# --- No 401/403 may EVER produce PASS, in any case group -------------------
+#
+# SP_API §42.2 recorded P-02..P-06 and C6-01/C6-02 showing PASS purely because
+# "the user was not created" -- when the "no" was a 401 auth rejection, not a
+# policy rejection. §47.5 found the same in M-05 and L-04. This pins the whole
+# class shut. See ADR-032's amendment: 401/403 -> BLOCKED, never PASS.
+
+
+@pytest.mark.parametrize("status", [401, 403])
+def test_password_cases_blocked_not_passed_when_create_user_unauthorized(monkeypatch, status):
+    fake = ScriptedFusionAuth([(status, {})] * 6)
+    monkeypatch.setattr(vib.urllib.request, "urlopen", fake)
+    findings = vib.run_password_tests(_client(fake))
+    by_id = {f.case_id: f for f in findings}
+    for case_id in ("P-01", "P-02", "P-03", "P-04", "P-05", "P-06"):
+        assert by_id[case_id].status == vib.Status.BLOCKED, (case_id, by_id[case_id])
+        assert by_id[case_id].status != vib.Status.PASS
+
+
+@pytest.mark.parametrize("status", [401, 403])
+def test_control6_blocked_not_passed_when_create_user_unauthorized(monkeypatch, status):
+    fake = ScriptedFusionAuth([(status, {})] * 2)
+    monkeypatch.setattr(vib.urllib.request, "urlopen", fake)
+    findings = vib.run_control6_tests(_client(fake))
+    for finding in findings:
+        assert finding.status == vib.Status.BLOCKED, finding
+        assert finding.status != vib.Status.PASS
+
+
+@pytest.mark.parametrize("status", [401, 403])
+def test_m01_blocked_not_passed_when_login_unauthorized(monkeypatch, status):
+    fake = ScriptedFusionAuth([
+        (200, {"user": {"id": "u1", "email": "x@y.invalid"}}),
+        (200, {"registration": {}}),
+        (status, {}),  # POST /api/login refused
+    ])
+    monkeypatch.setattr(vib.urllib.request, "urlopen", fake)
+    findings = vib.run_mfa_enforcement_observation(_client(fake), APP_ID)
+    assert findings[0].case_id == "M-01"
+    assert findings[0].status == vib.Status.BLOCKED
+    assert findings[0].status != vib.Status.PASS
+
+
+def test_password_rejection_by_real_policy_still_scores_pass(monkeypatch):
+    """A genuine 400 policy rejection must remain usable evidence."""
+    script = [(200, {"user": {"id": "u1", "email": "a@b.invalid"}})]  # P-01 accepted
+    script += [(400, {"fieldErrors": {"user.password": []}})] * 5     # P-02..P-06 rejected
+    fake = ScriptedFusionAuth(script)
+    monkeypatch.setattr(vib.urllib.request, "urlopen", fake)
+    findings = {f.case_id: f for f in vib.run_password_tests(_client(fake))}
+    for case_id in ("P-01", "P-02", "P-03", "P-04", "P-05", "P-06"):
+        assert findings[case_id].status == vib.Status.PASS, (case_id, findings[case_id])
+
+
+def test_unauthorized_helper_is_exactly_401_and_403():
+    assert vib.unauthorized(401) and vib.unauthorized(403)
+    for status in (200, 242, 400, 404, 409, 500):
+        assert not vib.unauthorized(status), status
+
+
+def test_universal_401_produces_no_pass_anywhere(monkeypatch):
+    """End-to-end guarantee: if the key is refused on every call, nothing PASSes.
+
+    This is the whole-tool version of the case-by-case guards above. It is the
+    property that matters for compliance: a run whose credential is rejected
+    must produce zero behavioral evidence, not a wall of green.
+    """
+    class All401:
+        def __call__(self, request, timeout=None):
+            raise urllib.error.HTTPError(request.full_url, 401, "", {}, None)
+
+    monkeypatch.setattr(vib.urllib.request, "urlopen", All401())
+    client = vib.Client("http://127.0.0.1:9011", "dummy", tenant_id=TENANT_ID)
+    findings = vib.run_all(client, APP_ID, too_many_attempts=3)
+
+    assert findings, "the run must still report cases, not silently produce nothing"
+    passes = [f.case_id for f in findings if f.status == vib.Status.PASS]
+    assert passes == [], f"401 produced PASS for: {passes}"
+    assert all(f.status in (vib.Status.BLOCKED, vib.Status.NOT_TESTED) for f in findings)

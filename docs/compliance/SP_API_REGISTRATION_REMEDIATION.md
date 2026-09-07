@@ -3586,3 +3586,105 @@ corrected to `404`. L-02/L-03/L-05 were already safe: they score from the
 
 `CONTROL_6 = B - PARTIALLY_SATISFIED` (unchanged) · `JUVAL_AUTH_MODE` unset ·
 no behavioral write has been executed.
+
+## 48. Seven-grant behavioral credential approved; the 401-as-PASS class closed tool-wide (2026-09-07)
+
+### 48.1 The ACL drift that caused the false positives
+
+ADR-032 has specified **seven** endpoints for the behavioral credential since
+it was written. Between §41 and §46 the work drifted to "the six approved",
+silently dropping `POST /api/two-factor/login`. The drift was not cosmetic:
+with six permissions that endpoint returns `401`, and the tool scored
+**M-05** as `PASS if status not in (200,)` and **L-04** as
+`PASS if status not in (200, 242)` — turning an authorization refusal into
+"wrong TOTP code rejected" and "the lockout held".
+
+The operator has now approved the seventh explicitly. ADR-032 carries an
+amendment pinning the exact seven, the reason, and the classification rule.
+This is lifecycle-scoped, not a generic broadening: it adds no tenant,
+application, key or system access.
+
+### 48.2 The class was wider than §47 found
+
+Auditing every `Status.PASS` path, not just the two already fixed, found
+**three more**:
+
+| case | old scoring | what a `401` produced |
+|---|---|---|
+| P-02…P-06 | `accepted = status == 200; PASS if accepted == expect_accept` | `401` → `accepted=False` → matches `expect_accept=False` → **PASS**, "password rejected by policy" |
+| C6-01 / C6-02 | `Status.PASS` unconditionally | **PASS**, "name check produced evidence" |
+| M-01 | `Status.PASS` unconditionally after login | **PASS**, "MFA enforcement observed" |
+
+§42.2 had *already recorded* the P-02…P-06 and C6 behaviour in prose — "the
+'no' is a `401` auth rejection, **not** a password-policy rejection" — but it
+was never fixed in code, so a later live run could have produced the same
+false greens again with nothing to stop it.
+
+### 48.3 The fix
+
+A single shared predicate now guards every case:
+
+```python
+UNAUTHORIZED_STATUSES = (401, 403)
+
+def unauthorized(status: int) -> bool:
+    """True if the request never reached the behavior under test."""
+    return status in UNAUTHORIZED_STATUSES
+```
+
+Every scoring path that reads "the request did not succeed, therefore the
+policy rejected it" calls it first and records `BLOCKED`. FusionAuth answers
+a bad credential, a bad TOTP code or an unknown user with **404**, and
+reserves **401/403** for API-key authentication and authorization failure —
+so 404 remains usable behavioral evidence and 401 never is.
+
+**Verified end-to-end**, not just per case: with `urlopen` forced to raise
+`401` on every call, a full `run_all()` yields
+`{BLOCKED: 10, NOT_TESTED: 2}` and **zero** `PASS`. That is now a permanent
+test, alongside one asserting a genuine `400` policy rejection still scores
+`PASS`, so the guard cannot hollow out real evidence.
+
+### 48.4 Pre-live audit — all thirteen items
+
+| # | Check | Result |
+|---|---|---|
+| 1–2 | tool and tests re-read | done |
+| 3 | exact endpoint requirement | **7**, derived mechanically from source; matches the approved set exactly — no extras, none unused |
+| 4 | expected behavioral statuses | 200 accept / 400 policy reject / 404 bad credential or code / 242 second-factor challenge |
+| 5 | 401/403 cannot produce PASS | **verified exhaustively** (§48.3) |
+| 6 | targeting | requires `GET /api/application/{id}` → `name == "JUVAl"` **and** `tenantId ==` supplied tenant, else raises |
+| 7 | Default tenant | unreachable — no default ids in code; both required and checked against FusionAuth's own record |
+| 8 | DELETE | impossible — `Client.request` raises |
+| 9 | disposable identifiers unique | `uuid4` per user, `@…invalid` (RFC 2606) |
+| 10 | secret containment | 4 dedicated tests: no password, TOTP secret/code or token reaches `Finding.detail`, stdout or exceptions; key read from env only |
+| 11 | dry/default mode | **zero network calls**, verified by blocking `urlopen` and running to completion |
+| 12 | both live gates | `--execute` **and** `JUVAL_IDENTITY_VERIFICATION_CONFIRM=yes-run-live-writes`; `--execute` alone refuses |
+| 13 | cleanup/residual behaviour | reported below |
+
+### 48.5 Residual state a live run will create
+
+The tool has no `DELETE` by design, so every disposable user it creates
+**persists** in the `JUVAl` tenant until removed by hand. Expect roughly 10–11
+users across P-01…P-06, M-01, the lockout/MFA sequence, and C6-01/C6-02, each
+tagged in `user.data` with the tool name, case id and timestamp, and named
+`ZzvIdentityVerification DisposableTestUser` or `Zzqxctrlsix QqvxNamecheck` so
+they are unmistakable in the admin UI. Their passwords exist only in local
+variables for the duration of one check, so after the process exits they are
+inert, clearly-labelled fixtures rather than live credentials. Login ids are
+`@juval-identity-verification.invalid` and can never receive mail or collide
+with a real account. Cleanup is a controlled operator action afterwards.
+
+### 48.6 Status
+
+```
+BEHAVIORAL CREDENTIAL DESIGN  = APPROVED, 7 exact grants (ADR-032 amended)
+DIAGNOSTIC 2                  = deletion pending (operator, manual)
+BEHAVIORAL CREDENTIAL         = not yet created (operator, manual)
+401-as-PASS FALSE POSITIVES   = CLOSED tool-wide, 12 regression tests
+LIVE BEHAVIORAL EXECUTION     = NOT RUN, awaiting explicit approval
+PASSWORD / LOCKOUT / MFA      = NOT_VERIFIED (unchanged)
+CONTROL_6                     = B - PARTIALLY_SATISFIED (unchanged)
+SYNTHETIC USERS CREATED       = 0
+JUVAL_AUTH_MODE               = UNSET
+REAPPLICATION GATE            = BLOCKED
+```

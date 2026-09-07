@@ -104,3 +104,76 @@ en el reporte de la sesión 2026-09-01 (ver también `docs/compliance/
 SP_API_REGISTRATION_REMEDIATION.md` §41 si esta sesión registra evidencia
 ahí) y en `tools/verify_identity_behavior.py`, pendiente de creación manual
 por el operador antes de cualquier ejecución en vivo.
+
+---
+
+## Enmienda 2026-09-07 — la credencial de verificación behavioral son **siete** grants exactos
+
+**Estado: Aceptada** (aprobación explícita del usuario, 2026-09-07). No
+supersede nada de lo anterior; fija con precisión el punto 2 de la Decisión.
+
+### Qué se fija
+
+La credencial del punto 2 se llama **`JUVAL Behavioral Verification 1`** y su
+ACL es **exactamente estos siete grants, ni uno más**:
+
+| # | Método | Endpoint | Para qué |
+|---|---|---|---|
+| 1 | `GET` | `/api/application` | targeting fail-closed (`verify_targeting()`) |
+| 2 | `POST` | `/api/user` | crear usuarios desechables (P-01…P-06, C6-01/C6-02) |
+| 3 | `GET` | `/api/user/action` | leer el estado de bloqueo (L-02…L-05) |
+| 4 | `POST` | `/api/user/registration` | registrar el usuario en la aplicación |
+| 5 | `POST` | `/api/user/two-factor` | enrolar TOTP (M-02/M-03) |
+| 6 | `POST` | `/api/two-factor/login` | completar el segundo factor (M-05/M-06/M-07) |
+| 7 | `POST` | `/api/login` | login real (M-01/M-04, L-01/L-04) |
+
+`GET /api/user/action` y `POST /api/two-factor/login` se envían **sin**
+`X-FusionAuth-TenantId` (`scope_tenant=False`); los demás lo llevan.
+
+### Por qué se registra esto
+
+La ACL de siete endpoints ya estaba en el cuerpo de este ADR desde su
+redacción. Entre §41 y §46 el trabajo derivó a hablar de "los seis
+aprobados", omitiendo `POST /api/two-factor/login`. Esa deriva no fue
+inocua: con seis permisos ese endpoint devuelve `401`, y
+`tools/verify_identity_behavior.py` puntuaba **M-05** como
+`PASS if status not in (200,)` y **L-04** como
+`PASS if status not in (200, 242)`. Ambos convertían un rechazo de
+autorización en evidencia de política — "código TOTP incorrecto rechazado",
+"el bloqueo se mantuvo" — sin que la política se hubiera evaluado nunca.
+
+Corregido en código (`SP_API_REGISTRATION_REMEDIATION.md` §47.5) con seis
+tests de regresión. Se deja escrito aquí porque el ADR es el sitio donde se
+consulta la ACL, y una ACL mal transcrita fue lo que habilitó el falso
+positivo.
+
+**Esto no es un broadening genérico.** El séptimo endpoint es
+lifecycle-scoped y estrictamente necesario para la verificación behavioral;
+no amplía la superficie a gestión de tenant, aplicación, claves ni sistema.
+La regla operativa del cuerpo del ADR sigue intacta: `DELETE`, `PUT`,
+`PATCH`, Key Manager, `/api/key*`, `/api/system*` y `/api/tenant*` quedan
+fuera.
+
+### Regla de clasificación, obligatoria para toda verificación behavioral
+
+```
+401 / 403  -> fallo de autenticación/autorización de la API key
+           -> BLOCKED (fallo de evidencia de infraestructura)
+           -> NUNCA PASS de un test de política o comportamiento
+
+404 u otro status esperado del endpoint puede ser evidencia behavioral
+solo si la semántica del endpoint y el test lo justifican explícitamente.
+```
+
+FusionAuth responde `404` a una credencial o a un código TOTP incorrectos;
+`401` queda reservado para el fallo de autorización de la API key. Confundir
+ambos es exactamente el error que §39–§46 arrastró durante toda la
+investigación del 401.
+
+### Ciclo de vida de esta credencial
+
+Creada manualmente por el operador en la GUI (nunca por el agente, nunca vía
+Playwright/MCP, que no abre el formulario Add API Key), Not Retrievable, Key
+Manager OFF, tenant `JUVAl`, expiración ≤24 h, y **revocada al terminar** la
+verificación. La expiración corta es respaldo, no el plan. No reutilizar
+`JUVAl Identity Verification` (IV1/IV2/IV3) ni ninguna key de bootstrap.
