@@ -347,16 +347,16 @@ def test_lockout_and_mfa_sequence_full_success_path(monkeypatch):
         (200, {"registration": {}}),  # register
         (200, {}),  # enroll TOTP
         (242, {"twoFactorId": "tf-1"}),  # M-04/L-01: correct password -> challenge
-        (401, {}),  # M-05: wrong code rejected
+        (404, {}),  # M-05: wrong code rejected (FusionAuth uses 404, not 401)
         (242, {"twoFactorId": "tf-2"}),  # second login for M-06
         (200, {"token": "not-a-real-jwt"}),  # M-06/M-07: correct code -> token
     ]
     # L-02: too_many_attempts - 1 = 2 wrong-password logins
-    script += [(401, {}) for _ in range(too_many_attempts - 1)]
+    script += [(404, {}) for _ in range(too_many_attempts - 1)]
     script += [(200, {"actions": []})]  # L-02 read-back: not locked
-    script += [(401, {})]  # L-03: the attempt that hits the threshold
+    script += [(404, {})]  # L-03: the attempt that hits the threshold
     script += [(200, {"actions": [{"expiry": "2026-01-01T00:00:00Z"}]})]  # L-03/L-05 read-back: locked
-    script += [(401, {})]  # L-04: correct password while locked -> still rejected
+    script += [(404, {})]  # L-04: correct password while locked -> still rejected
 
     fake = ScriptedFusionAuth(script)
     monkeypatch.setattr(vib.urllib.request, "urlopen", fake)
@@ -379,13 +379,13 @@ def test_lockout_sequence_flags_a_bypass_as_failure(monkeypatch):
         (200, {"registration": {}}),
         (200, {}),
         (242, {"twoFactorId": "tf-1"}),
-        (401, {}),
+        (404, {}),  # wrong TOTP code -- FusionAuth answers 404, not 401
         (242, {"twoFactorId": "tf-2"}),
         (200, {"token": "not-a-real-jwt"}),
     ]
-    script += [(401, {}) for _ in range(too_many_attempts - 1)]  # L-02 loop: 1 wrong-password login
+    script += [(404, {}) for _ in range(too_many_attempts - 1)]  # L-02 loop: 1 wrong-password login
     script += [(200, {"actions": []})]  # L-02 read-back after that 1 failure
-    script += [(401, {})]  # the threshold-hitting attempt
+    script += [(404, {})]  # the threshold-hitting attempt
     script += [(200, {"actions": [{"expiry": "2026-01-01T00:00:00Z"}]})]
     script += [(242, {"twoFactorId": "tf-bypass"})]  # L-04: BYPASS -- should be flagged FAIL
 
@@ -526,7 +526,7 @@ def test_full_run_only_touches_the_approved_endpoint_set(monkeypatch):
         (242, {"twoFactorId": "tf-2"}),
         (200, {"token": "tok"}),
     ]
-    script += [(401, {}) for _ in range(too_many_attempts - 1)]
+    script += [(404, {}) for _ in range(too_many_attempts - 1)]
     script += [(200, {"actions": []})]
     script += [(401, {})]
     script += [(200, {"actions": [{"expiry": "2026-01-01T00:00:00Z"}]})]
@@ -554,3 +554,74 @@ def test_full_run_only_touches_the_approved_endpoint_set(monkeypatch):
         assert call["method"] != "DELETE"
         assert call["method"] != "PUT"
         assert call["method"] != "PATCH"
+
+
+# --- 401 must never be scored as a policy result ---------------------------
+#
+# FusionAuth answers a bad credential or a bad TOTP code with 404. A 401 is
+# reserved for API-key authorization failure, and the tool's approved ACL is
+# six endpoints -- POST /api/two-factor/login is a seventh it does not have.
+# So every case that reads "not 200 => the policy rejected it" must first
+# exclude 401/403, or an authorization rejection is laundered into behavioral
+# evidence. See SP_API_REGISTRATION_REMEDIATION.md §47.
+
+
+def _mfa_script_until_two_factor(two_factor_status: int) -> list[tuple[int, dict]]:
+    return [
+        (200, {"user": {"id": "u1", "email": "x@y.invalid"}}),  # create
+        (200, {"registration": {}}),                            # register
+        (200, {}),                                              # enroll TOTP
+        (242, {"twoFactorId": "tf-1"}),                         # correct password
+        (two_factor_status, {}),                                # the call under test
+    ]
+
+
+@pytest.mark.parametrize("status", [401, 403])
+def test_m05_blocked_not_passed_when_two_factor_login_is_unauthorized(monkeypatch, status):
+    fake = ScriptedFusionAuth(_mfa_script_until_two_factor(status) + [(200, {"actions": []})] * 12)
+    monkeypatch.setattr(vib.urllib.request, "urlopen", fake)
+    findings = vib.run_lockout_and_mfa_sequence(_client(fake), APP_ID, too_many_attempts=3)
+    by_id = {f.case_id: f for f in findings}
+    assert by_id["M-05"].status == vib.Status.BLOCKED
+    assert by_id["M-06"].status == vib.Status.BLOCKED
+    assert by_id["M-07"].status == vib.Status.BLOCKED
+    for case_id in ("M-05", "M-06", "M-07"):
+        assert by_id[case_id].status != vib.Status.PASS
+
+
+def test_m05_still_passes_on_a_genuine_404_rejection(monkeypatch):
+    """404 IS the real wrong-code answer and must still count as evidence."""
+    fake = ScriptedFusionAuth(
+        _mfa_script_until_two_factor(404)
+        + [(242, {"twoFactorId": "tf-2"}), (200, {"token": "not-a-real-jwt"})]
+        + [(404, {})] * 2
+        + [(200, {"actions": []})]
+        + [(404, {})]
+        + [(200, {"actions": [{"expiry": "2026-01-01T00:00:00Z"}]})]
+        + [(404, {})]
+    )
+    monkeypatch.setattr(vib.urllib.request, "urlopen", fake)
+    findings = vib.run_lockout_and_mfa_sequence(_client(fake), APP_ID, too_many_attempts=3)
+    by_id = {f.case_id: f for f in findings}
+    assert by_id["M-05"].status == vib.Status.PASS
+    assert by_id["M-06"].status == vib.Status.PASS
+
+
+@pytest.mark.parametrize("status", [401, 403])
+def test_l04_blocked_not_passed_when_login_is_unauthorized(monkeypatch, status):
+    """A 401 on /api/login must not be read as 'the lockout held'."""
+    script = (
+        _mfa_script_until_two_factor(404)
+        + [(242, {"twoFactorId": "tf-2"}), (200, {"token": "t"})]
+        + [(404, {})] * 2
+        + [(200, {"actions": []})]
+        + [(404, {})]
+        + [(200, {"actions": [{"expiry": "2026-01-01T00:00:00Z"}]})]
+        + [(status, {})]  # L-04 under test
+    )
+    fake = ScriptedFusionAuth(script)
+    monkeypatch.setattr(vib.urllib.request, "urlopen", fake)
+    findings = vib.run_lockout_and_mfa_sequence(_client(fake), APP_ID, too_many_attempts=3)
+    by_id = {f.case_id: f for f in findings}
+    assert by_id["L-04"].status == vib.Status.BLOCKED
+    assert by_id["L-04"].status != vib.Status.PASS

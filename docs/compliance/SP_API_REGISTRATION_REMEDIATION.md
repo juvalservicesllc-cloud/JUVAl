@@ -3464,3 +3464,125 @@ profile, so the controls were not comparable with the profile under test.
 
 Key to be deleted once the evidence is captured; the ≤24h expiry is a
 backstop, not the plan.
+
+## 47. Fresh key authenticates: the runtime is exonerated, the fault is localised to the historical credentials (2026-09-07)
+
+### 47.1 The experiment
+
+The operator created `JUVAL API Key Diagnostic 2` manually in the GUI —
+tenant `JUVAl`, Not Retrievable, Key Manager off, **exactly one** permission
+(`GET /api/application`) — captured the value personally, and used it
+immediately. It was never shown to any agent, never persisted, never printed,
+hashed, fingerprinted or measured. Playwright/MCP never opened the Add API Key
+form.
+
+| probe | result |
+|---|---|
+| no `Authorization` header | `401` |
+| deliberately invalid key | `401` |
+| **`GET /api/application` (the only grant)** | **`200`** |
+| `GET /api/tenant` (deliberately NOT granted) | `401` |
+
+Verdict `AUTHENTICATION_CONFIRMED_OK`, minutes after the same instance
+returned 401 to every probe from both historical credentials.
+
+### 47.2 What is now proven about the current runtime
+
+1. FusionAuth accepts a freshly created API key.
+2. `Authorization` header transport works.
+3. API-key lookup and authentication work.
+4. **Tenant-scoped** API-key authentication works.
+5. Endpoint ACL enforcement works, in both directions: the granted endpoint
+   returns `200`, the non-granted endpoint returns `401`.
+
+H11 in its general form — "FusionAuth currently fails to authenticate API
+keys" — is **ELIMINATED**. H9, a 1.69.0 enforcement defect, is likewise
+**ELIMINATED** for the enforcement path this key exercises, and it never had
+positive evidence (§44.3).
+
+### 47.3 What it does *not* prove — a scope correction
+
+The diagnostic tool's success message previously read "H10 (wrong/stale
+operator-held secret) is ELIMINATED". That wording was wrong and has been
+corrected in code. A fresh key proves only that **the value used in that run**
+authenticated. In this project's taxonomy H10 asks whether the *historical*
+IV3 and Bootstrap values correspond to their intended rows, and no fresh key
+can establish that correspondence.
+
+The message now states the scope explicitly and a test asserts it, so the
+conflation cannot silently return.
+
+### 47.4 Precise root-cause classification
+
+```
+GENERAL RUNTIME / LOOKUP / ENFORCEMENT   = EXONERATED (§47.2, measured)
+FAULT LOCALISED TO                        = the two historical credentials
+                                            (IV3 03239bf9, and whichever
+                                            bootstrap row the held value
+                                            was meant to be)
+```
+
+Within that localisation two sub-explanations remain, and they are **not**
+separable with permitted evidence, because separating them would require
+reading `authentication_keys.key_value`:
+
+* **(a) custody / provenance** — the held values do not correspond to those
+  rows: mis-captured at creation, or belonging to a row since deleted. §38
+  records that the working bootstrap value was *"never persisted"*, so its
+  provenance was never establishable. Both keys are Not Retrievable, so
+  capture was one-shot and silent.
+* **(b) stored-value defect for those specific rows** — the rows read
+  correctly in every non-secret column but their stored key material is not
+  verifiable.
+
+Given the evidence, **(a) is the primary explanation** and (b) is not
+excluded. Both share the same remedy, which is why the distinction is
+operationally moot: issue a fresh key, which is now proven to work.
+
+`ROOT CAUSE = NARROWED AND LOCALISED; the general-runtime hypothesis is
+CONFIRMED FALSE. The specific mechanism within the historical credentials is
+NOT CONFIRMED and cannot be confirmed without reading key material.`
+
+### 47.5 Two false-positive defects found and fixed in the behavioral tool
+
+Auditing `tools/verify_identity_behavior.py` against the approved six-permission
+ACL — before asking for the final credential — surfaced the exact error class
+this whole investigation exists to avoid: **a 401 being scored as a policy
+result.**
+
+The tool needs a **seventh** endpoint, `POST /api/two-factor/login`, which is
+*not* among the approved six. With six permissions it returns 401, and:
+
+| case | old scoring | consequence |
+|---|---|---|
+| M-05 | `PASS if status not in (200,)` | a `401` scored **PASS** — "wrong TOTP code rejected", concluded from an authorization refusal |
+| L-04 | `PASS if status not in (200, 242)` | a `401` scored **PASS** — "lockout held", concluded from an authorization refusal |
+| M-06 / M-07 | `FAIL` on 401 | not a false positive, but wrong: unobservable, not failing |
+
+FusionAuth answers a bad credential or bad TOTP code with **404**; `401` is
+reserved for API-key authorization failure. Both cases now exclude 401/403
+first and record `BLOCKED`, with M-06/M-07 recorded as `BLOCKED` too and the
+lockout cases (which use different endpoints) still running. Six regression
+tests pin it, including one asserting a genuine `404` still scores `PASS` so
+the guard cannot hollow out real evidence.
+
+The unit-test fixtures themselves encoded the same conflation — scripting
+`401` as the expected wrong-password and wrong-TOTP response — and were
+corrected to `404`. L-02/L-03/L-05 were already safe: they score from the
+`/api/user/action` read-back requiring `status == 200`.
+
+### 47.6 Behavioral-verification readiness
+
+| check | result |
+|---|---|
+| endpoints vs approved six | **seven required** — `POST /api/two-factor/login` is outside the ACL; M-05/M-06/M-07 will be `BLOCKED`, never `PASS` |
+| unit tests | 37 passed (was 32; +6 regression, all green) |
+| default/dry mode | **zero network calls** — verified by blocking `urlopen` and running to completion |
+| fail-closed targeting | `verify_targeting()` requires `GET /api/application/{id}` to return `name == "JUVAl"` **and** `tenantId ==` the supplied tenant, else raises and refuses to proceed |
+| Default tenant | impossible — no default ids exist in code; both must be supplied and are checked against FusionAuth's own record |
+| DELETE | impossible — `Client.request` raises on `DELETE` |
+| secret containment | 4 dedicated tests: no password, TOTP secret/code or token reaches `Finding.detail`, stdout or an exception |
+| live-write gates | both required and verified: `--execute` **and** `JUVAL_IDENTITY_VERIFICATION_CONFIRM=yes-run-live-writes` |
+
+`CONTROL_6 = B - PARTIALLY_SATISFIED` (unchanged) · `JUVAL_AUTH_MODE` unset ·
+no behavioral write has been executed.

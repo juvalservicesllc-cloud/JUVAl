@@ -438,44 +438,105 @@ def run_lockout_and_mfa_sequence(client: Client, application_id: str, *, too_man
             Finding("M-04", Status.FAIL, f"expected 242+twoFactorId for a correct password, got status={status}")
         )
         findings.append(Finding("L-01", Status.FAIL, f"correct password did not yield the expected pre-2FA success signal (status={status})"))
+    # M-05 / M-06 / M-07: the second-factor challenge.
+    #
+    # POST /api/two-factor/login is a SEVENTH endpoint, outside the approved
+    # six-permission ACL. FusionAuth answers a bad TOTP code with 404; a 401/403
+    # means the key was refused before the MFA check ever ran. Scoring such a
+    # response as "not 200, therefore the wrong code was rejected" would launder
+    # an authorization failure into behavioral evidence -- the exact error this
+    # investigation exists to avoid. See SP_API_REGISTRATION_REMEDIATION.md §47.
+    UNAUTHORIZED = (401, 403)
+    two_factor_unauthorized = False
 
-    # M-05: wrong TOTP code rejected.
-    if two_factor_id:
-        status, _ = complete_two_factor_login(client, two_factor_id=two_factor_id, code=wrong_totp_code(secret))
-        findings.append(
-            Finding(
-                "M-05",
-                Status.PASS if status not in (200,) else Status.FAIL,
-                f"invalid TOTP code -> status={status} (expected not 200)",
-            )
+    if not two_factor_id:
+        findings.append(Finding("M-05", Status.BLOCKED, "no twoFactorId from M-04 to challenge"))
+        findings.append(Finding("M-06", Status.BLOCKED, "no twoFactorId from M-04 to challenge"))
+        findings.append(Finding("M-07", Status.NOT_TESTED, "depends on M-06"))
+    else:
+        status, _ = complete_two_factor_login(
+            client, two_factor_id=two_factor_id, code=wrong_totp_code(secret)
         )
-        # M-06 / M-07: correct code completes login, only now does a token issue.
-        status, body = login(client, login_id=login_id, password=password, application_id=application_id)
-        two_factor_id_2 = body.get("twoFactorId")
-        if two_factor_id_2:
-            status, body = complete_two_factor_login(client, two_factor_id=two_factor_id_2, code=totp_code(secret))
-            token_issued = "token" in body
+        if status in UNAUTHORIZED:
+            two_factor_unauthorized = True
+            findings.append(
+                Finding(
+                    "M-05",
+                    Status.BLOCKED,
+                    f"status={status} on POST /api/two-factor/login -- rejected before the "
+                    "MFA check; this is not evidence about TOTP validation",
+                )
+            )
+        else:
+            findings.append(
+                Finding(
+                    "M-05",
+                    Status.PASS if status != 200 else Status.FAIL,
+                    f"invalid TOTP code -> status={status} (expected not 200)",
+                )
+            )
+
+        if two_factor_unauthorized:
             findings.append(
                 Finding(
                     "M-06",
-                    Status.PASS if status == 200 and token_issued else Status.FAIL,
-                    f"valid TOTP code -> status={status}, token issued={token_issued}",
+                    Status.BLOCKED,
+                    "POST /api/two-factor/login is not authorized for this key",
                 )
             )
             findings.append(
                 Finding(
                     "M-07",
-                    Status.PASS if token_issued else Status.FAIL,
-                    "token was issued only after the second factor completed, not at the first /api/login call",
+                    Status.BLOCKED,
+                    "token issuance could not be observed: the second-factor call was "
+                    "rejected at the authorization layer",
                 )
             )
         else:
-            findings.append(Finding("M-06", Status.BLOCKED, "could not obtain a second twoFactorId to test the correct code"))
-            findings.append(Finding("M-07", Status.NOT_TESTED, "depends on M-06"))
-    else:
-        findings.append(Finding("M-05", Status.BLOCKED, "no twoFactorId from M-04 to challenge"))
-        findings.append(Finding("M-06", Status.BLOCKED, "no twoFactorId from M-04 to challenge"))
-        findings.append(Finding("M-07", Status.NOT_TESTED, "depends on M-06"))
+            status, body = login(
+                client, login_id=login_id, password=password, application_id=application_id
+            )
+            two_factor_id_2 = body.get("twoFactorId")
+            if not two_factor_id_2:
+                findings.append(Finding("M-06", Status.BLOCKED, "could not obtain a second twoFactorId to test the correct code"))
+                findings.append(Finding("M-07", Status.NOT_TESTED, "depends on M-06"))
+            else:
+                status, body = complete_two_factor_login(
+                    client, two_factor_id=two_factor_id_2, code=totp_code(secret)
+                )
+                token_issued = "token" in body
+                if status in UNAUTHORIZED:
+                    findings.append(
+                        Finding(
+                            "M-06",
+                            Status.BLOCKED,
+                            f"status={status} on POST /api/two-factor/login -- rejected "
+                            "before the MFA check; not evidence about TOTP validation",
+                        )
+                    )
+                    findings.append(
+                        Finding(
+                            "M-07",
+                            Status.BLOCKED,
+                            "token issuance could not be observed: the second-factor call "
+                            "was rejected at the authorization layer",
+                        )
+                    )
+                else:
+                    findings.append(
+                        Finding(
+                            "M-06",
+                            Status.PASS if status == 200 and token_issued else Status.FAIL,
+                            f"valid TOTP code -> status={status}, token issued={token_issued}",
+                        )
+                    )
+                    findings.append(
+                        Finding(
+                            "M-07",
+                            Status.PASS if token_issued else Status.FAIL,
+                            "token was issued only after the second factor completed, not at the first /api/login call",
+                        )
+                    )
 
     # L-02: wrong password, (threshold - 1) times -> not yet locked.
     for _ in range(too_many_attempts - 1):
@@ -501,7 +562,19 @@ def run_lockout_and_mfa_sequence(client: Client, application_id: str, *, too_man
 
     # L-04: correct credentials while locked must NOT bypass the lock.
     status, body = login(client, login_id=login_id, password=password, application_id=application_id)
-    if status not in (200, 242):
+    if status in (401, 403):
+        # Rejected before the credential was ever evaluated. FusionAuth answers
+        # a bad credential with 404, not 401, so a 401 here is the API key
+        # lacking POST /api/login -- it is not evidence that the lock held.
+        findings.append(
+            Finding(
+                "L-04",
+                Status.BLOCKED,
+                f"status={status} on POST /api/login -- rejected at the authorization "
+                "layer, before any credential check; this is not evidence about lockout",
+            )
+        )
+    elif status not in (200, 242):
         findings.append(Finding("L-04", Status.PASS, f"correct password while locked -> status={status} (not 200/242, lockout held)"))
     else:
         findings.append(Finding("L-04", Status.FAIL, f"correct password while locked -> status={status}, lockout did NOT hold"))

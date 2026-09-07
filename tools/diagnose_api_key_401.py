@@ -355,10 +355,15 @@ def classify(results: list[Result]) -> tuple[str, str]:
         labels = ", ".join(r.probe.label for r in non_401)
         return (
             "AUTHENTICATION_CONFIRMED_OK",
-            "The key value authenticates: it produced a non-401 status on "
-            f"{len(non_401)} granted endpoint(s) ({labels}). Every remaining 401 "
-            "is therefore an authorization result, not a bad credential. "
-            "H10 (wrong/stale operator-held secret) is ELIMINATED.",
+            "The value used in THIS run authenticates: it produced a non-401 "
+            f"status on {len(non_401)} granted endpoint(s) ({labels}). Any "
+            "remaining 401 in this run is therefore an authorization result, "
+            "not a bad credential.\n"
+            "  Scope: this says nothing about any OTHER credential. It does not "
+            "establish that some previously captured value corresponds to its "
+            "intended row, and it does not eliminate the custody/provenance "
+            "hypothesis for historical keys -- only that the runtime accepted "
+            "the value presented here.",
         )
 
     return (

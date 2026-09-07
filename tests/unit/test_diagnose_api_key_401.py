@@ -161,7 +161,9 @@ def test_all_granted_401_yields_no_authentication_evidence_not_a_cause():
 def test_one_non_401_grant_proves_authentication_works():
     verdict, explanation = diag.classify(_results({"/api/application/": 200}))
     assert verdict == "AUTHENTICATION_CONFIRMED_OK"
-    assert "H10" in explanation and "ELIMINATED" in explanation
+    assert "THIS run" in explanation
+    # Must NOT generalise to other credentials (see SP_API §47.3).
+    assert "does not eliminate the custody/provenance hypothesis" in explanation
 
 
 def test_a_400_also_proves_authentication_works():
