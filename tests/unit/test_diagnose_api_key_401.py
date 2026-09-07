@@ -413,3 +413,36 @@ def test_clean_key_that_still_401s_is_not_blamed_on_transport(patched, capsys):
     out = capsys.readouterr().out
     assert "credential transport check" not in out
     assert "NO_AUTHENTICATION_EVIDENCE_OBTAINED" in out
+
+
+# --- exit codes as a machine-checkable gate --------------------------------
+#
+# A live behavioral run is chained behind this check with `&&`. If a failed
+# check exited 0, the live writes would start against an unauthenticated
+# credential and every case would be BLOCKED -- or worse, misread. These
+# codes are load-bearing, not cosmetic.
+
+
+def test_exit_code_0_only_when_authentication_confirmed(patched):
+    patched({"/api/application": 200})
+    assert diag.main(["--application-id", APP_ID, "--profile", "diagnostic"]) == 0
+
+
+def test_exit_code_1_when_no_authentication_evidence(patched):
+    patched({})
+    assert diag.main(["--application-id", APP_ID, "--profile", "diagnostic"]) == 1
+
+
+def test_exit_code_2_when_server_unreachable(patched, monkeypatch):
+    def refuse(request, timeout=None):
+        raise urllib.error.URLError("connection refused")
+
+    monkeypatch.setattr(urllib.request, "urlopen", refuse)
+    monkeypatch.setenv("JUVAL_IDP_API_KEY", SECRET)
+    assert diag.main(["--application-id", APP_ID, "--profile", "diagnostic"]) == 2
+
+
+def test_exit_code_2_when_key_missing(patched, monkeypatch):
+    patched({})
+    monkeypatch.delenv("JUVAL_IDP_API_KEY", raising=False)
+    assert diag.main(["--application-id", APP_ID]) == 2

@@ -480,7 +480,13 @@ def main(argv: Optional[list[str]] = None) -> int:
             "before drawing any other conclusion."
         )
 
-    return 0 if verdict != "INCONCLUSIVE" else 2
+    # Exit codes are a machine-checkable gate, so a caller can chain a live
+    # run behind this check with `&&` and have it refuse to start unless
+    # authentication was actually confirmed:
+    #   0 = AUTHENTICATION_CONFIRMED_OK
+    #   1 = NO_AUTHENTICATION_EVIDENCE_OBTAINED
+    #   2 = INCONCLUSIVE (server unreachable, or no key supplied)
+    return {"AUTHENTICATION_CONFIRMED_OK": 0, "INCONCLUSIVE": 2}.get(verdict, 1)
 
 
 if __name__ == "__main__":
