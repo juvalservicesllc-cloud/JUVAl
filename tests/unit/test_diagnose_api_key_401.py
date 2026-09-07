@@ -514,3 +514,69 @@ def test_behavioral_profile_selected_by_flag(patched):
     assert "/api/application" in paths
     assert "/api/login" in paths
     assert not any("/api/two-factor/login" in p for p in paths)
+
+
+# --- profile cannot affect credential transport (SP_API §51, Task 3) -------
+#
+# Three multi-grant keys failed the gate where a single-grant key passed. Before
+# attributing that to FusionAuth, the tool must be proven incapable of sending
+# the credential differently depending on which profile is selected.
+
+
+ALL_PROFILES = ("behavioral", "iv3", "bootstrap", "diagnostic")
+
+
+@pytest.mark.parametrize("profile", ALL_PROFILES)
+def test_authorization_header_is_byte_identical_in_every_profile(patched, profile):
+    recorder = patched({})
+    diag.main(["--application-id", APP_ID, "--profile", profile])
+    authed = [c["authorization"] for c in recorder.calls if c["authorization"] not in (None, diag.INVALID_KEY_CONTROL)]
+    assert authed, f"{profile} sent no authenticated request"
+    # Verbatim: not stripped, not re-encoded, not prefixed.
+    assert set(authed) == {SECRET}, f"{profile} mutated the key"
+
+
+@pytest.mark.parametrize("profile", ALL_PROFILES)
+def test_tenant_header_construction_is_identical_in_every_profile(patched, profile):
+    tenant = "5fcaaf07-8832-491a-a6e7-35d348a591b6"
+    recorder = patched({})
+    diag.main(["--application-id", APP_ID, "--profile", profile, "--tenant-id", tenant])
+    assert recorder.calls
+    assert {c["tenant"] for c in recorder.calls} == {tenant}, f"{profile} varied the tenant header"
+
+
+def test_a_key_with_surrounding_whitespace_is_still_sent_verbatim_first(patched):
+    """The sanitising retry must never replace the ORIGINAL attempt."""
+    import os
+
+    damaged = SECRET + " "
+    recorder = patched({})
+    os.environ["JUVAL_IDP_API_KEY"] = damaged
+    try:
+        diag.main(["--application-id", APP_ID, "--profile", "diagnostic"])
+    finally:
+        os.environ["JUVAL_IDP_API_KEY"] = SECRET
+    first_authed = next(c["authorization"] for c in recorder.calls
+                        if c["authorization"] not in (None, diag.INVALID_KEY_CONTROL))
+    assert first_authed == damaged, "the supplied value must be sent exactly as given"
+
+
+def test_send_has_no_profile_parameter():
+    """Structural guarantee: transport cannot branch on profile."""
+    import inspect
+
+    params = set(inspect.signature(diag.send).parameters)
+    assert params == {"base", "probe", "api_key", "tenant_id"}
+    assert "profile" not in params
+
+
+def test_profiles_differ_only_in_probes_not_in_credentials(patched):
+    """Same key, two profiles -> identical auth headers, different paths."""
+    a = patched({}); diag.main(["--application-id", APP_ID, "--profile", "behavioral"])
+    calls_a = list(a.calls)
+    b = patched({}); diag.main(["--application-id", APP_ID, "--profile", "bootstrap"])
+    calls_b = list(b.calls)
+    auth = lambda calls: {c["authorization"] for c in calls}
+    paths = lambda calls: {c["path"] for c in calls}
+    assert auth(calls_a) == auth(calls_b)
+    assert paths(calls_a) != paths(calls_b)
