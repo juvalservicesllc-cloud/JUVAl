@@ -201,7 +201,23 @@ class Client:
         self._api_key = api_key
         self._tenant_id = tenant_id
 
-    def request(self, method: str, path: str, body: Optional[dict] = None, *, scope_tenant: bool = True) -> tuple[int, dict]:
+    def request(
+        self,
+        method: str,
+        path: str,
+        body: Optional[dict] = None,
+        *,
+        scope_tenant: bool = True,
+        send_api_key: bool = True,
+    ) -> tuple[int, dict]:
+        """Issue one request. `send_api_key=False` omits the Authorization header.
+
+        Some FusionAuth endpoints are not gated by API-key permissions at all
+        and carry their own credential in the body. Sending a key there would
+        transmit it where it is neither required nor checked -- the same
+        least-privilege correction §38.1 made for `GET /api/status`, where the
+        fix was sending *fewer* credentials, not more.
+        """
         if method == "DELETE":
             raise IdentityVerificationError(
                 "this tool never issues DELETE -- see the module docstring's cleanup strategy"
@@ -209,7 +225,8 @@ class Client:
         url = f"{self._base}{path}"
         data = json.dumps(body).encode() if body is not None else None
         request = urllib.request.Request(url, data=data, method=method)
-        request.add_header("Authorization", self._api_key)
+        if send_api_key:
+            request.add_header("Authorization", self._api_key)
         request.add_header("Accept", "application/json")
         if data is not None:
             request.add_header("Content-Type", "application/json")
@@ -294,9 +311,26 @@ def enroll_totp(client: Client, *, user_id: str, secret: str) -> tuple[int, dict
 
 
 def complete_two_factor_login(client: Client, *, two_factor_id: str, code: str) -> tuple[int, dict]:
-    """POST /api/two-factor/login (OpenAPI 1.69.0: twoFactorLoginWithId)."""
+    """POST /api/two-factor/login (OpenAPI 1.69.0: twoFactorLoginWithId).
+
+    **Requires no API key**, and none is sent. This endpoint has no row in
+    FusionAuth 1.69.0's API-key endpoint-permission UI because it is not gated
+    by API-key permissions: the one-time `twoFactorId` issued by the preceding
+    `/api/login` 242 response *is* the credential, and the `code` proves the
+    second factor. Measured on the deployed 1.69.0 instance (§49.1): with no
+    `Authorization` header at all, an empty body returns `400` with a
+    `fieldErrors` object naming `twoFactorId` and `code` -- it routed, parsed
+    and validated. By contrast `/api/two-factor/start`, `/api/two-factor/send`
+    and `/api/user/two-factor/{id}`, which *do* have permission rows, return
+    `401` without a key.
+
+    So the key is deliberately withheld here: it would be transmitted to an
+    endpoint that neither requires nor checks it.
+    """
     body = {"twoFactorId": two_factor_id, "code": code}
-    return client.request("POST", "/api/two-factor/login", body, scope_tenant=False)
+    return client.request(
+        "POST", "/api/two-factor/login", body, scope_tenant=False, send_api_key=False
+    )
 
 
 def read_lockout_state(client: Client, *, user_id: str) -> tuple[int, dict]:
@@ -484,12 +518,17 @@ def run_lockout_and_mfa_sequence(client: Client, application_id: str, *, too_man
         findings.append(Finding("L-01", Status.FAIL, f"correct password did not yield the expected pre-2FA success signal (status={status})"))
     # M-05 / M-06 / M-07: the second-factor challenge.
     #
-    # POST /api/two-factor/login is a SEVENTH endpoint, outside the approved
-    # six-permission ACL. FusionAuth answers a bad TOTP code with 404; a 401/403
-    # means the key was refused before the MFA check ever ran. Scoring such a
-    # response as "not 200, therefore the wrong code was rejected" would launder
-    # an authorization failure into behavioral evidence -- the exact error this
-    # investigation exists to avoid. See SP_API_REGISTRATION_REMEDIATION.md §47.
+    # POST /api/two-factor/login needs no API key and is sent without one
+    # (§49.1, measured). Its behavioral contract:
+    #
+    #   404 -> unknown/expired twoFactorId, or wrong code  <- M-05's evidence
+    #   200 -> second factor completed, token issued       <- M-06/M-07
+    #   400 -> malformed request (a defect in this tool, not evidence)
+    #
+    # A 401/403 here would be anomalous, since no credential is presented that
+    # could be rejected. It is still treated as BLOCKED rather than PASS: an
+    # unexplained authorization refusal is an infrastructure failure, never
+    # behavioral evidence. Fail closed. See §47.5 and §49.
     two_factor_unauthorized = False
 
     if not two_factor_id:
@@ -506,8 +545,9 @@ def run_lockout_and_mfa_sequence(client: Client, application_id: str, *, too_man
                 Finding(
                     "M-05",
                     Status.BLOCKED,
-                    f"status={status} on POST /api/two-factor/login -- rejected before the "
-                    "MFA check; this is not evidence about TOTP validation",
+                    f"status={status} on POST /api/two-factor/login -- anomalous: this "
+                    "endpoint takes no API key, so an authorization refusal is "
+                    "unexplained. Not evidence about TOTP validation.",
                 )
             )
         else:
@@ -524,7 +564,8 @@ def run_lockout_and_mfa_sequence(client: Client, application_id: str, *, too_man
                 Finding(
                     "M-06",
                     Status.BLOCKED,
-                    "POST /api/two-factor/login is not authorized for this key",
+                    "POST /api/two-factor/login returned an anomalous authorization "
+                    "refusal on the M-05 probe; not re-attempted",
                 )
             )
             findings.append(
@@ -553,8 +594,9 @@ def run_lockout_and_mfa_sequence(client: Client, application_id: str, *, too_man
                         Finding(
                             "M-06",
                             Status.BLOCKED,
-                            f"status={status} on POST /api/two-factor/login -- rejected "
-                            "before the MFA check; not evidence about TOTP validation",
+                            f"status={status} on POST /api/two-factor/login -- anomalous: "
+                            "this endpoint takes no API key. Not evidence about TOTP "
+                            "validation.",
                         )
                     )
                     findings.append(

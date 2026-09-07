@@ -177,3 +177,94 @@ Playwright/MCP, que no abre el formulario Add API Key), Not Retrievable, Key
 Manager OFF, tenant `JUVAl`, expiración ≤24 h, y **revocada al terminar** la
 verificación. La expiración corta es respaldo, no el plan. No reutilizar
 `JUVAl Identity Verification` (IV1/IV2/IV3) ni ninguna key de bootstrap.
+
+---
+
+## Corrección 2026-09-07 (posterior) — son **seis** grants seleccionables, no siete
+
+**Estado: Aceptada.** Esta corrección **rectifica la enmienda anterior de la
+misma fecha**, que era incorrecta en su conclusión operativa.
+
+### El error
+
+La enmienda anterior afirmó que la credencial behavioral necesita **siete
+grants seleccionables** y que decir "seis" era una deriva. **Es al revés.**
+El error fue confundir dos conjuntos distintos:
+
+| conjunto | qué es | tamaño |
+|---|---|---|
+| endpoints que la herramienta ejerce | llamadas HTTP que `verify_identity_behavior.py` hace | **7** |
+| grants seleccionables en la ACL de una API key | filas que existen en la UI de permisos de FusionAuth | **6** |
+
+No son el mismo conjunto, y el ADR nunca dijo que lo fueran: su cuerpo lista
+*endpoints*, no *filas de ACL*. **Los seis aprobados por el usuario eran
+correctos desde el principio.**
+
+### La evidencia
+
+El operador observó que la UI de permisos de API key de FusionAuth 1.69.0 **no
+tiene fila** para `/api/two-factor/login`; la sección `/api/two-factor` sólo
+ofrece `secret`, `send`, `start` y `status`. Medido después contra la
+instancia desplegada (`SP_API_REGISTRATION_REMEDIATION.md` §49.1):
+
+| llamada | sin `Authorization` | con key inválida |
+|---|---|---|
+| `POST /api/two-factor/login`, body `{}` | **400** + `fieldErrors` (`twoFactorId`, `code`) | — |
+| `POST /api/two-factor/login`, id/código falsos | **404** | **404** |
+| `POST /api/two-factor/start` | `401` | — |
+| `POST /api/two-factor/send` | `401` | — |
+| `POST /api/user/two-factor/{id}` | `401` | — |
+| `POST /api/login`, `POST /api/user`, `GET /api/application` | `401` | `401` |
+
+Un `400` con `fieldErrors` **sin ninguna credencial** demuestra que la ruta
+existe, enruta, parsea y valida el cuerpo sin API key. La regla es exacta:
+**hay fila de permiso si y sólo si el endpoint está protegido por API key.**
+
+### El modelo de autenticación de `POST /api/two-factor/login`
+
+No requiere API key **por diseño**. El `twoFactorId` — token de un solo uso y
+vida corta que emite la respuesta `242` del `/api/login` previo — **es** la
+credencial, y el `code` prueba el segundo factor. Es el caso (d) de la
+pregunta del operador. Por eso no aparece en la ACL: no hay nada que conceder.
+
+### Consecuencia normativa
+
+La ACL de `JUVAL Behavioral Verification 1` es de **SEIS** grants
+seleccionables:
+
+| # | Método | Endpoint |
+|---|---|---|
+| 1 | `GET` | `/api/application` |
+| 2 | `POST` | `/api/user` |
+| 3 | `GET` | `/api/user/action` |
+| 4 | `POST` | `/api/user/registration` |
+| 5 | `POST` | `/api/user/two-factor` |
+| 6 | `POST` | `/api/login` |
+
+`POST /api/two-factor/login` se ejerce sin conceder nada, y la herramienta ya
+**no envía** la API key a ese endpoint (`send_api_key=False`) — enviarla la
+transmitiría donde ni se exige ni se comprueba. Misma corrección de mínimo
+privilegio que §38.1 hizo con `GET /api/status`: la solución es mandar *menos*
+credenciales, no más.
+
+**No se amplía ninguna ACL.** La regla operativa del cuerpo del ADR sigue
+intacta.
+
+### Qué sigue siendo válido de la enmienda anterior
+
+La regla de clasificación, que no dependía del recuento:
+
+```
+401 / 403  -> BLOCKED, nunca PASS de un test de política
+404 u otro status esperado -> evidencia behavioral sólo si el contrato del
+                              endpoint lo justifica explícitamente
+```
+
+Y las correcciones de falsos positivos en `verify_identity_behavior.py`, que
+eran reales y siguen siéndolo — pero **por otra razón** de la que se registró.
+`POST /api/user` y `POST /api/login` **sí** están protegidos por API key, así
+que P-02…P-06, C6-01/C6-02, M-01 y L-04 podían efectivamente convertir un
+`401` en `PASS`; §42.2 documentó que ocurrió. Lo que **no** podía pasar es el
+escenario que se atribuyó a M-05/M-06/M-07: ese endpoint nunca devuelve `401`
+por falta de permiso. La guardia se conserva como fail-closed ante un `401`
+anómalo, no como defensa de un permiso ausente.

@@ -706,3 +706,39 @@ def test_universal_401_produces_no_pass_anywhere(monkeypatch):
     passes = [f.case_id for f in findings if f.status == vib.Status.PASS]
     assert passes == [], f"401 produced PASS for: {passes}"
     assert all(f.status in (vib.Status.BLOCKED, vib.Status.NOT_TESTED) for f in findings)
+
+
+# --- POST /api/two-factor/login carries no API key -------------------------
+#
+# Measured on the deployed 1.69.0 instance (SP_API §49.1): with no
+# Authorization header, an empty body returns 400 with fieldErrors naming
+# twoFactorId and code -- it routed, parsed and validated. The endpoint has no
+# row in the API-key permission UI because it is not API-key gated; the
+# one-time twoFactorId is the credential. Sending the key there would transmit
+# it where it is neither required nor checked.
+
+
+def test_complete_two_factor_login_sends_no_authorization_header(monkeypatch):
+    fake = ScriptedFusionAuth([(200, {"token": "t"})])
+    monkeypatch.setattr(vib.urllib.request, "urlopen", fake)
+    vib.complete_two_factor_login(_client(fake), two_factor_id="tfid", code="123456")
+    headers = fake.calls[0]["headers"]
+    assert "Authorization" not in headers
+    assert "X-fusionauth-tenantid" not in headers
+
+
+def test_every_other_call_still_sends_the_api_key(monkeypatch):
+    fake = ScriptedFusionAuth([(200, {"user": {"id": "u1", "email": "a@b.invalid"}})])
+    monkeypatch.setattr(vib.urllib.request, "urlopen", fake)
+    vib.create_disposable_user(_client(fake), case_id="X", password="Vvz9!abcdefQx")
+    assert "Authorization" in fake.calls[0]["headers"]
+
+
+def test_send_api_key_false_is_the_only_way_to_omit_it(monkeypatch):
+    fake = ScriptedFusionAuth([(200, {}), (200, {})])
+    monkeypatch.setattr(vib.urllib.request, "urlopen", fake)
+    client = _client(fake)
+    client.request("POST", "/api/anything", {})
+    client.request("POST", "/api/anything", {}, send_api_key=False)
+    assert "Authorization" in fake.calls[0]["headers"]
+    assert "Authorization" not in fake.calls[1]["headers"]

@@ -3688,3 +3688,122 @@ SYNTHETIC USERS CREATED       = 0
 JUVAL_AUTH_MODE               = UNSET
 REAPPLICATION GATE            = BLOCKED
 ```
+
+## 49. Correction: the behavioral credential needs **six** selectable grants, not seven (2026-09-07)
+
+The operator stopped before creating the key: FusionAuth 1.69.0's API-key
+endpoint-permission UI has **no row** for `/api/two-factor/login`. The
+`/api/two-factor` section offers only `secret`, `send`, `start` and `status`.
+**No key was saved, no secret generated or captured, no live write performed.**
+
+This section corrects §47.5, §48.1 and the first ADR-032 amendment of the same
+date. **The operator's original six was correct; the "seven" in §48 was wrong.**
+
+### 49.1 Measured against the deployed instance
+
+Read-only, no API key involved, nothing created:
+
+| call | no `Authorization` | invalid key |
+|---|---|---|
+| `POST /api/two-factor/login`, body `{}` | **400** + `fieldErrors: {twoFactorId, code}` | — |
+| `POST /api/two-factor/login`, bogus id + code | **404** | **404** |
+| `POST /api/two-factor/start` | `401` | — |
+| `POST /api/two-factor/send` | `401` | — |
+| `POST /api/user/two-factor/{uuid}` | `401` | — |
+| `POST /api/login` | `401` | `401` |
+| `POST /api/user` | `401` | `401` |
+| `GET /api/application` | `401` | `401` |
+
+A `400` carrying a `fieldErrors` object **with no credential presented** proves
+the route exists, routes, parses and validates the body without an API key —
+ruling out "404 because the path is unknown" (a genuinely unknown path,
+`POST /api/two-factor/zzz-does-not-exist`, also 404s, which is why the empty-body
+probe was needed to disambiguate).
+
+The rule is exact and holds for every endpoint tested: **a permission row exists
+if and only if the endpoint is API-key gated.**
+
+### 49.2 Authoritative answer
+
+`POST /api/two-factor/login` (Complete Multi-Factor Authentication) **requires
+no API key, by design** — the operator's option **(d)**. The one-time,
+short-lived `twoFactorId` issued by the preceding `/api/login` `242` response
+*is* the credential, and `code` proves the second factor. There is nothing to
+grant, which is why the UI has no row. It is **not** authorized through
+`/api/login`, and none of `start`/`send`/`status`/`secret` is a substitute —
+they are different APIs and must not be enabled.
+
+`Authorization` should **not** be sent. The tool previously sent it; it now
+passes `send_api_key=False`. Transmitting a credential to an endpoint that
+neither requires nor checks it is the same least-privilege error §38.1
+corrected for `GET /api/status`, where the fix was sending *fewer* credentials.
+
+### 49.3 What I got wrong, precisely
+
+§48.1 claimed ADR-032 "always specified seven" and that saying six was drift.
+That conflated two different sets:
+
+| set | meaning | size |
+|---|---|---|
+| endpoints the tool exercises | HTTP calls `verify_identity_behavior.py` makes | **7** |
+| selectable API-key ACL grants | rows that exist in FusionAuth's permission UI | **6** |
+
+ADR-032's body lists *endpoints*; it never claimed they were all grantable. The
+inference from "the tool calls seven endpoints" to "the key needs seven grants"
+was mine, and it was wrong.
+
+The consequence for the false-positive analysis is narrower than it looks:
+
+* **Still valid, and the reason they were worth fixing** — `POST /api/user` and
+  `POST /api/login` *are* API-key gated (401 confirmed above), so P-02…P-06,
+  C6-01/C6-02, M-01 and **L-04** could genuinely turn a `401` into `PASS`.
+  §42.2 documented that actually happening.
+* **Wrongly attributed** — the M-05/M-06/M-07 scenario §47.5/§48 described
+  ("with six permissions the endpoint returns 401") **cannot occur**: that
+  endpoint never returns 401 for a missing permission. The code guard is kept,
+  but as fail-closed handling of an *anomalous* 401, not as cover for an absent
+  grant.
+
+The `401/403 → BLOCKED, never PASS` rule is unaffected and stands.
+
+### 49.4 M-05 / M-06 / M-07 evidence semantics
+
+| status | meaning | classification |
+|---|---|---|
+| `200` + `token` | second factor completed | M-06/M-07 `BEHAVIORALLY_VERIFIED` |
+| `404` | unknown/expired `twoFactorId`, or wrong code | **M-05's genuine evidence** — a real rejection |
+| `400` | malformed request | tool defect, not evidence → `FAIL` on the tool |
+| `401`/`403` | anomalous — no credential was presented that could be refused | `BLOCKED`, never `PASS` |
+
+### 49.5 Exact ACL the operator should enable — six switches
+
+| # | Method | Endpoint |
+|---|---|---|
+| 1 | `GET` | `/api/application` |
+| 2 | `POST` | `/api/user` |
+| 3 | `GET` | `/api/user/action` |
+| 4 | `POST` | `/api/user/registration` |
+| 5 | `POST` | `/api/user/two-factor` |
+| 6 | `POST` | `/api/login` |
+
+Everything else OFF. **Do not** enable `/api/two-factor/secret`, `/send`,
+`/start` or `/status` — none of them substitutes for `/api/two-factor/login`,
+and the tool calls none of them. No ACL is broadened by this correction; it is
+one grant *smaller* than §48 proposed.
+
+### 49.6 Status
+
+```
+SELECTABLE ACL GRANTS REQUIRED = 6 (corrected from 7)
+ENDPOINTS EXERCISED BY TOOL    = 7 (unchanged; one needs no grant)
+POST /api/two-factor/login     = NO API KEY REQUIRED (measured, §49.1)
+                                 tool now sends none (send_api_key=False)
+ADR-032                        = corrected; prior same-day amendment rectified
+BEHAVIORAL CREDENTIAL          = not created; no secret generated or captured
+LIVE BEHAVIORAL EXECUTION      = NOT RUN
+401-as-PASS FALSE POSITIVES    = CLOSED tool-wide (unchanged, still valid)
+CONTROL_6                      = B - PARTIALLY_SATISFIED (unchanged)
+SYNTHETIC USERS CREATED        = 0
+JUVAL_AUTH_MODE                = UNSET
+REAPPLICATION GATE             = BLOCKED
+```
