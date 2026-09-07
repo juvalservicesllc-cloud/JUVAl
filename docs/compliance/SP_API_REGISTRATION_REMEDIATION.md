@@ -3905,3 +3905,95 @@ SYNTHETIC USERS CREATED       = 0
 JUVAL_AUTH_MODE               = UNSET
 REAPPLICATION GATE            = BLOCKED
 ```
+
+## 51. IV1 falsifies the leading hypothesis: no structural discriminator exists (2026-09-07)
+
+Read-only projection of every `authentication_keys` row, `key_value` never
+selected. **Nothing was created, modified, deleted or restarted.**
+
+### 51.1 The falsification
+
+`JUVAl Identity Verification` (IV1, `d0f26756`) is **tenant-scoped**, holds
+**six** persisted grants, and its permissions payload is **byte-identical** to
+IV3's and Behavioral 2's — same 178 characters, same key order, same compact
+serialisation, same `key_format`, same `key_manager`:
+
+```
+{"endpoints":{"/api/application":["GET"],"/api/login":["POST"],"/api/user":["POST"],
+"/api/user/action":["GET"],"/api/user/registration":["POST"],"/api/user/two-factor":["POST"]}}
+```
+
+§42.2 records IV1 returning **`HTTP 200`** on `GET /api/application/{id}`.
+
+A tenant-scoped, six-grant key with this exact payload therefore **did
+authenticate**. `tenant-scoped + multi-grant` is **ELIMINATED**, and with it
+the last structural hypothesis. **VERIFIED.**
+
+### 51.2 Answers
+
+| # | Question | Answer | Class |
+|---|---|---|---|
+| 1 | IV1's persisted grants | **six** | VERIFIED |
+| 2 | IV1 tenant-scoped? | **yes**, `5fcaaf07-...` | VERIFIED |
+| 3 | IV1 vs IV3/Behavioral 2 | **byte-identical payloads**, identical `key_format`/`key_manager` | VERIFIED |
+| 4 | `permissions_type` uniform? | **`text` for every row**, working and failing alike | VERIFIED |
+| 5 | Truncation/duplication? | **none** — every `perms_len` matches its literal exactly (178/178/178/178, 127/127, 152, 113), all parse as valid JSON | VERIFIED |
+| 6 | Serialisation/order anomaly? | **none** among operator-created keys — all compact, same order. Only FusionAuth's own internal key (`24307c7f`) uses spaced separators, written by a different install-time path | VERIFIED |
+| 7 | tenant-scoped + multi-grant viable? | **NO — eliminated by IV1** | VERIFIED |
+| 8 | Feature shared only by failed keys? | **None in any authentication-relevant column.** One non-causal marker only — see §51.3 | VERIFIED |
+
+### 51.3 The one marker that separates them, and why it is not a cause
+
+`name` carries a trailing space on both failed keys and on neither confirmed
+working key:
+
+| key | trailing space in `name` | authenticated |
+|---|---|---|
+| `de00c6d3` bootstrap | no | **yes** (§38/§40) |
+| `d0f26756` IV1 | no | **yes** (§42.2) |
+| `03239bf9` IV3 | **yes** | **no** |
+| `83136b5d` Behavioral 2 | **yes** | **no** |
+| `ccd38e21` bootstrap | **yes** | never individually tested |
+
+FusionAuth does not authenticate by name, so this **cannot be causal**. It is
+a proxy for how the form was filled: stray whitespace reaching the `name`
+field shows the capture session carried extra characters. It does **not** show
+the key value was mis-captured, and `ccd38e21` carries the marker without a
+known outcome, so the partition is not even clean. **NOT CONFIRMED — an
+indicator, not evidence.** Two caveats: n=4, and the trailing spaces were read
+from text pasted through a chat transport that can itself add or strip them.
+`SELECT id, length(name) FROM authentication_keys;` would confirm them at zero
+risk.
+
+### 51.4 A limit of the tooling, stated plainly
+
+`transport_faults()` detects surrounding/embedded whitespace, CR, LF,
+non-ASCII and control characters (ESC included, so bracketed paste is covered).
+It **cannot detect truncation**: a key missing leading or trailing characters
+is still clean ASCII and passes silently. Earlier passes recorded "transport
+corruption eliminated" — that claim held only for the classes checked and
+never covered truncation. Corrected here.
+
+### 51.5 Hypothesis table
+
+| hypothesis | state | supporting | contradicting | falsifier |
+|---|---|---|---|---|
+| General API-key runtime defect | **ELIMINATED** | — | Diagnostic 2 authenticated post-restart, ACL enforced both ways | done |
+| Tool transport defect | **ELIMINATED** | — | 11 tests: `send()` has no profile parameter; header byte-identical across profiles | done |
+| Multi-grant general defect | **ELIMINATED** | — | `de00c6d3`: 4 endpoints, 9 methods, worked | done |
+| Tenant-scoped + multi-grant | **ELIMINATED** | — | **IV1: tenant-scoped, 6 grants, byte-identical payload, `200`** | done (§51.1) |
+| Row-specific stored-material defect | **NOT CONFIRMED, weakened** | three perfect rows fail | requires three independent storage faults within one hour; every readable column is correct | only `key_value` — prohibited, so likely permanently undecidable |
+| **Operator capture failure** | **SUPPORTED INFERENCE — last standing** | every alternative eliminated; Not Retrievable makes capture one-shot and silent; truncation is undetectable by current tooling (§51.4); trailing-space marker (§51.3) | Diagnostic 2 captured correctly by the same hand in the same session | a Retrievable key whose stored value the operator can re-read and compare locally |
+| Historical/runtime state transition | **NOT CONFIRMED, weak** | multi-grant successes predate the 2026-09-07 restart | IV3 failed before it too | a pre-restart multi-grant key authenticating now |
+
+`ROOT CAUSE = NOT CONFIRMED.` Capture failure is the only hypothesis still
+standing, and it stands by **elimination**, not by direct evidence.
+
+### 51.6 Cleanup confirmed
+
+`JUVAL Behavioral Verification 1` (`25a48117`) and `JUVAL API KEY Diagnostic 2`
+(`fdc7ae7d`) are **absent** from the projection — both deletions are done.
+Remaining: three bootstrap keys (VALID to 2026-09-10), IV1/IV2 (EXPIRED), IV3
+and Behavioral 2 (VALID to 2026-09-09), plus FusionAuth's own internal key.
+IV3 and Behavioral 2 are non-functioning credentials still valid for two days
+and are candidates for revocation.
