@@ -149,11 +149,12 @@ def _results(statuses: dict[str, int]) -> list:
     return out
 
 
-def test_all_granted_401_indicates_authentication_failure():
+def test_all_granted_401_yields_no_authentication_evidence_not_a_cause():
+    """401 everywhere is an absence of evidence, never a proof of a bad key."""
     verdict, explanation = diag.classify(_results({}))
-    assert verdict == "AUTHENTICATION_FAILURE_INDICATED"
-    assert "leading hypothesis" in explanation
-    assert "NOT proof of a FusionAuth defect" in explanation
+    assert verdict == "NO_AUTHENTICATION_EVIDENCE_OBTAINED"
+    assert "no evidence" in explanation
+    assert "(c) the key is stored correctly" in explanation
 
 
 def test_one_non_401_grant_proves_authentication_works():
@@ -171,7 +172,7 @@ def test_a_400_also_proves_authentication_works():
 def test_control_endpoint_status_does_not_affect_the_verdict():
     """A 401 on the not-granted control is expected and must not count."""
     verdict, _ = diag.classify(_results({"NOT granted": 401}))
-    assert verdict == "AUTHENTICATION_FAILURE_INDICATED"
+    assert verdict == "NO_AUTHENTICATION_EVIDENCE_OBTAINED"
 
 
 def test_unreachable_server_is_inconclusive_not_a_verdict():
@@ -298,9 +299,62 @@ def test_sanitising_a_whitespace_damaged_key_is_reported_as_root_cause(monkeypat
     assert SECRET not in out
 
 
+# --- bootstrap profile ----------------------------------------------------
+
+
+def test_bootstrap_profile_probes_only_bootstrap_grants():
+    probes = diag.build_bootstrap_probes(APP_ID)
+    granted = [p.path for p in probes if p.granted]
+    assert any(p == "/api/tenant" for p in granted)
+    assert any(p == "/api/application" for p in granted)
+    assert any(p.startswith("/api/application/84f0") for p in granted)
+    assert any(p == "/api/jwt/vend" for p in granted)
+    # None of the IV3-only user endpoints may appear as a *grant*.
+    assert not any("/api/user" in p for p in granted)
+
+
+def test_bootstrap_profile_control_is_a_user_endpoint():
+    controls = [p for p in diag.build_bootstrap_probes(APP_ID) if not p.granted]
+    assert len(controls) == 1
+    assert "/api/user/action" in controls[0].path
+
+
+def test_bootstrap_profile_is_read_only_except_an_invalid_jwt_vend():
+    for probe in diag.build_bootstrap_probes(APP_ID):
+        if probe.method == "POST":
+            assert probe.path == "/api/jwt/vend"
+            assert probe.body == {}, "must fail validation and mint nothing"
+
+
+def test_bootstrap_profile_selected_by_flag(patched):
+    recorder = patched({})
+    diag.main(["--application-id", APP_ID, "--profile", "bootstrap"])
+    paths = {c["path"] for c in recorder.calls}
+    assert "/api/tenant" in paths
+    assert "/api/jwt/vend" in paths
+    assert not any(p.startswith("/api/login") for p in paths)
+
+
+def test_default_profile_is_iv3(patched):
+    recorder = patched({})
+    diag.main(["--application-id", APP_ID])
+    paths = {c["path"] for c in recorder.calls}
+    assert "/api/user" in paths
+    assert "/api/jwt/vend" not in paths
+
+
+def test_bootstrap_tenant_200_proves_authentication(patched, capsys):
+    """The §39.2 sanity row: a 200 here means the key value authenticates."""
+    patched({"/api/tenant": 200})
+    diag.main(["--application-id", APP_ID, "--profile", "bootstrap"])
+    out = capsys.readouterr().out
+    assert "AUTHENTICATION_CONFIRMED_OK" in out
+    assert SECRET not in out
+
+
 def test_clean_key_that_still_401s_is_not_blamed_on_transport(patched, capsys):
     patched({})
     diag.main(["--application-id", APP_ID])
     out = capsys.readouterr().out
     assert "credential transport check" not in out
-    assert "AUTHENTICATION_FAILURE_INDICATED" in out
+    assert "NO_AUTHENTICATION_EVIDENCE_OBTAINED" in out

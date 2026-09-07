@@ -3204,3 +3204,102 @@ The output prints only endpoint names and status codes. Two outcomes:
 Only after a non-401 is obtained does `tools/verify_identity_behavior.py`
 become meaningful; running it now would classify a transport failure as a
 password-policy result.
+
+## 44. The three bootstrap rows characterised; §39's "granted but unenforced" reading does not survive it (2026-09-07)
+
+The operator ran one approved read-only query as `postgres` (nine non-secret
+columns; `key_value` never selected). **No database, FusionAuth, key or
+frontend state changed.**
+
+### 44.1 The three rows
+
+| id | name | `tenants_id` | expires (UTC) | state | created (UTC) | last updated (UTC) | fmt | km | endpoints |
+|---|---|---|---|---|---|---|---|---|---|
+| `903366c8` | `JUVAl Bootstrap` | **NULL** | 2026-09-10 16:00 | **VALID** | 09-01 00:49:55 | 09-01 00:49:55 (never edited) | 1 | f | `/api/application` POST GET PATCH · `/api/application/role` POST · `/api/tenant` POST GET PATCH |
+| `ccd38e21` | `JUVAl Bootstrap` | **NULL** | 2026-09-10 16:00 | **VALID** | 09-01 14:58:08 | 09-01 14:58:08 (never edited) | 1 | f | identical to above |
+| `de00c6d3` | `JUVAl bootstrap` | **NULL** | 2026-09-10 16:00 | **VALID** | 09-01 15:10:07 | **09-01 16:23:35 (edited)** | 1 | f | above **+ `/api/jwt/vend` POST** |
+
+Clock at the time of the query: `2026-09-07 17:54 UTC`. All three are
+unscoped, unexpired, `key_format=1`, not key managers. `de00c6d3` is the
+documented-functional row: it is the only one carrying `/api/jwt/vend`, which
+is what §40 exercised, and the only one ever edited. Note the name case —
+`de00c6d3` is lower-case `bootstrap`; the other two are capital `Bootstrap`.
+
+### 44.2 (B) The bootstrap 401 is not explained by any property of these rows
+
+| Candidate explanation | Verdict |
+|---|---|
+| Expiration | **ELIMINATED** — all three valid until 2026-09-10 16:00Z, three days out |
+| The held secret belongs to a different one of the three | **ELIMINATED as an explanation of the observed call** — the operator probed `GET /api/application/{id}`, and **all three rows grant `/api/application` GET**. Whichever row the value belongs to, that call should not have 401'd |
+| Different permissions | **ELIMINATED** — identical on that endpoint across all three |
+| Tenant-scope mismatch | **ELIMINATED** — all three `tenants_id` NULL, so no tenant context is required or can conflict |
+
+Two explanations survive, and status codes cannot separate them: the held
+value is **not** any of the three stored values, or the runtime lookup /
+verification is at fault. §38 records that the working bootstrap value was
+"never persisted" — it existed only in that session's environment — so the
+provenance of the currently-held value is genuinely unproven, exactly as the
+operator stated.
+
+### 44.3 §39 → §40 re-read: the strongest support for H9 dissolves
+
+This investigation has carried, since §40, an unexplained precedent: a
+permission the operator had granted was "not observably in effect" until a
+re-save, cause never determined. That precedent is what made "correctly
+persisted but unenforced" seem plausible for IV3, and it is what justified
+five key-creation attempts.
+
+The row data undercuts it. `de00c6d3` is **the only row with `/api/jwt/vend`**
+and **the only row ever edited**, and its edit timestamps bracket §39 and §40
+exactly: §39 observed `POST /api/jwt/vend` → 401, the operator then went into
+the admin UI, the row was updated at 16:23:35, and §40 observed 200. The
+mundane reading — the grant was genuinely absent when §39 tested it, and the
+operator's edit **added** it — fits every recorded fact, and §39.2's own
+candidate list named it ("the grant did not save"; "saved on a different key",
+and two other bootstrap rows do exist, neither carrying `jwt/vend`).
+
+This is **SUPPORTED, not CONFIRMED**: proving it requires the audit-log diffs
+for `de00c6d3` at 15:54:26 and 16:23:35, which are unread (browser CDP is
+down, `audit_logs` needs privilege). But it removes the only evidence ever
+offered that FusionAuth fails to enforce a correctly persisted grant.
+**H9 therefore has no supporting precedent — it is UNRESOLVED, not eliminated,
+and now rests on no positive evidence at all.**
+
+### 44.4 What would make a runtime defect provable
+
+`de00c6d3` has not been modified since 2026-09-01 16:23:35, has not expired,
+and runs on a process that has not restarted since 2026-08-26 22:19 (PID
+25656, verified). §39.2 recorded `GET /api/tenant` with that key returning
+`200`. So **if** the held value is genuinely `de00c6d3`'s, a 401 on that same
+call today would be a change in behaviour with no change in data,
+configuration or process — which would be real evidence for H11/H9. If it is
+not that value, the result says nothing. The provenance gap is the whole
+difficulty, and it cannot be closed from status codes.
+
+### 44.5 Matrix delta
+
+| # | Hypothesis | Change |
+|---|---|---|
+| H4 | Expiration | **ELIMINATED for the bootstrap rows too** — all three valid |
+| H9 | FusionAuth 1.69.0 enforcement defect | **UNRESOLVED, and its only precedent is withdrawn** (§44.3). Not eliminated |
+| H9b | Tenant-scoping | **ELIMINATED** — the bootstrap keys are unscoped (`tenants_id` NULL) and fail too |
+| H10 | Wrong / stale / malformed held secret | **SUPPORTED, NOT CONFIRMED** — unchanged in strength. The trailing space in IV3's *name* shows manual-entry risk; it does **not** show secret corruption |
+| H11 | Runtime lookup / cache / verification | **UNRESOLVED, now materially more interesting** — two independent credentials, both against correctly-persisted unexpired rows, produce identical 401s |
+
+`ROOT CAUSE = NOT CONFIRMED.` The IV3 `MIS-SCOPED` classification stays
+withdrawn. No mutation is justified by anything in this pass.
+
+### 44.6 Tooling
+
+`tools/diagnose_api_key_401.py` gained `--profile bootstrap`, probing the
+bootstrap grants (`GET /api/tenant`, `GET /api/application`, `GET
+/api/application/{id}`, `POST /api/jwt/vend` with an empty body that mints
+nothing) plus a not-granted control. `GET /api/tenant` is the point: it is the
+one call with a documented working result to compare against.
+
+The all-401 verdict was renamed `NO_AUTHENTICATION_EVIDENCE_OBTAINED` and now
+states explicitly that it cannot distinguish (a) a value that is no stored
+key, (b) a correct value damaged in capture, or (c) a correctly stored key
+with a faulty runtime lookup — and that it licenses no rotation, no ACL
+change and no root-cause claim. 33 unit tests; secret still never printed,
+persisted, hashed or measured.

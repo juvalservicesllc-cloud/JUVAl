@@ -146,8 +146,66 @@ class Result:
         return self.status == 401
 
 
+def build_bootstrap_probes(application_id: str) -> list[Probe]:
+    """Probe set for the unscoped `JUVAl bootstrap` keys (§43.9).
+
+    All three bootstrap rows grant `/api/application` and `/api/tenant`
+    (GET/POST/PATCH); only `de00c6d3` also grants `/api/jwt/vend`. Every probe
+    here is a read, except `POST /api/jwt/vend` with an empty body, which
+    fails validation and mints no token.
+
+    `GET /api/tenant` is the point of this profile: §39.2 recorded exactly that
+    call returning `200` on 2026-09-01, and the row has not been modified since
+    16:23:35 that day, has not expired, and sits on a process that has not
+    restarted. It is the one call with a documented working result to compare
+    against.
+    """
+    return [
+        Probe(
+            label="GET /api/tenant  (§39.2 recorded 200)",
+            method="GET",
+            path="/api/tenant",
+            body=None,
+            granted=True,
+            expected_if_working="200",
+        ),
+        Probe(
+            label="GET /api/application",
+            method="GET",
+            path="/api/application",
+            body=None,
+            granted=True,
+            expected_if_working="200",
+        ),
+        Probe(
+            label="GET /api/application/{id}",
+            method="GET",
+            path=f"/api/application/{application_id}",
+            body=None,
+            granted=True,
+            expected_if_working="200",
+        ),
+        Probe(
+            label="POST /api/jwt/vend (empty body; de00c6d3 only)",
+            method="POST",
+            path="/api/jwt/vend",
+            body={},
+            granted=True,
+            expected_if_working="400 (401 if not the de00c6d3 row)",
+        ),
+        Probe(
+            label="GET /api/user/action (NOT granted -- control)",
+            method="GET",
+            path=f"/api/user/action?userId={uuid.uuid4()}",
+            body=None,
+            granted=False,
+            expected_if_working="401",
+        ),
+    ]
+
+
 def build_probes(application_id: str, *, skip_login: bool) -> list[Probe]:
-    """Return the probe set. Random UUIDs guarantee the targets do not exist."""
+    """Return the IV3 probe set. Random UUIDs guarantee the targets do not exist."""
     absent_user = str(uuid.uuid4())
     absent_login = f"juval-diagnostic-{uuid.uuid4()}@invalid.example"
 
@@ -265,14 +323,18 @@ def classify(results: list[Result]) -> tuple[str, str]:
         )
 
     return (
-        "AUTHENTICATION_FAILURE_INDICATED",
-        f"All {len(granted)} granted endpoints returned 401. Because the ACL is "
-        "independently proven persisted (UI + Audit Log + "
-        "authentication_keys.permissions agree), an authorization explanation "
-        "requires six separately-stored grants to be unenforced at once, while "
-        "an authentication explanation requires one fault: the key value held by "
-        "the caller is not the value FusionAuth stored. H10 becomes the leading "
-        "hypothesis. This is NOT proof of a FusionAuth defect.",
+        "NO_AUTHENTICATION_EVIDENCE_OBTAINED",
+        f"All {len(granted)} granted endpoints returned 401, so this run "
+        "produced no evidence that the supplied value ever authenticated. That "
+        "is the limit of what it shows. It does NOT by itself identify which "
+        "of these is true, and they are not distinguishable from status codes "
+        "alone:\n"
+        "    (a) the value is not any key FusionAuth stores;\n"
+        "    (b) the value is a correct key that was damaged in capture;\n"
+        "    (c) the key is stored correctly and the runtime lookup or "
+        "verification is at fault.\n"
+        "  Do not declare a root cause, rotate the key, or broaden the ACL on "
+        "the strength of this result.",
     )
 
 
@@ -286,6 +348,12 @@ def main(argv: Optional[list[str]] = None) -> int:
         help="omit the POST /api/login probe (its only side effect is a "
         "failed-login record against a login id that matches no user)",
     )
+    parser.add_argument(
+        "--profile",
+        choices=("iv3", "bootstrap"),
+        default="iv3",
+        help="which key's granted endpoints to probe (default: iv3)",
+    )
     args = parser.parse_args(argv)
 
     api_key = os.environ.get("JUVAL_IDP_API_KEY")
@@ -297,9 +365,13 @@ def main(argv: Optional[list[str]] = None) -> int:
         )
         return 2
 
-    probes = build_probes(args.application_id, skip_login=args.skip_login)
+    if args.profile == "bootstrap":
+        probes = build_bootstrap_probes(args.application_id)
+    else:
+        probes = build_probes(args.application_id, skip_login=args.skip_login)
 
     print(f"base = {args.base}")
+    print(f"profile = {args.profile}")
     print("(the API key value is never printed, hashed or persisted)\n")
 
     print("--- baseline controls -------------------------------------------")
