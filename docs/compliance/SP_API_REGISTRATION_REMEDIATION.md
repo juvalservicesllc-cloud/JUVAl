@@ -3303,3 +3303,69 @@ key, (b) a correct value damaged in capture, or (c) a correctly stored key
 with a faulty runtime lookup — and that it licenses no rotation, no ACL
 change and no root-cause claim. 33 unit tests; secret still never printed,
 persisted, hashed or measured.
+
+## 45. IV1 vs IV3: a near-controlled comparison on one endpoint (2026-09-07)
+
+No state changed. This is a re-read of evidence already in this document.
+
+### 45.1 The comparison
+
+§42.2 records IV1 (`JUVAl Identity Verification`, `d0f26756`) returning
+**`200`** on `GET /api/application/84f077a0-...` — with a sanity row of its
+own, so IV1's key value demonstrably authenticated, and its 401s on
+`POST /api/user` / `GET /api/user/action` were genuine authorization results.
+
+IV3 returns **`401`** on that same call.
+
+| | IV1 | IV3 |
+|---|---|---|
+| tenant-scoped to `JUVAl` | yes | yes |
+| grant `/api/application` GET | yes | yes, verified persisted (UI + Audit + DB) |
+| endpoint probed | `GET /api/application/{id}` | identical |
+| FusionAuth process | PID 25656 | same, never restarted |
+| result | **200** | **401** |
+
+Tenant scoping, ACL shape, endpoint, instance and application are held
+constant. What differs is the key value presented, and whatever is stored
+against IV3's row.
+
+### 45.2 What it does and does not license
+
+It **eliminates** a class of explanation for IV3: `GET /api/application/{id}`
+is proven to be matched and enforced correctly for a tenant-scoped Identity
+Verification key with exactly this grant. So IV3's 401 on it is not an
+endpoint-matching or tenant-scoping defect.
+
+It does **not** confirm H10. Two explanations remain and are not separable
+from the record: the value presented for IV3 is not what FusionAuth stored
+(a), or IV3's stored value cannot be verified at runtime even though its
+row reads correctly (b/c). A near-controlled comparison narrows the space;
+it does not close it.
+
+### 45.3 An open question about §42 worth settling
+
+§42.3 asserted "an approved grant is simply not observably in effect", the
+same reading §44.3 has now withdrawn for §39. It rests on the same
+unverified premise: that IV1's six write rows were actually *persisted*, not
+merely approved. IV1's persisted `permissions` has never been read. If it
+turns out to hold only `/api/application` GET, then §42's diagnosis collapses
+exactly as §39's did, and the recurring pattern across this whole
+investigation is admin-UI grants that do not save — a human/UI failure mode,
+not a FusionAuth enforcement defect.
+
+That would *not* explain IV3, whose six grants are confirmed persisted. It
+would, however, mean no case of "persisted but unenforced" has ever been
+demonstrated in this system, leaving H10/H11 as the only live explanations
+for IV3.
+
+IV1 expired 2026-09-02, so it cannot be probed live; only its stored ACL is
+readable. Read-only, non-secret columns:
+
+```sql
+SELECT id, name, tenants_id, expiration_instant, key_format, key_manager, permissions
+FROM authentication_keys
+WHERE id = 'd0f26756-...';   -- IV1, exact id from the Audit Log
+```
+
+`ROOT CAUSE = NOT CONFIRMED.` H9 UNRESOLVED (no positive evidence),
+H9b ELIMINATED, H10 SUPPORTED/NOT CONFIRMED, H11 UNRESOLVED.
