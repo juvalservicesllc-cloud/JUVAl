@@ -3807,3 +3807,101 @@ SYNTHETIC USERS CREATED        = 0
 JUVAL_AUTH_MODE                = UNSET
 REAPPLICATION GATE             = BLOCKED
 ```
+
+## 50. Outcome B: the Behavioral 1 row is structurally correct and its held value still did not authenticate (2026-09-07)
+
+The gate did its job: `NO_AUTHENTICATION_EVIDENCE_OBTAINED`, exit `1`,
+`GATE FAILED — NO LIVE WRITES PERFORMED`. **No behavioral write ran, no user
+was created, no ACL changed, no key rotated.**
+
+### 50.1 Metadata, read-only, `key_value` never selected
+
+`JUVAL Behavioral Verification 1`
+
+| field | value |
+|---|---|
+| id | `25a48117-f81c-4e88-b1d3-2c683d036eae` |
+| tenant | `5fcaaf07-8832-491a-a6e7-35d348a591b6` (JUVAl) — **correct** |
+| created | 2026-09-07 19:49:13.306 UTC |
+| last updated | 2026-09-07 19:49:13.306 UTC — **identical; never edited after creation** |
+| expiry | 2026-09-09 12:00 UTC — **VALID** |
+| `key_format` | 1 |
+| `key_manager` | false |
+| persisted permissions | `GET /api/application`, `POST /api/login`, `POST /api/user`, `GET /api/user/action`, `POST /api/user/registration`, `POST /api/user/two-factor` — **exactly the six, no extras** |
+
+**No metadata or configuration defect exists.** Every field is what it should
+be, and `created == last_updated` to the millisecond shows a single clean save
+with no subsequent edit.
+
+### 50.2 The controlled comparison
+
+| | `Diagnostic 2` `fdc7ae7d` | `Behavioral 1` `25a48117` |
+|---|---|---|
+| tenant | JUVAl | JUVAl |
+| `key_format` / `key_manager` | 1 / false | 1 / false |
+| expiry state | VALID | VALID |
+| permissions | 1, correct | 6, correct |
+| created by | operator, manually, same GUI | same, minutes later |
+| **authenticated** | **YES — `200`** | **NO — `401` on all five probed grants** |
+
+Structurally the rows differ in **one** respect: the number of grants. Both are
+correct. One value authenticates, the other does not.
+
+### 50.3 What this licenses, and what it does not
+
+Established: FusionAuth's current API-key authentication, tenant-scoped lookup
+and ACL enforcement all work (§47, `Diagnostic 2`); and the `Behavioral 1` row
+is correct in every non-secret column.
+
+**Not established:** why the held value fails. A capture failure would explain
+it, and so would a defect in how that particular row's key material was stored.
+Nothing observed distinguishes them, and the only thing that would —
+`authentication_keys.key_value` — is prohibited and will not be read.
+**`ROOT CAUSE = NOT CONFIRMED`. No capture failure is claimed.**
+
+### 50.4 Two confounds in the failed run, now removed
+
+The Behavioral 1 gate ran the `iv3` profile, which differs from the
+`Diagnostic 2` run in two ways unrelated to the credential:
+
+| | `Diagnostic 2` run | `Behavioral 1` run |
+|---|---|---|
+| `/api/application` probe | `GET /api/application` (bare) → **200** | `GET /api/application/{id}` → **401** |
+| grants exercised | 1 of 1 | **5 of 6** (`--skip-login` omitted `POST /api/login`) |
+
+Neither is a plausible cause — `POST /api/user` is an exact ACL-row match and
+also returned 401, and §42.2 records IV1 answering `200` on
+`/api/application/{id}` from a plain `/api/application` grant. But they were
+uncontrolled, and removing them is free.
+
+`--profile behavioral` now exercises **all six** grants and leads with the bare
+`GET /api/application` — the exact call and path `Diagnostic 2` answered `200`
+to. `POST /api/two-factor/login` is deliberately absent: not API-key gated, no
+grant to test (§49). This also retires the misleading `iv3` label for
+behavioral-credential evidence. Verified live against a known-invalid key:
+seven granted probes plus control, all `401`, exit `1`. Seven regression tests.
+
+### 50.5 Cleanup finding
+
+`JUVAL API KEY Diagnostic 2` (`fdc7ae7d-7e7c-461f-b0a8-9b9f1145a7db`) **still
+exists and is VALID**. It was expected to have been deleted after §47 and was
+not. It is a live, tenant-scoped credential whose value was captured in
+plaintext by the operator, and it should not outlive its diagnostic purpose.
+Both it and `Behavioral 1` are now queued for manual deletion.
+
+### 50.6 Status
+
+```
+BEHAVIORAL 1 ROW              = STRUCTURALLY CORRECT (§50.1)
+BEHAVIORAL 1 VALUE            = NO AUTHENTICATION EVIDENCE
+ROOT CAUSE                    = NOT CONFIRMED (no capture failure claimed)
+FUSIONAUTH RUNTIME            = WORKING (§47, unchanged)
+LIVE BEHAVIORAL EXECUTION     = NOT RUN — gate exited 1
+PENDING DELETION (operator)   = Diagnostic 2 fdc7ae7d, Behavioral 1 25a48117
+REPLACEMENT                   = Behavioral Verification 2, 6 grants, manual
+KEYS CREATED/MODIFIED/DELETED = 0 by the agent, this pass and every pass
+CONTROL_6                     = B - PARTIALLY_SATISFIED (unchanged)
+SYNTHETIC USERS CREATED       = 0
+JUVAL_AUTH_MODE               = UNSET
+REAPPLICATION GATE            = BLOCKED
+```

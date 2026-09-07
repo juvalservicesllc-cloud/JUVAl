@@ -459,3 +459,58 @@ def test_scope_violation_outranks_a_confirmed_authentication(patched):
     """Even with a granted 200, a leaking control must not exit 0."""
     patched({"/api/application": 200, "/api/tenant": 200})
     assert diag.main(["--application-id", APP_ID, "--profile", "diagnostic"]) != 0
+
+
+# --- behavioral profile: all six grants, same path Diagnostic 2 proved -----
+
+
+def test_behavioral_profile_exercises_all_six_grants():
+    granted = [p for p in diag.build_behavioral_probes(APP_ID) if p.granted]
+    paths = {(p.method, p.path.split("?")[0].rstrip("0123456789abcdef-").rstrip("/"))
+             for p in granted}
+    assert len(granted) == 7  # six grants, /api/application probed two ways
+    for method, fragment in [
+        ("GET", "/api/application"), ("GET", "/api/user/action"),
+        ("POST", "/api/user"), ("POST", "/api/user/registration"),
+        ("POST", "/api/user/two-factor"), ("POST", "/api/login"),
+    ]:
+        assert any(p.method == method and p.path.startswith(fragment) for p in granted), fragment
+
+
+def test_behavioral_profile_leads_with_the_bare_application_path():
+    """Diagnostic 2 answered 200 to exactly this call; lead with it."""
+    first = diag.build_behavioral_probes(APP_ID)[0]
+    assert first.method == "GET" and first.path == "/api/application"
+
+
+def test_behavioral_profile_never_probes_two_factor_login():
+    """Not API-key gated (§49) -- there is no grant to test."""
+    for probe in diag.build_behavioral_probes(APP_ID):
+        assert "/api/two-factor/login" not in probe.path
+
+
+def test_behavioral_profile_has_one_not_granted_control():
+    controls = [p for p in diag.build_behavioral_probes(APP_ID) if not p.granted]
+    assert len(controls) == 1 and controls[0].path == "/api/tenant"
+
+
+def test_behavioral_profile_write_probes_cannot_mutate():
+    for probe in diag.build_behavioral_probes(APP_ID, skip_login=True):
+        if probe.method == "POST":
+            assert probe.body == {}
+
+
+def test_behavioral_skip_login_drops_only_the_login_grant():
+    with_login = diag.build_behavioral_probes(APP_ID)
+    without = diag.build_behavioral_probes(APP_ID, skip_login=True)
+    assert len(with_login) - len(without) == 1
+    assert not any(p.path == "/api/login" for p in without)
+
+
+def test_behavioral_profile_selected_by_flag(patched):
+    recorder = patched({})
+    diag.main(["--application-id", APP_ID, "--profile", "behavioral"])
+    paths = {c["path"] for c in recorder.calls}
+    assert "/api/application" in paths
+    assert "/api/login" in paths
+    assert not any("/api/two-factor/login" in p for p in paths)

@@ -184,6 +184,106 @@ def build_diagnostic_probes() -> list[Probe]:
     ]
 
 
+def build_behavioral_probes(application_id: str, *, skip_login: bool = False) -> list[Probe]:
+    """Probe set for the six-grant behavioral credential (§50).
+
+    Exercises **all six** selectable grants, and leads with the bare
+    `GET /api/application` -- the exact call and exact path that `Diagnostic 2`
+    answered `200` to. The earlier Behavioral 1 gate ran the `iv3` profile,
+    which probes `GET /api/application/{id}` instead and, with `--skip-login`,
+    never touched `POST /api/login` at all. So the run that worked and the run
+    that failed differed in two ways beyond the credential itself. Both are
+    removed here, at no cost, so a future failure cannot be attributed to
+    probe shape.
+
+    `POST /api/two-factor/login` is deliberately absent: it is not API-key
+    gated and has no grant to test (§49).
+
+    Nothing here can mutate identity state -- every body is deliberately
+    invalid or targets a freshly generated UUID. `POST /api/login` is the only
+    probe with any side effect, a failed-login record against a login id that
+    matches no user; it is the only way to exercise that grant, and
+    `--skip-login` omits it.
+    """
+    absent_user = str(uuid.uuid4())
+    probes = [
+        Probe(
+            label="GET /api/application  (bare -- Diagnostic 2 got 200 here)",
+            method="GET",
+            path="/api/application",
+            body=None,
+            granted=True,
+            expected_if_working="200",
+        ),
+        Probe(
+            label="GET /api/application/{id}",
+            method="GET",
+            path=f"/api/application/{application_id}",
+            body=None,
+            granted=True,
+            expected_if_working="200",
+        ),
+        Probe(
+            label="GET /api/user/action?userId=<absent>",
+            method="GET",
+            path=f"/api/user/action?userId={absent_user}",
+            body=None,
+            granted=True,
+            expected_if_working="200 or 404",
+        ),
+        Probe(
+            label="POST /api/user (empty body)",
+            method="POST",
+            path="/api/user",
+            body={},
+            granted=True,
+            expected_if_working="400",
+        ),
+        Probe(
+            label="POST /api/user/registration (empty body)",
+            method="POST",
+            path="/api/user/registration",
+            body={},
+            granted=True,
+            expected_if_working="400",
+        ),
+        Probe(
+            label="POST /api/user/two-factor/<absent> (empty body)",
+            method="POST",
+            path=f"/api/user/two-factor/{absent_user}",
+            body={},
+            granted=True,
+            expected_if_working="400 or 404",
+        ),
+    ]
+    if not skip_login:
+        probes.append(
+            Probe(
+                label="POST /api/login (absent loginId -- 6th grant)",
+                method="POST",
+                path="/api/login",
+                body={
+                    "loginId": f"juval-diagnostic-{uuid.uuid4()}@invalid.example",
+                    "password": str(uuid.uuid4()),
+                    "applicationId": application_id,
+                },
+                granted=True,
+                expected_if_working="404",
+            )
+        )
+    probes.append(
+        Probe(
+            label="GET /api/tenant (NOT granted -- control)",
+            method="GET",
+            path="/api/tenant",
+            body=None,
+            granted=False,
+            expected_if_working="401",
+        )
+    )
+    return probes
+
+
 def build_bootstrap_probes(application_id: str) -> list[Probe]:
     """Probe set for the unscoped `JUVAl bootstrap` keys (§43.9).
 
@@ -406,7 +506,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     )
     parser.add_argument(
         "--profile",
-        choices=("iv3", "bootstrap", "diagnostic"),
+        choices=("behavioral", "iv3", "bootstrap", "diagnostic"),
         default="iv3",
         help="which key's granted endpoints to probe (default: iv3)",
     )
@@ -421,7 +521,9 @@ def main(argv: Optional[list[str]] = None) -> int:
         )
         return 2
 
-    if args.profile == "diagnostic":
+    if args.profile == "behavioral":
+        probes = build_behavioral_probes(args.application_id, skip_login=args.skip_login)
+    elif args.profile == "diagnostic":
         probes = build_diagnostic_probes()
     elif args.profile == "bootstrap":
         probes = build_bootstrap_probes(args.application_id)
