@@ -66,8 +66,14 @@ Usage:
         --base http://127.0.0.1:9011 \
         --application-id 84f077a0-b2b0-4655-8168-082b2233d029
 
-Exit code is 0 when the run is conclusive (either verdict), 2 when it could not
-reach the server or the key was not supplied.
+Exit codes are a machine-checkable gate, so a live run can be chained behind
+this check with `&&` and refuse to start unless authentication was confirmed:
+
+    0  AUTHENTICATION_CONFIRMED_OK, and the not-granted control was refused
+    1  NO_AUTHENTICATION_EVIDENCE_OBTAINED
+    2  INCONCLUSIVE -- server unreachable, or no key supplied
+    3  SCOPE VIOLATION -- a not-granted endpoint answered, so the key is
+       wider than its recorded ACL
 """
 
 from __future__ import annotations
@@ -475,17 +481,23 @@ def main(argv: Optional[list[str]] = None) -> int:
     control = next((r for r in results if not r.probe.granted), None)
     if control is not None and control.status is not None and not control.is_401:
         print(
-            "\n  NOTE: the not-granted control endpoint did NOT return 401. "
-            "The key is behaving as wider than its recorded ACL; report this "
-            "before drawing any other conclusion."
+            f"\n  SCOPE VIOLATION: the not-granted control endpoint "
+            f"({control.probe.label}) returned {control.status}, not 401. The key "
+            "is behaving as WIDER than its recorded ACL. Report this before "
+            "drawing any other conclusion, and do not run anything behind this "
+            "check."
         )
+        return 3
 
     # Exit codes are a machine-checkable gate, so a caller can chain a live
     # run behind this check with `&&` and have it refuse to start unless
     # authentication was actually confirmed:
-    #   0 = AUTHENTICATION_CONFIRMED_OK
+    #   0 = AUTHENTICATION_CONFIRMED_OK, and the not-granted control was
+    #       correctly refused
     #   1 = NO_AUTHENTICATION_EVIDENCE_OBTAINED
     #   2 = INCONCLUSIVE (server unreachable, or no key supplied)
+    #   3 = SCOPE VIOLATION: a not-granted endpoint answered, so the key is
+    #       wider than its recorded ACL
     return {"AUTHENTICATION_CONFIRMED_OK": 0, "INCONCLUSIVE": 2}.get(verdict, 1)
 
 

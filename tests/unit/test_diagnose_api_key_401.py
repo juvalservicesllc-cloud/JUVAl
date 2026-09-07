@@ -446,3 +446,16 @@ def test_exit_code_2_when_key_missing(patched, monkeypatch):
     patched({})
     monkeypatch.delenv("JUVAL_IDP_API_KEY", raising=False)
     assert diag.main(["--application-id", APP_ID]) == 2
+
+
+def test_exit_code_3_when_a_not_granted_endpoint_answers(patched, capsys):
+    """An over-broad key must block anything chained behind this check."""
+    patched({"/api/application": 200, "/api/tenant": 200})
+    assert diag.main(["--application-id", APP_ID, "--profile", "diagnostic"]) == 3
+    assert "SCOPE VIOLATION" in capsys.readouterr().out
+
+
+def test_scope_violation_outranks_a_confirmed_authentication(patched):
+    """Even with a granted 200, a leaking control must not exit 0."""
+    patched({"/api/application": 200, "/api/tenant": 200})
+    assert diag.main(["--application-id", APP_ID, "--profile", "diagnostic"]) != 0
