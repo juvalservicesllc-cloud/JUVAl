@@ -72,6 +72,7 @@ class Recorder:
                 "path": path,
                 "method": request.get_method(),
                 "authorization": request.get_header("Authorization"),
+                "tenant": request.get_header("X-fusionauth-tenantid"),
                 "body": json.loads(request.data.decode()) if request.data else None,
             }
         )
@@ -297,6 +298,58 @@ def test_sanitising_a_whitespace_damaged_key_is_reported_as_root_cause(monkeypat
     assert "carriage return" in out
     assert "No FusionAuth or database change is required" in out
     assert SECRET not in out
+
+
+# --- diagnostic profile ---------------------------------------------------
+
+
+def test_diagnostic_profile_has_exactly_one_grant_and_one_control():
+    probes = diag.build_diagnostic_probes()
+    granted = [p for p in probes if p.granted]
+    controls = [p for p in probes if not p.granted]
+    assert len(granted) == 1 and granted[0].path == "/api/application"
+    assert len(controls) == 1 and controls[0].path == "/api/tenant"
+
+
+def test_diagnostic_profile_is_entirely_read_only():
+    """A single-grant diagnostic key must not be able to change anything."""
+    for probe in diag.build_diagnostic_probes():
+        assert probe.method == "GET"
+        assert probe.body is None
+
+
+def test_diagnostic_profile_selected_by_flag(patched):
+    recorder = patched({})
+    diag.main(["--application-id", APP_ID, "--profile", "diagnostic"])
+    paths = {c["path"] for c in recorder.calls}
+    assert paths <= {"/api/application", "/api/tenant"}
+    assert all(c["method"] == "GET" for c in recorder.calls)
+
+
+def test_diagnostic_200_is_authentication_confirmed(patched, capsys):
+    patched({"/api/application": 200})
+    diag.main(["--application-id", APP_ID, "--profile", "diagnostic"])
+    out = capsys.readouterr().out
+    assert "AUTHENTICATION_CONFIRMED_OK" in out
+    assert SECRET not in out
+
+
+# --- tenant header --------------------------------------------------------
+
+
+def test_tenant_header_sent_on_every_probe_when_requested(patched):
+    tenant = "5fcaaf07-8832-491a-a6e7-35d348a591b6"
+    recorder = patched({})
+    diag.main(["--application-id", APP_ID, "--profile", "diagnostic", "--tenant-id", tenant])
+    assert recorder.calls
+    for call in recorder.calls:
+        assert call.get("tenant") == tenant
+
+
+def test_tenant_header_absent_by_default(patched):
+    recorder = patched({})
+    diag.main(["--application-id", APP_ID, "--profile", "diagnostic"])
+    assert all(c.get("tenant") is None for c in recorder.calls)
 
 
 # --- bootstrap profile ----------------------------------------------------

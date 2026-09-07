@@ -146,6 +146,38 @@ class Result:
         return self.status == 401
 
 
+def build_diagnostic_probes() -> list[Probe]:
+    """Probe set for a single-grant diagnostic key (§46).
+
+    The key carries exactly one permission, `GET /api/application`. A freshly
+    created key, captured seconds earlier, isolates *current* API-key
+    authentication from the custody and provenance of values captured days
+    ago: a `200` says authentication works today and moves the question back
+    to the old credentials, a `401` says a brand-new key with one verified
+    grant also fails, which no custody explanation covers.
+
+    Both probes are reads. Nothing here can mutate any state.
+    """
+    return [
+        Probe(
+            label="GET /api/application  (the only grant)",
+            method="GET",
+            path="/api/application",
+            body=None,
+            granted=True,
+            expected_if_working="200",
+        ),
+        Probe(
+            label="GET /api/tenant (NOT granted -- control)",
+            method="GET",
+            path="/api/tenant",
+            body=None,
+            granted=False,
+            expected_if_working="401",
+        ),
+    ]
+
+
 def build_bootstrap_probes(application_id: str) -> list[Probe]:
     """Probe set for the unscoped `JUVAl bootstrap` keys (§43.9).
 
@@ -282,12 +314,19 @@ def build_probes(application_id: str, *, skip_login: bool) -> list[Probe]:
     return probes
 
 
-def send(base: str, probe: Probe, api_key: Optional[str]) -> Result:
+def send(
+    base: str,
+    probe: Probe,
+    api_key: Optional[str],
+    tenant_id: Optional[str] = None,
+) -> Result:
     """Issue one probe. Returns the status code; never echoes the key."""
     data = json.dumps(probe.body).encode() if probe.body is not None else None
     request = urllib.request.Request(base + probe.path, data=data, method=probe.method)
     if api_key is not None:
         request.add_header("Authorization", api_key)
+    if tenant_id is not None:
+        request.add_header("X-FusionAuth-TenantId", tenant_id)
     if data is not None:
         request.add_header("Content-Type", "application/json")
 
@@ -343,6 +382,12 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--base", default=os.environ.get("JUVAL_IDP_BASE", "http://127.0.0.1:9011"))
     parser.add_argument("--application-id", required=True)
     parser.add_argument(
+        "--tenant-id",
+        default=None,
+        help="send X-FusionAuth-TenantId with every probe (a tenant id is "
+        "not a secret; it appears throughout this repo's documentation)",
+    )
+    parser.add_argument(
         "--skip-login",
         action="store_true",
         help="omit the POST /api/login probe (its only side effect is a "
@@ -350,7 +395,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     )
     parser.add_argument(
         "--profile",
-        choices=("iv3", "bootstrap"),
+        choices=("iv3", "bootstrap", "diagnostic"),
         default="iv3",
         help="which key's granted endpoints to probe (default: iv3)",
     )
@@ -365,19 +410,24 @@ def main(argv: Optional[list[str]] = None) -> int:
         )
         return 2
 
-    if args.profile == "bootstrap":
+    if args.profile == "diagnostic":
+        probes = build_diagnostic_probes()
+    elif args.profile == "bootstrap":
         probes = build_bootstrap_probes(args.application_id)
     else:
         probes = build_probes(args.application_id, skip_login=args.skip_login)
 
     print(f"base = {args.base}")
     print(f"profile = {args.profile}")
+    if args.tenant_id:
+        print("X-FusionAuth-TenantId header: sent")
     print("(the API key value is never printed, hashed or persisted)\n")
 
     print("--- baseline controls -------------------------------------------")
-    baseline = build_probes(args.application_id, skip_login=True)[0]
-    no_auth = send(args.base, baseline, None)
-    bad_key = send(args.base, baseline, INVALID_KEY_CONTROL)
+    # Same endpoint the profile probes, so the controls are comparable.
+    baseline = probes[0]
+    no_auth = send(args.base, baseline, None, args.tenant_id)
+    bad_key = send(args.base, baseline, INVALID_KEY_CONTROL, args.tenant_id)
     print(f"  no Authorization header       -> {no_auth.status} (expect 401)")
     print(f"  deliberately invalid key      -> {bad_key.status} (expect 401)")
     if no_auth.status != 401 or bad_key.status != 401:
@@ -387,7 +437,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     print("\n--- probes with the supplied key --------------------------------")
     results = []
     for probe in probes:
-        result = send(args.base, probe, api_key)
+        result = send(args.base, probe, api_key, args.tenant_id)
         results.append(result)
         marker = "grant " if probe.granted else "control"
         shown = result.status if result.status is not None else f"ERROR {result.error}"
@@ -401,7 +451,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         print("\n--- credential transport check -----------------------------------")
         print(f"  the supplied value carries: {', '.join(faults)}")
         sanitised = api_key.strip()
-        retry = send(args.base, probes[0], sanitised)
+        retry = send(args.base, probes[0], sanitised, args.tenant_id)
         print(f"  retry of {probes[0].label} with surrounding whitespace removed -> {retry.status}")
         if retry.status is not None and not retry.is_401:
             print(

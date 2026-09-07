@@ -3369,3 +3369,98 @@ WHERE id = 'd0f26756-...';   -- IV1, exact id from the Audit Log
 
 `ROOT CAUSE = NOT CONFIRMED.` H9 UNRESOLVED (no positive evidence),
 H9b ELIMINATED, H10 SUPPORTED/NOT CONFIRMED, H11 UNRESOLVED.
+
+## 46. Controlled restart: no change. Transient runtime state eliminated (2026-09-07)
+
+One restart of `fusionauth-app.service` was authorized and performed, for the
+sole purpose of testing H11 (runtime/cache/state). **No database, configuration,
+key, ACL, tenant, port, firewall or frontend change accompanied it.**
+
+### 46.1 Before and after
+
+| | pre-restart | post-restart |
+|---|---|---|
+| service | `active`, MainPID 25656 | `active`, **new PID** |
+| uptime | 11d 20h (since 2026-08-26 22:19:06) | restarted 2026-09-07 |
+| listeners | `*:9011`, `*:9012` | both recovered |
+| `/api/status` | `200` | `200` |
+
+The service recovered healthy. No rollback was needed.
+
+### 46.2 Probes repeated with unchanged credentials
+
+| credential | endpoint | pre | post |
+|---|---|---|---|
+| Bootstrap | `GET /api/tenant` (§39.2 recorded 200) | 401 | **401** |
+| Bootstrap | `GET /api/application` | 401 | **401** |
+| Bootstrap | `GET /api/application/{id}` | 401 | **401** |
+| Bootstrap | `POST /api/jwt/vend` | 401 | **401** |
+| IV3 | all five granted endpoints | 401 | **401** |
+
+Both verdicts: `NO_AUTHENTICATION_EVIDENCE_OBTAINED`, identical before and
+after. A full JVM restart clears every in-memory cache, so **H11 as transient
+cache or accumulated runtime state is eliminated**. What survives of H11 is
+only a *persistent* lookup or verification defect, which a restart would not
+fix.
+
+### 46.3 Transport corruption eliminated for both credentials
+
+The tool's credential transport check runs whenever every granted endpoint
+returns 401, and prints only when the supplied value carries surrounding or
+embedded whitespace, CR, LF, non-ASCII, or any control character — ESC
+included, so bracketed-paste contamination is covered. It printed nothing on
+either credential, on either side of the restart. Both values reached the
+tool as clean ASCII.
+
+This does not prove either value is *correct*, but it eliminates the
+common-mode explanation: a shell or terminal mangling every pasted secret the
+same way. That was the most plausible route by which two independently
+captured credentials could fail identically, and it is now closed.
+
+### 46.4 Where this leaves the hypotheses
+
+| # | Hypothesis | State |
+|---|---|---|
+| H1–H6 | persistence, ACL, tenant, expiry, header syntax, runtime/proxy | **ELIMINATED** |
+| H7 | effective configuration | **WEAKENED** |
+| H8 | secondary DB persistence | **WEAKENED** |
+| H9 | FusionAuth 1.69.0 defect | **UNRESOLVED** — no positive evidence; its only precedent was withdrawn in §44.3 |
+| H9b | tenant-scoping | **ELIMINATED** (§44.2 — unscoped bootstrap keys fail too) |
+| H10 | credential custody / stale or non-corresponding value | **SUPPORTED, NOT CONFIRMED** — transport corruption eliminated (§46.3), but provenance remains unproven for both values, and §38 records the working bootstrap value was never persisted |
+| H11 | runtime lookup / verification | **transient form ELIMINATED; persistent form UNRESOLVED and now primary alongside H10** |
+
+`ROOT CAUSE = NOT CONFIRMED.` Two explanations remain and status codes cannot
+separate them: both held values fail to correspond to what is stored, or
+FusionAuth currently fails to authenticate any API key.
+
+### 46.5 The discriminating experiment
+
+Every remaining read-only avenue tests old credentials, and every old
+credential carries the same unprovable provenance. The one variable never
+controlled is **age of capture**. A key created and captured within the same
+minute removes it entirely:
+
+* `200` → API-key authentication works today; the fault lies in the custody or
+  provenance of the older values, and no old key should be rotated on that
+  basis alone until the evidence is documented.
+* `401` → a brand-new key, captured seconds earlier, with a single verified
+  grant, also fails. No custody explanation covers that, and H11's persistent
+  form becomes primary.
+
+Approved and specified by the operator: `JUVAL API Key Diagnostic 1`, tenant
+`JUVAl`, Not Retrievable, Key Manager off, ≤24h expiry, **exactly one**
+permission (`GET /api/application`). Created manually in the GUI by the
+operator — **not** via Playwright/MCP, which never opens the Add API Key form
+and never sees the value. Written up, secret-free, in
+`~/Desktop/DIAGNOSTIC-KEY-INSTRUCCIONES.txt`.
+
+`tools/diagnose_api_key_401.py --profile diagnostic` probes that single grant
+plus a not-granted control, both GET, both incapable of mutating anything, and
+gained `--tenant-id` to send `X-FusionAuth-TenantId` (a tenant id is not a
+secret). A latent defect was fixed while adding it: the no-auth and
+invalid-key baselines previously always probed the IV3 endpoint regardless of
+profile, so the controls were not comparable with the profile under test.
+39 unit tests.
+
+Key to be deleted once the evidence is captured; the ≤24h expiry is a
+backstop, not the plan.
