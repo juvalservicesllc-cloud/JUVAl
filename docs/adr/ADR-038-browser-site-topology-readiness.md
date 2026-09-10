@@ -84,3 +84,14 @@ frontend auth feature changes or production migration in this decision.
 - [Cookie SameSite semantics](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie#samesitesamesite-value).
 
 Provider documentation supports capabilities, not a verified JUVAl deployment.
+
+## Browser semantics lab — 2026-09-10
+
+`JUVAL_LAB_CHROMIUM=<installed-Chromium> node scripts/browser-site-lab.mjs`
+from project-portal passed four properties: same-site credentialed fetch sends
+Lax cookie; cross-site fetch does not; host-only/HttpOnly cookie is unavailable
+to app JavaScript; top-level safe navigation sends Lax cookie. Requests are all
+fulfilled in memory under synthetic .test hosts, using a fresh browser context.
+No DNS, TLS handshake, real BFF, FusionAuth, credentials or existing profile.
+Classification BROWSER_SEMANTICS_LAB_VERIFIED only; actual production hostname
+browser acceptance remains NOT_EXECUTED.
