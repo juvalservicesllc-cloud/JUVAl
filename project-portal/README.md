@@ -150,3 +150,42 @@ Production: https://juval-project-intelligence.vercel.app (Vercel login required
 ## Automatic updates from GitHub
 
 The production portal now follows `master` through Vercel's Git integration. Each push regenerates evidence at the exact deployed commit and runs the portal's validation before publishing. Failed builds leave the last successful version online. See [automatic synchronization](AUTO_SYNC.md). Earlier manual-deployment instructions describe the initial setup; normal updates are now Git pushes.
+
+## Accelerator evidence update — 2026-09-10
+
+Prepared on `accelerator/portal-readiness`, based on remote `6a6d07c`, while
+Linux identity work is on `master` at `63568c4`. Histories were not merged or
+rewritten. New mappings recognize N-1 lab remediation, real-login blocking and
+browser-site topology without promoting production readiness. Sources missing
+before integration remain unverified; merge the preserved Linux evidence before
+publishing an updated integrated snapshot. No Vercel deployment was performed.
+
+To reproduce against the immutable Linux evidence (locally available commit):
+
+```sh
+JUVAL_EVIDENCE_REF=63568c40dd35e07e8b489d5a8bf27a3112eb6d77 npm run sync
+npm test
+npm run lint
+npm run build
+python3 tests/test_record_tests.py
+```
+
+`record-tests.py` no longer invents Windows/origin provenance for every JUnit
+report. After running the backend at a known clean revision, supply that exact
+revision and a non-secret environment description:
+
+```sh
+python3 scripts/record-tests.py --tested-commit <full-tested-commit> --environment '<actual test environment>'
+```
+
+The exporter parses counts only and records the caller-declared provenance;
+it does not independently prove a JUnit file came from that checkout. Raw JUnit
+case names, failures and output are not exported. Generated snapshots remain
+ignored and are regenerated; no manual progress percentages were introduced.
+
+Validation of this update: source snapshot `63568c4`, 30 criteria / 38 ADRs;
+10 model tests + 4 component/i18n tests + 3 Python exporter tests passed; lint
+and build passed; npm audit reports zero advisories. Backend JUnit counters were
+reproduced on clean Linux `63568c4`: 821 passed / 36 skipped with real nginx.
+Browser E2E was not rerun (no portal UI change); this does not claim a new
+browser-rendering or live deployment verification.

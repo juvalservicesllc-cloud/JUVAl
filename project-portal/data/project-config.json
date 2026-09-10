@@ -1,7 +1,7 @@
 {
   "repository": "juvalservicesllc-cloud/JUVAl",
-  "modelVersion": "1.0",
-  "scope": "Repository plan phases 0–10; conservative evidence-weighted acceptance criteria. Weights are portal planning metadata, not an approved business completion estimate.",
+  "modelVersion": "1.1",
+  "scope": "Repository plan phases 0\u201310; conservative evidence-weighted acceptance criteria. Weights are portal planning metadata, not an approved business completion estimate.",
   "phases": [
     "Foundation",
     "Domain & Processing",
@@ -230,8 +230,8 @@
       "status": "BLOCKED",
       "verificationLevel": "NOT_VERIFIED",
       "source": "docs/compliance/SP_API_REGISTRATION_REMEDIATION.md",
-      "section": "54.5",
-      "notes": "Latest repository status: public surface is template only; five of ten rules not verified. Production activation remains blocked.",
+      "section": "55.1",
+      "notes": "N-1 fixed in template/lab; D-1 and real hosted-login/MFA compatibility remain pending. No public TLS/issuer activation.",
       "dependsOn": [
         "identity-runtime"
       ],
@@ -239,7 +239,7 @@
     },
     {
       "id": "rf-01",
-      "title": "RF-01 · 24-hour incident reporting",
+      "title": "RF-01 \u00b7 24-hour incident reporting",
       "phase": 10,
       "workstream": "Incident Response",
       "weight": 2,
@@ -249,7 +249,7 @@
     },
     {
       "id": "rf-02",
-      "title": "RF-02 · Network controls",
+      "title": "RF-02 \u00b7 Network controls",
       "phase": 10,
       "workstream": "Network Controls",
       "weight": 2,
@@ -259,7 +259,7 @@
     },
     {
       "id": "rf-03",
-      "title": "RF-03 · Password policy and MFA",
+      "title": "RF-03 \u00b7 Password policy and MFA",
       "phase": 9,
       "workstream": "Security",
       "weight": 3,
@@ -272,7 +272,7 @@
     },
     {
       "id": "rf-04",
-      "title": "RF-04 · Job function / least privilege",
+      "title": "RF-04 \u00b7 Job function / least privilege",
       "phase": 9,
       "workstream": "RBAC",
       "weight": 2,
@@ -285,7 +285,7 @@
     },
     {
       "id": "rf-05",
-      "title": "RF-05 · Security program and response roles",
+      "title": "RF-05 \u00b7 Security program and response roles",
       "phase": 10,
       "workstream": "Compliance",
       "weight": 2,
@@ -313,7 +313,7 @@
         "rf-04",
         "rf-05"
       ],
-      "section": "54.5",
+      "section": "55.1",
       "evidenceMatch": "REAPPLICATION GATE          = BLOCKED"
     },
     {
@@ -338,11 +338,12 @@
       "status": "COMPLETE",
       "verificationLevel": "VERIFIED_TEST",
       "source": "docs/adr/ADR-036-durable-session-store.md",
-      "section": "Estado",
-      "notes": "36 contract tests documented against disposable PostgreSQL; migration not applied to production.",
+      "section": "Startup readiness correction",
+      "notes": "Startup now checks actual DB connectivity, table ownership and zero-policy RLS. Disposable PostgreSQL evidence only; live migration not applied.",
       "dependsOn": [
         "bff"
-      ]
+      ],
+      "evidenceMatch": "read-only"
     },
     {
       "id": "rf03-behavior",
@@ -354,7 +355,7 @@
       "status": "BLOCKED",
       "verificationLevel": "NOT_TESTED",
       "source": "docs/compliance/SP_API_REGISTRATION_REMEDIATION.md",
-      "section": "54.5",
+      "section": "55.1",
       "notes": "RF03_BEHAVIORAL = NOT_EXECUTED in latest status. Production evidence remains empty.",
       "dependsOn": [
         "identity-runtime",
@@ -378,6 +379,57 @@
       "notes": "Mitigation has code and test evidence; Amazon Control 6 remains partial and production evidence is none.",
       "dependsOn": [
         "rbac"
+      ]
+    },
+    {
+      "id": "nginx-n1",
+      "title": "N-1 relative redirect remediation in inactive template",
+      "phase": 10,
+      "workstream": "Security",
+      "weight": 1,
+      "rule": "documented",
+      "status": "COMPLETE",
+      "verificationLevel": "LAB_BEHAVIORALLY_VERIFIED",
+      "source": "docs/adr/ADR-037-nginx-generated-response-hardening.md",
+      "section": "Decision and evidence",
+      "evidenceMatch": "90 nginx tests passed",
+      "notes": "Echo-proxy lab only. Does not prove real hosted-login requirements or production deployment.",
+      "dependsOn": [
+        "bff"
+      ]
+    },
+    {
+      "id": "real-login-surface",
+      "title": "Observe exact JUVAl hosted-login resources",
+      "phase": 9,
+      "workstream": "FusionAuth",
+      "weight": 1,
+      "rule": "documented",
+      "status": "BLOCKED",
+      "verificationLevel": "NOT_VERIFIED",
+      "source": "docs/IDENTITY_SECURITY_READINESS.md",
+      "section": "Temporary real-login session",
+      "evidenceMatch": "baseline",
+      "notes": "Operator must preserve exact redirect baseline, add only approved temporary URI, probe without credentials, restore and read back.",
+      "dependsOn": [
+        "bff"
+      ]
+    },
+    {
+      "id": "browser-site-topology",
+      "title": "Approve compatible browser/API site topology",
+      "phase": 10,
+      "workstream": "Infrastructure",
+      "weight": 1,
+      "rule": "documented",
+      "status": "BLOCKED",
+      "verificationLevel": "NOT_VERIFIED",
+      "source": "docs/adr/ADR-038-browser-site-topology-readiness.md",
+      "section": "Proposed decision",
+      "evidenceMatch": "registrable domain",
+      "notes": "SameSite=Lax does not permit cross-site API fetches just because CORS allows credentials. Domain/ingress decision pending.",
+      "dependsOn": [
+        "bff"
       ]
     }
   ]

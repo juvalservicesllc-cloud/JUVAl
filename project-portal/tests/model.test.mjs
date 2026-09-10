@@ -12,4 +12,19 @@ test('risk prioritization is deterministic with dependency impact',()=>{const a=
 test('secrets are redacted without dropping policy documents',()=>{assert.doesNotMatch(sanitize('client_secret=abcdef\npostgresql://user:password@host/db\nghp_abcdefghijklmnopqrstuvwxyz1234'),/abcdef|user:password|ghp_/);});
 test('generated snapshot has valid provenance, unique IDs and real ADR discovery',()=>{const s=JSON.parse(readFileSync(new URL('../data/generated/project-state.json',import.meta.url)));validateState(s);assert.ok(s.adrs.length>=36);assert.ok(s.criteria.every(c=>c.commit===s.git.head));assert.equal(s.criteria.find(c=>c.id==='control-6').status,'PARTIAL');assert.equal(s.criteria.find(c=>c.id==='amazon-approval').status,'BLOCKED');assert.ok(s.files.every(f=>!f.path.includes('.env')&&!f.path.includes('Secret Key')));assert.throws(()=>validateState({...s,criteria:[{...s.criteria[0],weight:-1}]}));assert.throws(()=>validateState({...s,criteria:[s.criteria[0],s.criteria[0]]}));});
 
-test('repository records do not masquerade as current Linux evidence',()=>{const s=JSON.parse(readFileSync(new URL('../data/generated/project-state.json',import.meta.url)));assert.equal(s.git.localHead,s.git.head);assert.equal(s.evidenceSources.linux.status,'EXTERNAL_RUNTIME_EVIDENCE_REQUIRED');assert.equal(s.evidenceSources.linux.observedAt,null);assert.ok(s.criteria.every(c=>c.evidenceSource==='REPOSITORY_VERIFIED'||c.evidenceSource==='HISTORICAL_CONTEXT_ONLY'));assert.ok(s.recordedObservations.some(o=>o.evidence.includes('MainPID=369334')));assert.ok(s.recordedObservations.some(o=>o.evidence.includes('BEHAVIORALLY_VERIFIED')));assert.ok(s.recordedObservations.every(o=>o.runtimeVerification==='EXTERNAL_RUNTIME_EVIDENCE_REQUIRED'));});
+test('repository records do not masquerade as current Linux evidence',()=>{const s=JSON.parse(readFileSync(new URL('../data/generated/project-state.json',import.meta.url)));assert.equal(s.evidenceSources.repository.localHead,s.git.localHead);assert.equal(s.evidenceSources.repository.commit,s.git.head);if(s.git.localHead!==s.git.head)assert.ok(s.sync.warnings.some(w=>w.includes('differs from indexed')));assert.equal(s.evidenceSources.linux.status,'EXTERNAL_RUNTIME_EVIDENCE_REQUIRED');assert.equal(s.evidenceSources.linux.observedAt,null);assert.ok(s.criteria.every(c=>c.evidenceSource==='REPOSITORY_VERIFIED'||c.evidenceSource==='HISTORICAL_CONTEXT_ONLY'));assert.ok(s.recordedObservations.some(o=>o.evidence.includes('MainPID=369334')));assert.ok(s.recordedObservations.some(o=>o.evidence.includes('BEHAVIORALLY_VERIFIED')));assert.ok(s.recordedObservations.every(o=>o.runtimeVerification==='EXTERNAL_RUNTIME_EVIDENCE_REQUIRED'));});
+
+test('accelerator mappings keep lab remediation separate from public readiness',()=>{
+ const s=JSON.parse(readFileSync(new URL('../data/generated/project-state.json',import.meta.url)));
+ const n1=s.criteria.find(c=>c.id==='nginx-n1');
+ if(s.files.some(f=>f.path==='docs/adr/ADR-037-nginx-generated-response-hardening.md')){
+   assert.equal(n1.status,'COMPLETE');
+   assert.equal(n1.verificationLevel,'LAB_BEHAVIORALLY_VERIFIED');
+   assert.equal(s.criteria.find(c=>c.id==='real-login-surface').status,'BLOCKED');
+   assert.equal(s.criteria.find(c=>c.id==='browser-site-topology').status,'BLOCKED');
+ } else {
+   assert.equal(n1.verificationLevel,'NOT_VERIFIED');
+   assert.notEqual(n1.status,'COMPLETE');
+ }
+ assert.equal(s.criteria.find(c=>c.id==='amazon-approval').status,'BLOCKED');
+});
