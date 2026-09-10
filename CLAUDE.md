@@ -14,8 +14,9 @@ evidencia, bloqueos y procedimiento humano están centralizados en
 Fase activa: identidad/seguridad, PARTIALLY IMPLEMENTED, producción no activada.
 Tenant y aplicación exactos existen; nombres/roles no re-verificados. No recrear.
 N-1 corregido en plantilla/lab; real login y D-1 siguen NOT_VERIFIED.
-Frontend existente y congelado (`frontend/`, `frontend-next/`, `demo/`), con
-excepción autorizada solo para remediación mínima de vulnerabilidades confirmadas.
+Frontend congelado (`frontend/`, `frontend-next/`, `demo/`). En la tercera ola
+solo se permite una remediación mínima si nueva evidencia confirma que es necesaria;
+no hay cambios de frontend justificados por las auditorías npm actuales.
 No usar recuentos históricos de tests, estados de instalación o marcadores
 literales como evidencia actual. Ver mediciones fechadas en PROJECT_STATUS.
 

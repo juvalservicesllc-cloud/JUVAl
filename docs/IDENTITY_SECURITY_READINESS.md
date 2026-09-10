@@ -1,6 +1,6 @@
 # JUVAl identity/security — current readiness and operator runbook
 
-**2026-09-10 accelerator second wave. Status: PARTIALLY IMPLEMENTED.** Authoritative
+**2026-09-10 accelerator third wave. Status: PARTIALLY IMPLEMENTED.** Authoritative
 workspace: `/home/juval/JUVAl/APP`. This ledger supersedes dated implementation
 snapshots in project plans, contracts and research; historical experiments are
 not reclassified as production evidence. Git commits identify the exact changes.
@@ -10,7 +10,7 @@ not reclassified as production evidence. Git commits identify the exact changes.
 | Claim | Classification | Evidence / confidence |
 |---|---|---|
 | Starting repository | VERIFIED_LOCAL | `16189b7`, clean, cached origin `32c3aef`, local 0/3; high |
-| Current remote | VERIFIED_READ_ONLY via HTTPS | `6a6d07c`; both histories and portal branch integrated locally in normal merges; publication blocked by SSH authentication |
+| Durable Git checkpoint | VERIFIED via authenticated SSH fetch | `b338a67` matched origin/master 0/0 at third-wave resume; subsequent commits use normal gated pushes |
 | Exact tenant/application IDs exist | VERIFIED_RUNTIME_READ_ONLY | 2026-09-10 public controls: tenant 200 vs four 500 controls; real client invalid_redirect_uri vs random invalid_client_id; high for existence only |
 | Tenant/application names and role names | NOT_REVERIFIED | Admin readback not available; never recreate existing objects |
 | Real login surface | NOT_VERIFIED / BLOCKED_BY_REDIRECT_CONFIGURATION | No authenticated Admin browser capability in agent; baseline not read; no mutation |
@@ -21,7 +21,7 @@ not reclassified as production evidence. Git commits identify the exact changes.
 | Public TLS/hostname/issuer | NOT_ESTABLISHED | ADR-031 approved network boundary; actual names/provider pending |
 | Browser site topology | APPROVED_SAME_SITE_SUBDOMAINS | ADR-038 accepted; Chromium semantics lab passed; actual domain/public browser flow pending |
 | Control 6 / RF03 / Amazon | PARTIALLY_SATISFIED / NOT_EXECUTED / BLOCKED | Code/tests and isolated provider lab cannot prove effective production behavior |
-| SEC-DEPS-01 | REMEDIATED_LOCKFILE / VERIFIED_TEST | Five unique advisories patched; 155 frontend tests, lint/build/PWA smoke; deployed versions not verified |
+| SEC-DEPS-01 | DISCREPANCY_OPEN | Six GitHub alerts reported (4 high/2 moderate), exact metadata unavailable (API 401); current npm/installed audits clean; unsafe Python support floors corrected separately |
 
 Auth/DB variables are UNSET **in the agent environment**. Remote deployment
 variables were not inspected; prior inactive deployment status is not freshly
@@ -167,10 +167,10 @@ acceptance support any stronger claim. No Amazon submission is authorized.
 
 ## Prioritized remaining queue and stop boundaries
 
-1. Git histories and portal branch are integrated locally; SSH authentication
-   remains needed for normal push. User already authorized merges and pushes.
-   Fetch freshly before publishing and never force. Portal Git deployment may
-   follow a master push; protection settings were not independently reverified.
+1. Git histories and portal branch are integrated and checkpoint b338a67 was
+   verified via authenticated SSH at 0/0. Continue gated normal pushes. Obtain
+   the six non-secret Dependabot alert records to resolve the discrepancy; SSH
+   authentication does not grant REST alert access. Never request a token.
 2. Provide a controllable authenticated Admin browser or perform the compact
    operator redirect procedure locally: exact baseline, single temporary URI,
    probe without login, removal/readback. No baseline or mutation yet.
@@ -256,3 +256,33 @@ claim original configuration restored when no baseline was inspected.
 Prepared migration/RF03/off-host packet: `compliance/IDENTITY_OPERATOR_CHECKPOINT.md`.
 Forensics and commit map: `research/ACCELERATOR_SECOND_WAVE_GIT.md`.
 Manual simplicity/self-review performed; Ponytail callable capability unavailable.
+
+
+## Third-wave current evidence
+
+Full backend: 839 PASS / 42 SKIP in the final installed environment; the corrected-minimum
+environment passed 839/38 before four additional PostgreSQL-only negative cases,
+with disposable nginx. PostgreSQL: 52 PASS / 2 SKIP plus restart PASS. Executable
+session preflight: 4 PASS; offline hashes only unless explicit metadata check.
+New synthetic HTTP test verifies re-login recovery after provider rotation then
+persistence failure; no real user, provider login or live DB used.
+
+python-multipart >=0.0.31, PyJWT >=2.13.0, cryptography >=50.0.0, pytest >=9.0.3
+exclude audited vulnerable support ranges. Installed packages were already newer;
+no production environment upgrade. The full disposable dependency environment
+was audited after upgrading its bootstrap pip 24.0 to 26.2.0; no known package
+advisories then remained, with the local JUVAl project itself non-PyPI/unscannable.
+This does not reconcile or dismiss the six unknown GitHub alerts.
+
+Frontend 155 PASS, lint/build/PWA smoke PASS; all three frozen trees unchanged
+this wave. Portal criterion dependency-remediation is PARTIAL/NOT_VERIFIED while
+GitHub metadata is unresolved; measure through ADR-040 rather than retaining old
+scores. Real login/redirect baseline still unavailable. No configuration mutation
+or claimed restoration. N-1 retained and tested; N-3/final allow-list require real
+hosted/MFA/logout evidence. Rate-policy thresholds require measured legitimate
+flow/retry/NAT behavior; no synthetic number is treated as production-safe.
+
+RF03, off-host recovery and domain architecture runbooks re-reviewed; their
+remaining actions need explicit user/provider evidence. No new production
+controls claimed. Authoritative dependency detail:
+`compliance/DEPENDENCY_THIRD_WAVE_RECONCILIATION.md`.

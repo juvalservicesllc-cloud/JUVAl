@@ -1201,3 +1201,35 @@ nginx/FusionAuth real esperan evidencia del login. N-3 parcial, sin nuevas
 cabeceras incompatibles ni ampliación de allow-list. SSH/Admin/dominio/live/RF03/
 destino off-host/owner/ventana mantenimiento en cola humana. Sin reboot, upgrades,
 UFW/SSH, apertura de puertos, secretos, compras o envío Amazon.
+
+
+## Sesión 2026-09-10 — third-wave durable resume
+
+Checkpoint b338a67 verificado por fetch SSH autenticado: HEAD=origin/master,
+0/0. Se reutilizó el agente SSH autenticado, sin cambios de transporte/SSH ni
+lectura de claves. Ambas ramas del portal contenidas; no cherry-pick duplicado.
+
+Seis alertas GitHub reportadas (4 high, 2 moderate) siguen sin IDs/manifest:
+API Dependabot 401; no inferir equivalencia con los cinco avisos frontend previos.
+Auditorías npm de los cuatro lockfiles y entorno Python instalado limpias.
+Hallazgo independiente: mínimos Python permitían versiones vulnerables. Cuatro
+floors corregidos y probados en venv privado; cryptography49 rechazado por nuevo
+aviso, mínimo50 verificado. Detalles y 23 filas deduplicadas de rangos permitidos
+en compliance/DEPENDENCY_THIRD_WAVE_RECONCILIATION.md; no son la lista GitHub.
+
+Gates: 839 backend PASS / 38 SKIP en ambos entornos con nginx desechable;
+48 PostgreSQL PASS / 2 SKIP más restart PASS; frontend155, lint/build/smoke PASS,
+sin cambios en ningún árbol frontend. Nuevo preflight read-only y test de recuperación
+re-login tras pérdida de persistencia durante rotación. Portal descuenta el crédito
+de dependencias mientras la discrepancia esté abierta, según ADR-040.
+
+Admin controlable/autenticado y baseline real no disponibles: no redirect añadido,
+no login, no callback, no user ni RF03. N-1 lab retenido; D-1/compatibilidad real
+bloqueados. Migración live/auth/TLS/DNS/UFW/SSH/reboot/apt/submission sin cambios.
+
+
+Third-wave preflight follow-up: digest primary keys must be valid and
+nondeferrable in both identity tables. Four real PostgreSQL negatives now reject
+missing/deferrable keys; no migration change. PostgreSQL final52 PASS/2 SKIP plus
+restart PASS. Full suite final839 PASS/42 SKIP; new skips are the four explicit
+PostgreSQL-only cases when no disposable DB is supplied to the full suite.
