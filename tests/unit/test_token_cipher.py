@@ -17,7 +17,9 @@ from juval.infrastructure.crypto.token_cipher import (
     TokenCipher,
     TokenCryptoUnavailable,
     TokenDecryptionError,
+    _b64,
     _Key,
+    _unb64,
     context_for,
 )
 
@@ -79,20 +81,86 @@ def test_unknown_key_id_is_rejected():
         TokenCipher(_key("current")).decrypt(envelope, context=CTX)
 
 
+def _flip_sealed_byte(envelope: str, index: int) -> str:
+    """Flip one bit of a real byte in the sealed segment, then re-encode.
+
+    Tampering must happen at the *byte* level, not on the base64 text. The
+    sealed segment is unpadded urlsafe base64, so its final character carries
+    only two significant bits and four the decoder discards: replacing that one
+    character leaves the decoded bytes untouched for 16 of the 64 possible
+    originals (exactly `ABCDEFGHIJKLMNOP`, verified by enumeration). An earlier
+    version of this test did precisely that, so a quarter of the time it
+    tampered with nothing, `decrypt()` correctly succeeded, and the test failed
+    while asserting nothing about tamper-resistance.
+
+    Decoding, flipping a byte and re-encoding makes the mutation certain, and
+    `test_tampering_actually_changes_the_sealed_bytes` pins that it did.
+    """
+    scheme, key_id, nonce_b64, sealed_b64 = envelope.split(".", 3)
+    sealed = bytearray(_unb64(sealed_b64))
+    sealed[index] ^= 0x01
+    return ".".join((scheme, key_id, nonce_b64, _b64(bytes(sealed))))
+
+
+def _sealed_bytes(envelope: str) -> bytes:
+    return _unb64(envelope.split(".", 3)[3])
+
+
+@pytest.mark.parametrize("index", [-1, -16, 0], ids=["tag-last", "tag-first", "ciphertext"])
+def test_tampering_actually_changes_the_sealed_bytes(index: int):
+    """The precondition the rejection tests below depend on.
+
+    Without this, a mutation that quietly does nothing would look exactly like
+    a passing tamper-detection test.
+    """
+    envelope = TokenCipher(_key()).encrypt(TOKEN, context=CTX)
+    tampered = _flip_sealed_byte(envelope, index)
+    original_bytes, tampered_bytes = _sealed_bytes(envelope), _sealed_bytes(tampered)
+    assert tampered_bytes != original_bytes
+    assert len(tampered_bytes) == len(original_bytes)
+    # Exactly one bit, in the byte we aimed at.
+    differing = [i for i, (a, b) in enumerate(zip(original_bytes, tampered_bytes)) if a != b]
+    assert differing == [index % len(original_bytes)]
+
+
 @pytest.mark.parametrize(
     "mangle",
     [
-        lambda e: e[:-1] + ("A" if e[-1] != "A" else "B"),   # flipped tag byte
+        lambda e: _flip_sealed_byte(e, -1),                  # last byte of the GCM tag
+        lambda e: _flip_sealed_byte(e, -16),                 # first byte of the GCM tag
+        lambda e: _flip_sealed_byte(e, 0),                   # first ciphertext byte
         lambda e: e.replace(SCHEME, "v9", 1),                # unsupported scheme
         lambda e: e.split(".", 1)[1],                        # truncated envelope
         lambda e: "",                                        # empty
     ],
-    ids=["tampered", "unknown-scheme", "truncated", "empty"],
+    ids=["tag-last", "tag-first", "ciphertext", "unknown-scheme", "truncated", "empty"],
 )
 def test_corrupt_ciphertext_is_rejected(mangle):
     cipher = TokenCipher(_key())
     with pytest.raises(TokenDecryptionError):
         cipher.decrypt(mangle(cipher.encrypt(TOKEN, context=CTX)), context=CTX)
+
+
+def test_every_single_bit_flip_in_the_sealed_segment_is_rejected():
+    """Exhaustive, deterministic, and the strongest form of the invariant.
+
+    One fixed envelope, every bit of every sealed byte flipped in turn: AES-GCM
+    must reject all of them. This cannot pass by luck -- there is no randomness
+    left in the assertion.
+    """
+    cipher = TokenCipher(_key())
+    envelope = cipher.encrypt(TOKEN, context=CTX)
+    sealed = _sealed_bytes(envelope)
+    scheme, key_id, nonce_b64, _ = envelope.split(".", 3)
+
+    for byte_index in range(len(sealed)):
+        for bit in range(8):
+            mutated = bytearray(sealed)
+            mutated[byte_index] ^= 1 << bit
+            assert bytes(mutated) != sealed
+            candidate = ".".join((scheme, key_id, nonce_b64, _b64(bytes(mutated))))
+            with pytest.raises(TokenDecryptionError):
+                cipher.decrypt(candidate, context=CTX)
 
 
 def test_ciphertext_is_bound_to_its_column():
