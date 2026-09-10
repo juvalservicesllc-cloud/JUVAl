@@ -15,7 +15,9 @@ try {
  });
  const page=await context.newPage();
  await page.goto('https://api.juval.test/seed');
+ assert.equal(await page.evaluate(()=>document.cookie.length),0,'HttpOnly on issuing host');
  await page.goto('https://app.juval.test/');
+ assert.equal(await page.evaluate(async()=>await(await fetch('/probe')).json().then(x=>x.sent)),false,'host-only cookie not sent to sibling');
  const probe=()=>page.evaluate(async()=>await(await fetch('https://api.juval.test/probe',{credentials:'include'})).json());
  assert.equal((await probe()).sent,true,'same-site credentialed fetch');
  assert.equal(await page.evaluate(()=>document.cookie.length),0,'host-only HttpOnly cookie not exposed on app');
