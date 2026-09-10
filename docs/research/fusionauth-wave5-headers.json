@@ -1,0 +1,614 @@
+[
+  {
+    "scope": "GENERIC_UNAUTHENTICATED_RENDER_ONLY",
+    "candidate": {},
+    "headerReadback": {},
+    "path": "/oauth2/two-factor",
+    "status": 200,
+    "scriptReferences": 3,
+    "loadedStylesheets": 2,
+    "primeExecuted": true,
+    "assets": [
+      {
+        "path": "/oauth2/two-factor",
+        "status": 200,
+        "type": "document"
+      },
+      {
+        "path": "/css/font-awesome-4.7.0.min.css",
+        "status": 200,
+        "type": "stylesheet"
+      },
+      {
+        "path": "/css/entrypoints/fusionauth-hosted.css",
+        "status": 200,
+        "type": "stylesheet"
+      },
+      {
+        "path": "/js/prime-min-1.7.0.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "path": "/images/footer-logo.svg",
+        "status": 200,
+        "type": "image"
+      },
+      {
+        "path": "/js/Util.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "path": "/js/oauth2/LocaleSelect.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "path": "/images/favicon-128.png",
+        "status": 200,
+        "type": "other"
+      },
+      {
+        "path": "/images/favicon-32x32.png",
+        "status": 200,
+        "type": "other"
+      }
+    ],
+    "failures": []
+  },
+  {
+    "scope": "GENERIC_UNAUTHENTICATED_RENDER_ONLY",
+    "candidate": {},
+    "headerReadback": {},
+    "path": "/password/forgot",
+    "status": 200,
+    "scriptReferences": 3,
+    "loadedStylesheets": 2,
+    "primeExecuted": true,
+    "assets": [
+      {
+        "path": "/password/forgot",
+        "status": 200,
+        "type": "document"
+      },
+      {
+        "path": "/css/font-awesome-4.7.0.min.css",
+        "status": 200,
+        "type": "stylesheet"
+      },
+      {
+        "path": "/css/entrypoints/fusionauth-hosted.css",
+        "status": 200,
+        "type": "stylesheet"
+      },
+      {
+        "path": "/images/footer-logo.svg",
+        "status": 200,
+        "type": "image"
+      },
+      {
+        "path": "/js/Util.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "path": "/js/oauth2/LocaleSelect.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "path": "/js/prime-min-1.7.0.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "path": "/images/favicon-128.png",
+        "status": 200,
+        "type": "other"
+      },
+      {
+        "path": "/images/favicon-32x32.png",
+        "status": 200,
+        "type": "other"
+      }
+    ],
+    "failures": []
+  },
+  {
+    "scope": "GENERIC_UNAUTHENTICATED_RENDER_ONLY",
+    "candidate": {
+      "X-Content-Type-Options": "nosniff"
+    },
+    "headerReadback": {
+      "X-Content-Type-Options": "nosniff"
+    },
+    "path": "/oauth2/two-factor",
+    "status": 200,
+    "scriptReferences": 3,
+    "loadedStylesheets": 2,
+    "primeExecuted": true,
+    "assets": [
+      {
+        "path": "/oauth2/two-factor",
+        "status": 200,
+        "type": "document"
+      },
+      {
+        "path": "/css/font-awesome-4.7.0.min.css",
+        "status": 200,
+        "type": "stylesheet"
+      },
+      {
+        "path": "/css/entrypoints/fusionauth-hosted.css",
+        "status": 200,
+        "type": "stylesheet"
+      },
+      {
+        "path": "/images/footer-logo.svg",
+        "status": 200,
+        "type": "image"
+      },
+      {
+        "path": "/js/Util.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "path": "/js/oauth2/LocaleSelect.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "path": "/js/prime-min-1.7.0.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "path": "/images/favicon-128.png",
+        "status": 200,
+        "type": "other"
+      },
+      {
+        "path": "/images/favicon-32x32.png",
+        "status": 200,
+        "type": "other"
+      }
+    ],
+    "failures": []
+  },
+  {
+    "scope": "GENERIC_UNAUTHENTICATED_RENDER_ONLY",
+    "candidate": {
+      "X-Content-Type-Options": "nosniff"
+    },
+    "headerReadback": {
+      "X-Content-Type-Options": "nosniff"
+    },
+    "path": "/password/forgot",
+    "status": 200,
+    "scriptReferences": 3,
+    "loadedStylesheets": 2,
+    "primeExecuted": true,
+    "assets": [
+      {
+        "path": "/password/forgot",
+        "status": 200,
+        "type": "document"
+      },
+      {
+        "path": "/css/font-awesome-4.7.0.min.css",
+        "status": 200,
+        "type": "stylesheet"
+      },
+      {
+        "path": "/css/entrypoints/fusionauth-hosted.css",
+        "status": 200,
+        "type": "stylesheet"
+      },
+      {
+        "path": "/js/Util.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "path": "/images/footer-logo.svg",
+        "status": 200,
+        "type": "image"
+      },
+      {
+        "path": "/js/oauth2/LocaleSelect.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "path": "/js/prime-min-1.7.0.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "path": "/images/favicon-128.png",
+        "status": 200,
+        "type": "other"
+      },
+      {
+        "path": "/images/favicon-32x32.png",
+        "status": 200,
+        "type": "other"
+      }
+    ],
+    "failures": []
+  },
+  {
+    "scope": "GENERIC_UNAUTHENTICATED_RENDER_ONLY",
+    "candidate": {
+      "Referrer-Policy": "same-origin"
+    },
+    "headerReadback": {
+      "Referrer-Policy": "same-origin"
+    },
+    "path": "/oauth2/two-factor",
+    "status": 200,
+    "scriptReferences": 3,
+    "loadedStylesheets": 2,
+    "primeExecuted": true,
+    "assets": [
+      {
+        "path": "/oauth2/two-factor",
+        "status": 200,
+        "type": "document"
+      },
+      {
+        "path": "/css/font-awesome-4.7.0.min.css",
+        "status": 200,
+        "type": "stylesheet"
+      },
+      {
+        "path": "/css/entrypoints/fusionauth-hosted.css",
+        "status": 200,
+        "type": "stylesheet"
+      },
+      {
+        "path": "/js/Util.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "path": "/images/footer-logo.svg",
+        "status": 200,
+        "type": "image"
+      },
+      {
+        "path": "/js/oauth2/LocaleSelect.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "path": "/js/prime-min-1.7.0.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "path": "/images/favicon-128.png",
+        "status": 200,
+        "type": "other"
+      },
+      {
+        "path": "/images/favicon-32x32.png",
+        "status": 200,
+        "type": "other"
+      }
+    ],
+    "failures": []
+  },
+  {
+    "scope": "GENERIC_UNAUTHENTICATED_RENDER_ONLY",
+    "candidate": {
+      "Referrer-Policy": "same-origin"
+    },
+    "headerReadback": {
+      "Referrer-Policy": "same-origin"
+    },
+    "path": "/password/forgot",
+    "status": 200,
+    "scriptReferences": 3,
+    "loadedStylesheets": 2,
+    "primeExecuted": true,
+    "assets": [
+      {
+        "path": "/password/forgot",
+        "status": 200,
+        "type": "document"
+      },
+      {
+        "path": "/css/font-awesome-4.7.0.min.css",
+        "status": 200,
+        "type": "stylesheet"
+      },
+      {
+        "path": "/css/entrypoints/fusionauth-hosted.css",
+        "status": 200,
+        "type": "stylesheet"
+      },
+      {
+        "path": "/js/Util.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "path": "/js/prime-min-1.7.0.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "path": "/images/footer-logo.svg",
+        "status": 200,
+        "type": "image"
+      },
+      {
+        "path": "/js/oauth2/LocaleSelect.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "path": "/images/favicon-128.png",
+        "status": 200,
+        "type": "other"
+      },
+      {
+        "path": "/images/favicon-32x32.png",
+        "status": 200,
+        "type": "other"
+      }
+    ],
+    "failures": []
+  },
+  {
+    "scope": "GENERIC_UNAUTHENTICATED_RENDER_ONLY",
+    "candidate": {
+      "X-Frame-Options": "SAMEORIGIN"
+    },
+    "headerReadback": {
+      "X-Frame-Options": "SAMEORIGIN"
+    },
+    "path": "/oauth2/two-factor",
+    "status": 200,
+    "scriptReferences": 3,
+    "loadedStylesheets": 2,
+    "primeExecuted": true,
+    "assets": [
+      {
+        "path": "/oauth2/two-factor",
+        "status": 200,
+        "type": "document"
+      },
+      {
+        "path": "/css/font-awesome-4.7.0.min.css",
+        "status": 200,
+        "type": "stylesheet"
+      },
+      {
+        "path": "/css/entrypoints/fusionauth-hosted.css",
+        "status": 200,
+        "type": "stylesheet"
+      },
+      {
+        "path": "/images/footer-logo.svg",
+        "status": 200,
+        "type": "image"
+      },
+      {
+        "path": "/js/Util.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "path": "/js/prime-min-1.7.0.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "path": "/js/oauth2/LocaleSelect.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "path": "/images/favicon-128.png",
+        "status": 200,
+        "type": "other"
+      },
+      {
+        "path": "/images/favicon-32x32.png",
+        "status": 200,
+        "type": "other"
+      }
+    ],
+    "failures": []
+  },
+  {
+    "scope": "GENERIC_UNAUTHENTICATED_RENDER_ONLY",
+    "candidate": {
+      "X-Frame-Options": "SAMEORIGIN"
+    },
+    "headerReadback": {
+      "X-Frame-Options": "SAMEORIGIN"
+    },
+    "path": "/password/forgot",
+    "status": 200,
+    "scriptReferences": 3,
+    "loadedStylesheets": 2,
+    "primeExecuted": true,
+    "assets": [
+      {
+        "path": "/password/forgot",
+        "status": 200,
+        "type": "document"
+      },
+      {
+        "path": "/css/font-awesome-4.7.0.min.css",
+        "status": 200,
+        "type": "stylesheet"
+      },
+      {
+        "path": "/css/entrypoints/fusionauth-hosted.css",
+        "status": 200,
+        "type": "stylesheet"
+      },
+      {
+        "path": "/images/footer-logo.svg",
+        "status": 200,
+        "type": "image"
+      },
+      {
+        "path": "/js/Util.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "path": "/js/oauth2/LocaleSelect.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "path": "/js/prime-min-1.7.0.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "path": "/images/favicon-128.png",
+        "status": 200,
+        "type": "other"
+      },
+      {
+        "path": "/images/favicon-32x32.png",
+        "status": 200,
+        "type": "other"
+      }
+    ],
+    "failures": []
+  },
+  {
+    "scope": "GENERIC_UNAUTHENTICATED_RENDER_ONLY",
+    "candidate": {
+      "Permissions-Policy": "publickey-credentials-get=(self), publickey-credentials-create=(self)"
+    },
+    "headerReadback": {
+      "Permissions-Policy": "publickey-credentials-get=(self), publickey-credentials-create=(self)"
+    },
+    "path": "/oauth2/two-factor",
+    "status": 200,
+    "scriptReferences": 3,
+    "loadedStylesheets": 2,
+    "primeExecuted": true,
+    "assets": [
+      {
+        "path": "/oauth2/two-factor",
+        "status": 200,
+        "type": "document"
+      },
+      {
+        "path": "/css/font-awesome-4.7.0.min.css",
+        "status": 200,
+        "type": "stylesheet"
+      },
+      {
+        "path": "/css/entrypoints/fusionauth-hosted.css",
+        "status": 200,
+        "type": "stylesheet"
+      },
+      {
+        "path": "/images/footer-logo.svg",
+        "status": 200,
+        "type": "image"
+      },
+      {
+        "path": "/js/Util.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "path": "/js/oauth2/LocaleSelect.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "path": "/js/prime-min-1.7.0.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "path": "/images/favicon-128.png",
+        "status": 200,
+        "type": "other"
+      },
+      {
+        "path": "/images/favicon-32x32.png",
+        "status": 200,
+        "type": "other"
+      }
+    ],
+    "failures": []
+  },
+  {
+    "scope": "GENERIC_UNAUTHENTICATED_RENDER_ONLY",
+    "candidate": {
+      "Permissions-Policy": "publickey-credentials-get=(self), publickey-credentials-create=(self)"
+    },
+    "headerReadback": {
+      "Permissions-Policy": "publickey-credentials-get=(self), publickey-credentials-create=(self)"
+    },
+    "path": "/password/forgot",
+    "status": 200,
+    "scriptReferences": 3,
+    "loadedStylesheets": 2,
+    "primeExecuted": true,
+    "assets": [
+      {
+        "path": "/password/forgot",
+        "status": 200,
+        "type": "document"
+      },
+      {
+        "path": "/css/font-awesome-4.7.0.min.css",
+        "status": 200,
+        "type": "stylesheet"
+      },
+      {
+        "path": "/css/entrypoints/fusionauth-hosted.css",
+        "status": 200,
+        "type": "stylesheet"
+      },
+      {
+        "path": "/js/Util.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "path": "/js/prime-min-1.7.0.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "path": "/images/footer-logo.svg",
+        "status": 200,
+        "type": "image"
+      },
+      {
+        "path": "/js/oauth2/LocaleSelect.js",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "path": "/images/favicon-128.png",
+        "status": 200,
+        "type": "other"
+      },
+      {
+        "path": "/images/favicon-32x32.png",
+        "status": 200,
+        "type": "other"
+      }
+    ],
+    "failures": []
+  }
+]

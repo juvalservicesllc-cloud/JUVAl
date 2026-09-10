@@ -1,6 +1,7 @@
 """Opt-in real FusionAuth GET-only loopback lab; never mutates provider config.
 
-Requires independently verified temporary redirect baseline/add/readback.
+Real-login mode requires independently verified temporary redirect baseline/add/readback.
+Generic-surface-only mode makes no redirect change or real-login claim.
 Operator MUST restore that redirect after success or failure. No access/error
 logs, response bodies, cookies or OAuth query values are persisted by this lab.
 """
@@ -14,7 +15,7 @@ import subprocess
 import tempfile
 import time
 
-from fusionauth_surface_discovery import probe_real_login, fetch
+from fusionauth_surface_discovery import probe_real_login, fetch, extract_assets
 from nginx_surface_lab import (
     TEMPLATE, NGINX_CONF, render_lab_config, find_nginx, _free_port,
 )
@@ -35,8 +36,12 @@ def verify_paths(observations):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--temporary-redirect-confirmed', action='store_true')
+    parser.add_argument('--generic-surface-only', action='store_true',
+                        help='GET generic second-factor resources; no redirect mutation or real login claim')
     args = parser.parse_args()
-    if not args.temporary_redirect_confirmed:
+    if args.generic_surface_only and args.temporary_redirect_confirmed:
+        parser.error('choose generic discovery OR the attested real-login experiment')
+    if not args.temporary_redirect_confirmed and not args.generic_surface_only:
         parser.error('independent baseline/add/readback required before this lab')
     binary = find_nginx()
     if not binary:
@@ -65,7 +70,13 @@ def main():
                         break
                     except OSError:
                         time.sleep(.1)
-                login = probe_real_login(base, temporary_redirect_confirmed=True)
+                if args.generic_surface_only:
+                    response = fetch(base + '/oauth2/two-factor')
+                    login = {'status': response.status, 'classification': 'GENERIC_UNAUTHENTICATED_GET_ONLY',
+                             'resources': sorted({ref.path.split('?')[0] for ref in extract_assets(
+                                 response.text(), base + '/oauth2/two-factor') if ref.same_origin})}
+                else:
+                    login = probe_real_login(base, temporary_redirect_confirmed=True)
                 paths = sorted(set(login['resources']) | {
                     '/admin', '/api', '/account', '/password', '/oauth2/userinfo',
                     '/fonts/fontawesome-webfont.woff2', '/assets/icons/fingerprint-overlay.svg',
@@ -89,14 +100,17 @@ def main():
                         response.read()
                     finally:
                         connection.close()
-                rendered = (login['classification'] == 'OBSERVED_REAL_JUVAL_LOGIN'
+                expected = 'GENERIC_UNAUTHENTICATED_GET_ONLY' if args.generic_surface_only else 'OBSERVED_REAL_JUVAL_LOGIN'
+                rendered = (login['classification'] == expected and login['status'] == 200
                             and verify_paths(observations)
                             and all(row['hostile_headers_relative_redirect'] for row in redirects))
                 result = {
                     'classification': 'RUNTIME_LOOPBACK_VERIFIED' if rendered else 'NOT_VERIFIED',
-                    'scope': 'Initial authorize HTML and GET paths only; not MFA, WebAuthn or production',
+                    'scope': ('Generic GET paths only; not real login/MFA flow' if args.generic_surface_only
+                              else 'Initial authorize HTML and GET paths only; not MFA, WebAuthn or production'),
                     'login': login, 'paths': observations, 'redirects': redirects,
-                    'temporary_redirect_cleanup': 'REQUIRED_ADMIN_READBACK',
+                    'temporary_redirect_cleanup': ('NOT_APPLICABLE_NO_MUTATION' if args.generic_surface_only
+                                                   else 'REQUIRED_ADMIN_READBACK'),
                 }
                 print(json.dumps(result, indent=2))
                 return 0 if rendered else 1
@@ -109,7 +123,8 @@ def main():
                         process.kill()
                         process.wait(timeout=5)
     except Exception:
-        print('NOT_VERIFIED: loopback lab failed; diagnostics suppressed; redirect cleanup REQUIRED')
+        print('NOT_VERIFIED: loopback lab failed; diagnostics suppressed; ' +
+              ('no redirect mutation in generic mode' if args.generic_surface_only else 'redirect cleanup REQUIRED'))
         return 1
 
 

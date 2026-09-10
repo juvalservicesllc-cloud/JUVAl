@@ -1,0 +1,51 @@
+[
+  {
+    "css": "/css/font-awesome-4.7.0.min.css",
+    "path": "/fonts/fontawesome-webfont.eot",
+    "status": 200,
+    "mime": "application/vnd.ms-fontobject",
+    "classification": "CONDITIONAL_CSS_REFERENCE_NOT_RENDERED_REQUIREMENT"
+  },
+  {
+    "css": "/css/font-awesome-4.7.0.min.css",
+    "path": "/fonts/fontawesome-webfont.svg",
+    "status": 200,
+    "mime": "image/svg+xml",
+    "classification": "CONDITIONAL_CSS_REFERENCE_NOT_RENDERED_REQUIREMENT"
+  },
+  {
+    "css": "/css/font-awesome-4.7.0.min.css",
+    "path": "/fonts/fontawesome-webfont.ttf",
+    "status": 200,
+    "mime": "font/ttf",
+    "classification": "CONDITIONAL_CSS_REFERENCE_NOT_RENDERED_REQUIREMENT"
+  },
+  {
+    "css": "/css/font-awesome-4.7.0.min.css",
+    "path": "/fonts/fontawesome-webfont.woff",
+    "status": 200,
+    "mime": "font/woff",
+    "classification": "CONDITIONAL_CSS_REFERENCE_NOT_RENDERED_REQUIREMENT"
+  },
+  {
+    "css": "/css/font-awesome-4.7.0.min.css",
+    "path": "/fonts/fontawesome-webfont.woff2",
+    "status": 200,
+    "mime": "font/woff2",
+    "classification": "CONDITIONAL_CSS_REFERENCE_NOT_RENDERED_REQUIREMENT"
+  },
+  {
+    "css": "/css/entrypoints/fusionauth-hosted.css",
+    "path": "/assets/icons/fingerprint-overlay.svg",
+    "status": 200,
+    "mime": "image/svg+xml",
+    "classification": "CONDITIONAL_CSS_REFERENCE_NOT_RENDERED_REQUIREMENT"
+  },
+  {
+    "css": "/css/entrypoints/fusionauth-hosted.css",
+    "path": "/css/entrypoints/${request.contextPath}/assets/icons/fingerprint-overlay.svg",
+    "status": 404,
+    "mime": "text/html",
+    "classification": "CONDITIONAL_CSS_REFERENCE_NOT_RENDERED_REQUIREMENT"
+  }
+]

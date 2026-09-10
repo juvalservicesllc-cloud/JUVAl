@@ -39,3 +39,12 @@ policy accounting for shared NAT, OAuth retries and provider lockout.
 Rollback before activation: revert these two directives in a new commit and
 rerun the lab. Any later deployment rollback requires normal production change
 control; no production deployment occurred in this decision.
+
+## Quinta ola — 2026-09-10
+
+D-1 permanece PARTIAL. Recuperación hosted excluida explícitamente por ADR-035;
+no se publica por aparecer el enlace. Rutas MFA genéricas alcanzables, sin prueba
+de flujo MFA. Fuentes/icono de huella condicionales; configuración actual pendiente
+de lectura Admin. Cuatro headers candidatos pasan renders genéricos por separado,
+no se activan en nginx. Matriz y evidencia en
+`docs/research/FUSIONAUTH_D1_FIFTH_WAVE.md`. Sin cambios productivos ni redirects.

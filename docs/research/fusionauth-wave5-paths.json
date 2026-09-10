@@ -1,0 +1,94 @@
+[
+  {
+    "path": "/password/forgot",
+    "status": 200,
+    "mime": "text/html",
+    "location": null,
+    "resources": [
+      "/css/entrypoints/fusionauth-hosted.css",
+      "/css/font-awesome-4.7.0.min.css",
+      "/images/apple-icon-114x114.png",
+      "/images/apple-icon-120x120.png",
+      "/images/apple-icon-144x144.png",
+      "/images/apple-icon-152x152.png",
+      "/images/apple-icon-180x180.png",
+      "/images/apple-icon-57x57.png",
+      "/images/apple-icon-60x60.png",
+      "/images/apple-icon-72x72.png",
+      "/images/apple-icon-76x76.png",
+      "/images/favicon-128.png",
+      "/images/favicon-16x16.png",
+      "/images/favicon-32x32.png",
+      "/images/favicon-96x96.png",
+      "/images/footer-logo.svg",
+      "/images/manifest.json",
+      "/js/Util.js",
+      "/js/oauth2/LocaleSelect.js",
+      "/js/prime-min-1.7.0.js",
+      "/oauth2/authorize",
+      "/password/forgot"
+    ],
+    "classification": "GENERIC_UNAUTHENTICATED_GET_ONLY"
+  },
+  {
+    "path": "/password/change",
+    "status": 302,
+    "mime": "",
+    "location": "/password/forgot?tenantId=<redacted>",
+    "resources": [],
+    "classification": "GENERIC_UNAUTHENTICATED_GET_ONLY"
+  },
+  {
+    "path": "/oauth2/two-factor",
+    "status": 200,
+    "mime": "text/html",
+    "location": null,
+    "resources": [
+      "/css/entrypoints/fusionauth-hosted.css",
+      "/css/font-awesome-4.7.0.min.css",
+      "/images/apple-icon-114x114.png",
+      "/images/apple-icon-120x120.png",
+      "/images/apple-icon-144x144.png",
+      "/images/apple-icon-152x152.png",
+      "/images/apple-icon-180x180.png",
+      "/images/apple-icon-57x57.png",
+      "/images/apple-icon-60x60.png",
+      "/images/apple-icon-72x72.png",
+      "/images/apple-icon-76x76.png",
+      "/images/favicon-128.png",
+      "/images/favicon-16x16.png",
+      "/images/favicon-32x32.png",
+      "/images/favicon-96x96.png",
+      "/images/footer-logo.svg",
+      "/images/manifest.json",
+      "/js/Util.js",
+      "/js/oauth2/LocaleSelect.js",
+      "/js/prime-min-1.7.0.js"
+    ],
+    "classification": "GENERIC_UNAUTHENTICATED_GET_ONLY"
+  },
+  {
+    "path": "/oauth2/two-factor-methods",
+    "status": 302,
+    "mime": "",
+    "location": "/oauth2/authorize?tenantId=<redacted>",
+    "resources": [],
+    "classification": "GENERIC_UNAUTHENTICATED_GET_ONLY"
+  },
+  {
+    "path": "/fonts/fontawesome-webfont.woff2",
+    "status": 200,
+    "mime": "font/woff2",
+    "location": null,
+    "resources": [],
+    "classification": "GENERIC_UNAUTHENTICATED_GET_ONLY"
+  },
+  {
+    "path": "/assets/icons/fingerprint-overlay.svg",
+    "status": 200,
+    "mime": "image/svg+xml",
+    "location": null,
+    "resources": [],
+    "classification": "GENERIC_UNAUTHENTICATED_GET_ONLY"
+  }
+]

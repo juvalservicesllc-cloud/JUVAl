@@ -1,0 +1,207 @@
+{
+  "classification": "RUNTIME_LOOPBACK_VERIFIED",
+  "scope": "Generic GET paths only; not real login/MFA flow",
+  "login": {
+    "status": 200,
+    "classification": "GENERIC_UNAUTHENTICATED_GET_ONLY",
+    "resources": [
+      "/css/entrypoints/fusionauth-hosted.css",
+      "/css/font-awesome-4.7.0.min.css",
+      "/images/apple-icon-114x114.png",
+      "/images/apple-icon-120x120.png",
+      "/images/apple-icon-144x144.png",
+      "/images/apple-icon-152x152.png",
+      "/images/apple-icon-180x180.png",
+      "/images/apple-icon-57x57.png",
+      "/images/apple-icon-60x60.png",
+      "/images/apple-icon-72x72.png",
+      "/images/apple-icon-76x76.png",
+      "/images/favicon-128.png",
+      "/images/favicon-16x16.png",
+      "/images/favicon-32x32.png",
+      "/images/favicon-96x96.png",
+      "/images/footer-logo.svg",
+      "/images/manifest.json",
+      "/js/Util.js",
+      "/js/oauth2/LocaleSelect.js",
+      "/js/prime-min-1.7.0.js"
+    ]
+  },
+  "paths": [
+    {
+      "path": "/account",
+      "status": 404,
+      "mime": "text/html"
+    },
+    {
+      "path": "/admin",
+      "status": 404,
+      "mime": "text/html"
+    },
+    {
+      "path": "/api",
+      "status": 404,
+      "mime": "text/html"
+    },
+    {
+      "path": "/assets/icons/fingerprint-overlay.svg",
+      "status": 404,
+      "mime": "text/html"
+    },
+    {
+      "path": "/css",
+      "status": 301,
+      "mime": "text/html"
+    },
+    {
+      "path": "/css/entrypoints/fusionauth-hosted.css",
+      "status": 200,
+      "mime": "text/css"
+    },
+    {
+      "path": "/css/font-awesome-4.7.0.min.css",
+      "status": 200,
+      "mime": "text/css"
+    },
+    {
+      "path": "/fonts/fontawesome-webfont.woff2",
+      "status": 404,
+      "mime": "text/html"
+    },
+    {
+      "path": "/images",
+      "status": 301,
+      "mime": "text/html"
+    },
+    {
+      "path": "/images/apple-icon-114x114.png",
+      "status": 200,
+      "mime": "image/png"
+    },
+    {
+      "path": "/images/apple-icon-120x120.png",
+      "status": 200,
+      "mime": "image/png"
+    },
+    {
+      "path": "/images/apple-icon-144x144.png",
+      "status": 200,
+      "mime": "image/png"
+    },
+    {
+      "path": "/images/apple-icon-152x152.png",
+      "status": 200,
+      "mime": "image/png"
+    },
+    {
+      "path": "/images/apple-icon-180x180.png",
+      "status": 200,
+      "mime": "image/png"
+    },
+    {
+      "path": "/images/apple-icon-57x57.png",
+      "status": 200,
+      "mime": "image/png"
+    },
+    {
+      "path": "/images/apple-icon-60x60.png",
+      "status": 200,
+      "mime": "image/png"
+    },
+    {
+      "path": "/images/apple-icon-72x72.png",
+      "status": 200,
+      "mime": "image/png"
+    },
+    {
+      "path": "/images/apple-icon-76x76.png",
+      "status": 200,
+      "mime": "image/png"
+    },
+    {
+      "path": "/images/favicon-128.png",
+      "status": 200,
+      "mime": "image/png"
+    },
+    {
+      "path": "/images/favicon-16x16.png",
+      "status": 200,
+      "mime": "image/png"
+    },
+    {
+      "path": "/images/favicon-32x32.png",
+      "status": 200,
+      "mime": "image/png"
+    },
+    {
+      "path": "/images/favicon-96x96.png",
+      "status": 200,
+      "mime": "image/png"
+    },
+    {
+      "path": "/images/footer-logo.svg",
+      "status": 200,
+      "mime": "image/svg+xml"
+    },
+    {
+      "path": "/images/manifest.json",
+      "status": 200,
+      "mime": "application/json"
+    },
+    {
+      "path": "/js",
+      "status": 301,
+      "mime": "text/html"
+    },
+    {
+      "path": "/js/Util.js",
+      "status": 200,
+      "mime": "text/javascript"
+    },
+    {
+      "path": "/js/oauth2/LocaleSelect.js",
+      "status": 200,
+      "mime": "text/javascript"
+    },
+    {
+      "path": "/js/prime-min-1.7.0.js",
+      "status": 200,
+      "mime": "text/javascript"
+    },
+    {
+      "path": "/oauth2/two-factor",
+      "status": 200,
+      "mime": "text/html"
+    },
+    {
+      "path": "/oauth2/two-factor-methods",
+      "status": 302,
+      "mime": ""
+    },
+    {
+      "path": "/oauth2/userinfo",
+      "status": 404,
+      "mime": "text/html"
+    },
+    {
+      "path": "/password",
+      "status": 404,
+      "mime": "text/html"
+    }
+  ],
+  "redirects": [
+    {
+      "path": "/css",
+      "hostile_headers_relative_redirect": true
+    },
+    {
+      "path": "/js",
+      "hostile_headers_relative_redirect": true
+    },
+    {
+      "path": "/images",
+      "hostile_headers_relative_redirect": true
+    }
+  ],
+  "temporary_redirect_cleanup": "NOT_APPLICABLE_NO_MUTATION"
+}

@@ -4467,3 +4467,12 @@ exacto en cada ciclo. Login inicial real renderizado en Chromium; nginx real
 loopback devuelve formulario y assets iniciales. D-1 PARTIAL: MFA/WebAuthn/fuentes
 y recuperación aún pendientes. No producción ni Control 6 satisfecho. Evidencia:
 `docs/research/REAL_JUVAL_LOGIN_20260910.md` y JSON sanitizados asociados.
+
+## Quinta ola — 2026-09-10
+
+D-1 permanece PARTIAL. Recuperación hosted excluida explícitamente por ADR-035;
+no se publica por aparecer el enlace. Rutas MFA genéricas alcanzables, sin prueba
+de flujo MFA. Fuentes/icono de huella condicionales; configuración actual pendiente
+de lectura Admin. Cuatro headers candidatos pasan renders genéricos por separado,
+no se activan en nginx. Matriz y evidencia en
+`docs/research/FUSIONAUTH_D1_FIFTH_WAVE.md`. Sin cambios productivos ni redirects.

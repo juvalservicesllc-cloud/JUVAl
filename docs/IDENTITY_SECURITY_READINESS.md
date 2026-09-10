@@ -1,6 +1,6 @@
 # JUVAl identity/security — current readiness and operator runbook
 
-**2026-09-10 accelerator fourth wave continuation. Status: PARTIALLY IMPLEMENTED.** Authoritative
+**2026-09-10 accelerator fifth wave. Status: PARTIALLY IMPLEMENTED.** Authoritative
 workspace: `/home/juval/JUVAl/APP`. This ledger supersedes dated implementation
 snapshots in project plans, contracts and research; historical experiments are
 not reclassified as production evidence. Git commits identify the exact changes.
@@ -16,8 +16,8 @@ not reclassified as production evidence. Git commits identify the exact changes.
 | Real login surface | INITIAL_LOGIN_BEHAVIORALLY_VERIFIED / RUNTIME_LOOPBACK_VERIFIED | Real Chromium render and nginx GET probes; exact redirect restoration verified; docs/research/REAL_JUVAL_LOGIN_20260910.md |
 | BFF/session store | IMPLEMENTED_TESTED_NOT_ACTIVATED | ADR-034/036; startup readiness and revoked-session projection corrected |
 | N-1 | REMEDIATED_TEMPLATE / LAB_BEHAVIOURALLY_VERIFIED | ADR-037; relative 301, query retention, no upstream contact; 90 nginx tests |
-| D-1 / final asset allow-list | PARTIAL | Initial render verified; fonts/WebAuthn/MFA and blocked recovery navigation remain unresolved |
-| N-3 | PARTIAL | nginx version suppressed; other headers/rate policy await flow compatibility |
+| D-1 / final asset allow-list | PARTIAL | Initial render verified; MFA/WebAuthn/fonts remain open; hosted recovery explicitly excluded by ADR-035; see FUSIONAUTH_D1_FIFTH_WAVE.md |
+| N-3 | PARTIAL | nginx version suppressed; four header candidates pass generic-provider render only; real MFA/WebAuthn/frame compatibility remains open |
 | Public TLS/hostname/issuer | NOT_ESTABLISHED | ADR-031 approved network boundary; actual names/provider pending |
 | Browser site topology | APPROVED_SAME_SITE_SUBDOMAINS | ADR-038 accepted; Chromium semantics lab passed; actual domain/public browser flow pending |
 | Control 6 / RF03 / Amazon | PARTIALLY_SATISFIED / NOT_EXECUTED / BLOCKED | Code/tests and isolated provider lab cannot prove effective production behavior |
@@ -298,3 +298,12 @@ rotation. No production keyring or database was changed. The isolated contract
 passes 53 tests with 2 memory-only skips; actual private PostgreSQL restart also
 passes and the cluster is removed. Full backend gate: 839 PASS / 43 SKIP, with
 disposable nginx available; skipped database cases run in the separate lab.
+
+## Fifth-wave safe discovery
+
+See `docs/research/FUSIONAUTH_D1_FIFTH_WAVE.md` for the per-route matrix,
+recovery exclusion rationale, generic runtime/conditional CSS evidence and
+individual header experiments. No redirect or provider configuration changed.
+MFA_BEHAVIORAL_CHECKPOINT_REQUIRED=YES; configuration readback awaits private
+Admin authentication. RF03-P6 is BLOCKED_BY_ARCHITECTURE under ADR-035, not an
+authorization to set passwordChangeRequired. D1 remains PARTIAL.
