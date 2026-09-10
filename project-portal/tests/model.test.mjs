@@ -20,7 +20,12 @@ test('accelerator mappings keep lab remediation separate from public readiness',
  if(s.files.some(f=>f.path==='docs/adr/ADR-037-nginx-generated-response-hardening.md')){
    assert.equal(n1.status,'COMPLETE');
    assert.equal(n1.verificationLevel,'LAB_BEHAVIORALLY_VERIFIED');
-   assert.equal(s.criteria.find(c=>c.id==='real-login-surface').status,'BLOCKED');
+   const login=s.criteria.find(c=>c.id==='real-login-surface');
+   if(s.files.some(f=>f.path==='docs/research/REAL_JUVAL_LOGIN_20260910.md')){
+     assert.equal(login.status,'COMPLETE');
+     assert.equal(login.verificationLevel,'BEHAVIORALLY_VERIFIED');
+     assert.match(login.notes,/no production credit/);
+   } else assert.equal(login.status,'BLOCKED');
    const topology=s.criteria.find(c=>c.id==='browser-site-topology');
    if(s.adrs.find(a=>a.id==='ADR-038')?.status==='Accepted')assert.equal(topology.status,'COMPLETE');
    else assert.notEqual(topology.status,'COMPLETE');

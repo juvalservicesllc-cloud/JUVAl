@@ -405,12 +405,12 @@
       "workstream": "FusionAuth",
       "weight": 1,
       "rule": "documented",
-      "status": "BLOCKED",
-      "verificationLevel": "NOT_VERIFIED",
-      "source": "docs/IDENTITY_SECURITY_READINESS.md",
-      "section": "Temporary real-login session",
-      "evidenceMatch": "baseline",
-      "notes": "Operator must preserve exact redirect baseline, add only approved temporary URI, probe without credentials, restore and read back.",
+      "status": "COMPLETE",
+      "verificationLevel": "BEHAVIORALLY_VERIFIED",
+      "source": "docs/research/REAL_JUVAL_LOGIN_20260910.md",
+      "section": "Initial login evidence",
+      "evidenceMatch": "INITIAL_LOGIN_BEHAVIORALLY_VERIFIED",
+      "notes": "Initial credential-free render and exact redirect restoration verified. D-1 remains partial: MFA, WebAuthn, fonts and recovery are not verified; no production credit.",
       "dependsOn": [
         "bff"
       ]
