@@ -1233,3 +1233,12 @@ nondeferrable in both identity tables. Four real PostgreSQL negatives now reject
 missing/deferrable keys; no migration change. PostgreSQL final52 PASS/2 SKIP plus
 restart PASS. Full suite final839 PASS/42 SKIP; new skips are the four explicit
 PostgreSQL-only cases when no disposable DB is supplied to the full suite.
+
+## Sesión 2026-09-10 — cuarta ola
+
+Rotación aditiva de claves verificada sobre PostgreSQL desechable; RF03 preparado
+con cambio obligatorio y correo .invalid. Backend 839 PASS / 43 SKIP; PostgreSQL
+53 PASS / 2 SKIP y reinicio real PASS. Login real sigue NOT_VERIFIED; ventana
+Admin preparada para autenticación privada. Dependabot no bloquea trabajo
+independiente: PARTIAL / GITHUB_METADATA_REQUIRED. Evidencia y límites en
+`docs/research/ACCELERATOR_FOURTH_WAVE_RESULTS.md`. Sin activación de producción.
