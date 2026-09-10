@@ -189,3 +189,12 @@ and build passed; npm audit reports zero advisories. Backend JUnit counters were
 reproduced on clean Linux `63568c4`: 821 passed / 36 skipped with real nginx.
 Browser E2E was not rerun (no portal UI change); this does not claim a new
 browser-rendering or live deployment verification.
+
+## Five independent measurements (model 1.2)
+
+After `JUVAL_EVIDENCE_REF=<commit> npm run sync`, run `node scripts/measure.mjs`.
+ADR-040 defines separate implementation, verification, production evidence,
+security evidence and Amazon evidence scopes, weights and credit rules. The
+output includes its indexed commit and denominators. This is curated repository
+evidence, not measured live coverage or Amazon approval. Unknown runtime evidence
+earns no production credit. No percentage authorizes deployment or submission.

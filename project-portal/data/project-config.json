@@ -1,6 +1,6 @@
 {
   "repository": "juvalservicesllc-cloud/JUVAl",
-  "modelVersion": "1.1",
+  "modelVersion": "1.2",
   "scope": "Repository plan phases 0\u201310; conservative evidence-weighted acceptance criteria. Weights are portal planning metadata, not an approved business completion estimate.",
   "phases": [
     "Foundation",
@@ -422,15 +422,80 @@
       "workstream": "Infrastructure",
       "weight": 1,
       "rule": "documented",
-      "status": "BLOCKED",
-      "verificationLevel": "NOT_VERIFIED",
+      "status": "COMPLETE",
+      "verificationLevel": "VERIFIED_CONFIG",
       "source": "docs/adr/ADR-038-browser-site-topology-readiness.md",
-      "section": "Proposed decision",
-      "evidenceMatch": "registrable domain",
-      "notes": "SameSite=Lax does not permit cross-site API fetches just because CORS allows credentials. Domain/ingress decision pending.",
+      "section": "Decision",
+      "evidenceMatch": "Select separate same-site app/API/identity subdomains",
+      "notes": "ADR-038 accepted by operator authorization; actual domain and public browser behavior remain pending under issuer/real-login criteria.",
       "dependsOn": [
         "bff"
       ]
+    },
+    {
+      "id": "dependency-remediation",
+      "title": "Confirmed dependency advisory remediation",
+      "phase": 10,
+      "workstream": "Security",
+      "weight": 2,
+      "rule": "documented",
+      "source": "docs/compliance/SEC_DEPS_01_REVIEW.md",
+      "section": "Authorized remediation",
+      "status": "COMPLETE",
+      "verificationLevel": "VERIFIED_TEST",
+      "evidenceMatch": "155 frontend tests",
+      "dependsOn": [],
+      "notes": "Five advisories patched in frontend lock; deployed versions and private GitHub closure not verified."
     }
-  ]
+  ],
+  "measurements": {
+    "production_readiness": {
+      "ids": [
+        "issuer",
+        "real-login-surface",
+        "sessions",
+        "rf03-behavior",
+        "control-6",
+        "nginx-n1",
+        "dependency-remediation"
+      ],
+      "levels": [
+        "PRODUCTION_VERIFIED"
+      ]
+    },
+    "security_readiness": {
+      "ids": [
+        "rbac",
+        "bff",
+        "sessions",
+        "control-6",
+        "control6-mitigation",
+        "nginx-n1",
+        "real-login-surface",
+        "rf03-behavior",
+        "dependency-remediation"
+      ],
+      "levels": [
+        "VERIFIED_TEST",
+        "BEHAVIORALLY_VERIFIED",
+        "LAB_BEHAVIORALLY_VERIFIED",
+        "PRODUCTION_VERIFIED"
+      ]
+    },
+    "amazon_readiness": {
+      "ids": [
+        "rf-01",
+        "rf-02",
+        "rf-03",
+        "rf-04",
+        "rf-05",
+        "control-6",
+        "rf03-behavior",
+        "amazon-approval"
+      ],
+      "levels": [
+        "PRODUCTION_VERIFIED"
+      ]
+    }
+  }
 }

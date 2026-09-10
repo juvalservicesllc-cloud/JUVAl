@@ -16,6 +16,18 @@ export function progress(items, dimension = 'implementation') {
   const earned = included.reduce((n,c) => n + c.weight * (dimension === 'verification' ? (['VERIFIED','VERIFIED_TEST','BEHAVIORALLY_VERIFIED','LAB_BEHAVIORALLY_VERIFIED','PRODUCTION_VERIFIED'].includes(c.verificationLevel) ? 1 : 0) : c.status === 'COMPLETE' ? 1 : ['IN_PROGRESS','PARTIAL'].includes(c.status) ? .5 : 0), 0);
   return { percent: total ? Math.round(earned / total * 100) : null, earned, total, count: included.length };
 }
+export function readiness(criteria, spec) {
+  if (!spec?.ids?.length || new Set(spec.ids).size !== spec.ids.length || !spec.levels?.length || spec.levels.some(level=>!levels.includes(level))) throw new Error('Invalid readiness scope');
+  const included = spec.ids.map(id=>{
+    const c=criteria.find(item=>item.id===id);
+    if(!c || !Number.isFinite(c.weight) || c.weight<=0) throw new Error('Missing readiness criterion');
+    return c;
+  });
+  // Readiness blockers cannot disappear from the denominator through DEFERRED.
+  const total=included.reduce((n,c)=>n+c.weight,0);
+  const earned=included.reduce((n,c)=>n+(c.status==='COMPLETE'&&spec.levels.includes(c.verificationLevel)?c.weight:0),0);
+  return {percent:Math.round(earned/total*100),earned,total,count:included.length,ids:spec.ids};
+}
 export function riskScore(c) { return (c.status === 'BLOCKED' ? 3 : c.status === 'COMPLETE' ? 1 : 2) * (c.weight >= 3 ? 3 : 2); }
 export function nextActions(criteria) {
   return criteria.filter(c=>!['COMPLETE','DEFERRED'].includes(c.status)).map(c=>({...c,priority:riskScore(c)+criteria.filter(d=>d.dependsOn.includes(c.id)).length*2})).sort((a,b)=>b.priority-a.priority || a.phase-b.phase || a.id.localeCompare(b.id));

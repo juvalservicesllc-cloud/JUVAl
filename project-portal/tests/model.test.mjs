@@ -21,10 +21,22 @@ test('accelerator mappings keep lab remediation separate from public readiness',
    assert.equal(n1.status,'COMPLETE');
    assert.equal(n1.verificationLevel,'LAB_BEHAVIORALLY_VERIFIED');
    assert.equal(s.criteria.find(c=>c.id==='real-login-surface').status,'BLOCKED');
-   assert.equal(s.criteria.find(c=>c.id==='browser-site-topology').status,'BLOCKED');
+   const topology=s.criteria.find(c=>c.id==='browser-site-topology');
+   if(s.adrs.find(a=>a.id==='ADR-038')?.status==='Accepted')assert.equal(topology.status,'COMPLETE');
+   else assert.notEqual(topology.status,'COMPLETE');
  } else {
    assert.equal(n1.verificationLevel,'NOT_VERIFIED');
    assert.notEqual(n1.status,'COMPLETE');
  }
  assert.equal(s.criteria.find(c=>c.id==='amazon-approval').status,'BLOCKED');
+});
+
+
+test('readiness requires closed scope-specific evidence and retains deferred blockers',async()=>{
+ const {readiness}=await import('../scripts/model.mjs');
+ const criteria=[{id:'lab',weight:2,status:'COMPLETE',verificationLevel:'LAB_BEHAVIORALLY_VERIFIED'},{id:'public',weight:3,status:'DEFERRED',verificationLevel:'NOT_VERIFIED'}];
+ assert.equal(readiness(criteria,{ids:['lab','public'],levels:['PRODUCTION_VERIFIED']}).percent,0);
+ assert.equal(readiness(criteria,{ids:['lab','public'],levels:['LAB_BEHAVIORALLY_VERIFIED']}).percent,40);
+ assert.throws(()=>readiness(criteria,{ids:['missing'],levels:['PRODUCTION_VERIFIED']}));
+ assert.throws(()=>readiness(criteria,{ids:['lab','lab'],levels:['PRODUCTION_VERIFIED']}));
 });
