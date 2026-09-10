@@ -1,6 +1,6 @@
 # JUVAl identity/security — current readiness and operator runbook
 
-**2026-09-10 accelerator. Status: PARTIALLY IMPLEMENTED.** Authoritative
+**2026-09-10 accelerator second wave. Status: PARTIALLY IMPLEMENTED.** Authoritative
 workspace: `/home/juval/JUVAl/APP`. This ledger supersedes dated implementation
 snapshots in project plans, contracts and research; historical experiments are
 not reclassified as production evidence. Git commits identify the exact changes.
@@ -10,7 +10,7 @@ not reclassified as production evidence. Git commits identify the exact changes.
 | Claim | Classification | Evidence / confidence |
 |---|---|---|
 | Starting repository | VERIFIED_LOCAL | `16189b7`, clean, cached origin `32c3aef`, local 0/3; high |
-| Current remote | VERIFIED_READ_ONLY via HTTPS | `6a6d07c`, two remote-only portal commits; SSH push authentication unavailable; histories diverge |
+| Current remote | VERIFIED_READ_ONLY via HTTPS | `6a6d07c`; both histories and portal branch integrated locally in normal merges; publication blocked by SSH authentication |
 | Exact tenant/application IDs exist | VERIFIED_RUNTIME_READ_ONLY | 2026-09-10 public controls: tenant 200 vs four 500 controls; real client invalid_redirect_uri vs random invalid_client_id; high for existence only |
 | Tenant/application names and role names | NOT_REVERIFIED | Admin readback not available; never recreate existing objects |
 | Real login surface | NOT_VERIFIED / BLOCKED_BY_REDIRECT_CONFIGURATION | No authenticated Admin browser capability in agent; baseline not read; no mutation |
@@ -19,9 +19,9 @@ not reclassified as production evidence. Git commits identify the exact changes.
 | D-1 / final asset allow-list | BLOCKED | Generic CSS fonts/icon evidence only; real login needed |
 | N-3 | PARTIAL | nginx version suppressed; other headers/rate policy await flow compatibility |
 | Public TLS/hostname/issuer | NOT_ESTABLISHED | ADR-031 approved network boundary; actual names/provider pending |
-| Browser site topology | PENDING_DECISION | ADR-038: cross-site Vercel/Railway domains incompatible with Lax fetch cookies |
+| Browser site topology | APPROVED_SAME_SITE_SUBDOMAINS | ADR-038 accepted; Chromium semantics lab passed; actual domain/public browser flow pending |
 | Control 6 / RF03 / Amazon | PARTIALLY_SATISFIED / NOT_EXECUTED / BLOCKED | Code/tests and isolated provider lab cannot prove effective production behavior |
-| SEC-DEPS-01 | REVIEWED / PATCH_PENDING_FREEZE_EXCEPTION | `compliance/SEC_DEPS_01_REVIEW.md`; backend clean, five unique frontend advisories |
+| SEC-DEPS-01 | REMEDIATED_LOCKFILE / VERIFIED_TEST | Five unique advisories patched; 155 frontend tests, lint/build/PWA smoke; deployed versions not verified |
 
 Auth/DB variables are UNSET **in the agent environment**. Remote deployment
 variables were not inspected; prior inactive deployment status is not freshly
@@ -95,7 +95,8 @@ in the BFF; do not publish it. Do not publish broad `/assets/` for one icon.
 
 Run `.venv/bin/python tools/session_store_lab.py`: private UTF-8 PostgreSQL
 Unix socket, runtime env stripped, random schemas, teardown. Latest disposable
-measurement: 44 passed, 2 structural memory skips. Migration and down migration
+measurement: 48 passed, 2 structural memory skips; actual private PostgreSQL
+restart preserves a live session, revocation and consumed-transaction refusal. Migration and down migration
 repeat safely in the lab; unrelated sentinel data survives. This is not live
 Supabase evidence or permission to run a live migration.
 
@@ -166,36 +167,38 @@ acceptance support any stronger claim. No Amazon submission is authorized.
 
 ## Prioritized remaining queue and stop boundaries
 
-1. Resolve divergent histories: remote `6a6d07c` adds two portal commits from
-   `32c3aef`, while Linux has the three original identity commits plus accelerator
-   work. No rebase/history rewrite and no merge merely to synchronize are allowed.
-   Operator must authorize a non-rewriting integration merge (or provide another
-   explicit preservation strategy). Restore SSH authentication locally, then fetch,
-   gate and fast-forward push only when remote-only=0. Never share passphrase/key.
-2. Operator Admin session plus exact redirect baseline/add/readback/probe/cleanup;
-   then real asset inventory, D-1 allow-list and nginx/FusionAuth integration.
-3. Choose owned public hostnames, tunnel/TLS responsibility and ADR-038 topology.
-4. Approve dependency-only frontend freeze exception for the isolated patch in
-   SEC_DEPS_01_REVIEW; no visual/frontend feature changes.
-5. Authorize exact live session migration after backup/role verification, plus
-   eventual BFF/frontend activation only when identity gates permit it.
-6. Approve disposable RF03 identities/procedure and provide human password/TOTP
-   interaction; approve effective Control 6 production provisioning policy.
-7. Name security owner, off-host backup destination and maintenance window;
-   record restore/incident/access-review evidence. Amazon submission remains
-   separately human controlled.
+1. Git histories and portal branch are integrated locally; SSH authentication
+   remains needed for normal push. User already authorized merges and pushes.
+   Fetch freshly before publishing and never force. Portal Git deployment may
+   follow a master push; protection settings were not independently reverified.
+2. Provide a controllable authenticated Admin browser or perform the compact
+   operator redirect procedure locally: exact baseline, single temporary URI,
+   probe without login, removal/readback. No baseline or mutation yet.
+3. Select actual owned domain, identity tunnel/TLS provider/owner. Architectural
+   topology is accepted, not a pending decision; real assets/D-1/public login
+   and compatible remaining N-3 headers await hosted-flow evidence.
+4. Approve live session migration only with the one-shot packet in
+   `compliance/IDENTITY_OPERATOR_CHECKPOINT.md`; actual DB/pooler/role/backup
+   preflight and production-path login remain external prerequisites.
+5. Authorize RF03 disposable identities/procedure and private password/TOTP
+   input. RF03 runbook ready, execution NOT authorized; effective Control 6
+   behavior and production provisioning remain unverified.
+6. Name security owner, off-host destination/recovery custody and maintenance
+   window. Backup targets are proposals, not achieved RTO/RPO. No reboot,
+   apt upgrade, firewall/SSH change, paid purchase or Amazon submission.
 
 Backend/domain roadmap review: Decision Score formulas, commercial thresholds
 and HAZMAT/BULKY severities require business approval; external risk/data
 sources require authorized source decisions. No sourcing formulas or provenance
 were changed. Reproducibility model extensions require their own concrete design
-scope and should not displace the current identity gate. Project Intelligence portal was absent from the initial Linux tree but is
-present in two newly fetched remote-only commits. It must be preserved during
-history reconciliation; its publication is connected to Git according to remote
-docs (not independently reverified in Vercel). All five accelerator progress
-percentages are **NOT_MEASURED**, not inferred from the portal weighted model.
+scope and should not displace the current identity gate. Project Intelligence portal is now integrated, including both preserved
+readiness commits. ADR-040/model 1.2 defines five independent evidence measures;
+use `node scripts/measure.mjs` against an exact committed snapshot. These are
+curated evidence scores, not measured live system coverage or Amazon approval.
 
-## Final integration rehearsal and resume boundary
+## Historical first-wave integration rehearsal and resume boundary
+
+Superseded operationally by the authorized second-wave merges; retained as dated evidence.
 
 Core tested revision `3a17e125397b975efb582c87f614d1538ec15b10`; preserved portal
 branch `accelerator/portal-readiness` at
@@ -224,3 +227,32 @@ All task-created nginx/PostgreSQL scratch and listeners removed. FusionAuth
 PID 369334/NRestarts 0 unchanged; baseline listener inventory unchanged. No
 redirect mutation was made, so original Admin configuration remains unverified,
 not "restored successfully". No paid purchase, public DNS or migration occurred.
+
+
+## Second-wave verification and residuals
+
+Full backend after ADR-039: 834 PASS / 38 SKIP with disposable nginx. PostgreSQL
+48 PASS / 2 memory-only SKIP plus actual restart probe PASS and cleanup. HTTP
+refresh concurrency, expired writes and provider outage handling corrected;
+see ADR-039 for connection/rotation crash residuals. No production migration.
+Browser cookie semantics: same-site fetch positive, cross-site negative,
+host-only/HttpOnly visibility and top-level GET PASS in synthetic Chromium lab;
+not actual TLS/DNS/BFF/FusionAuth. Production frontend source untouched; only
+frontend/package-lock.json changed under security exception.
+
+N-3 decision: server_tokens off retained; candidate Referrer-Policy same-origin
+minimizes cross-origin URL disclosure while preserving same-origin resource
+requests. Do not add it or nosniff until real hosted/MFA/logout compatibility and
+CSS/JS MIME readback are available. Frame/CSP policy awaits SSO iframe behavior;
+Permissions-Policy must preserve WebAuthn. HSTS awaits real HTTPS/domain; no
+naive per-IP authorize limit. Template remains inactive and no allow-list widened.
+
+Runtime exact-ID controls re-run: tenant exists, client invalid_redirect_uri
+vs invalid_client_id control. FusionAuth PID 369334/NRestarts 0 unchanged.
+Names/roles NOT_REVERIFIED. REAL_LOGIN remains NOT_VERIFIED. Temporary redirect
+BASELINE NOT_ESTABLISHED, RESULT NOT_EXECUTED, CLEANUP NOT_APPLICABLE; do not
+claim original configuration restored when no baseline was inspected.
+
+Prepared migration/RF03/off-host packet: `compliance/IDENTITY_OPERATOR_CHECKPOINT.md`.
+Forensics and commit map: `research/ACCELERATOR_SECOND_WAVE_GIT.md`.
+Manual simplicity/self-review performed; Ponytail callable capability unavailable.

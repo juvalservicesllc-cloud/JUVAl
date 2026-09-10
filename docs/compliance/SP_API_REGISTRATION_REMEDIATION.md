@@ -4436,3 +4436,25 @@ RF-03 PARTIAL
 RF-04 PARTIAL
 RF-05 PARTIAL
 ```
+
+
+## 56. Second-wave accelerator — 2026-09-10
+
+Local concurrent Git histories and portal work reconciled by normal merges;
+publication pending SSH authentication. Five frontend advisories remediated in
+lockfile only (SEC_DEPS_01_REVIEW). ADR-038 accepted same-site subdomains, actual
+owned domain remains HUMAN_DOMAIN_SELECTION_PENDING. ADR-039 excludes concurrent
+provider refresh, handles 429/5xx outages and refuses expired token writes;
+scratch PostgreSQL and restart verified, live migration NOT authorized.
+ADR-040 separates five evidence measures, never equating lab and production.
+Full backend 834 PASS / 38 SKIP; frontend 155 PASS, lint/build/PWA smoke PASS.
+Runbooks in IDENTITY_OPERATOR_CHECKPOINT; RF03 execution still NOT authorized.
+
+CONTROL_6_AMAZON = PARTIALLY_SATISFIED
+REAL_JUVAL_LOGIN_SURFACE = NOT_VERIFIED
+RF03_BEHAVIORAL = NOT_EXECUTED
+AMAZON_COMPLIANCE_READINESS = BLOCKED
+
+Temporary redirect not mutated; baseline unavailable, cleanup not applicable.
+No public TLS/issuer, production migration, DNS/firewall/SSH changes or Amazon
+submission. The prior literal marker remains no evidence of successful login.

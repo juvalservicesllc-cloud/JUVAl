@@ -1165,3 +1165,39 @@ no product frontend changes. Ponytail unavailable, manual simplicity review only
 ADRs 034/036 updated, 037 accepted under scoped accelerator authorization,
 038 proposed. Estimates for implementation, verification, production, security
 and Amazon readiness: NOT_MEASURED. Public/production/control gates stay blocked.
+
+
+## Sesión 2026-09-10 — accelerator second wave
+
+Estado: PARTIALLY IMPLEMENTED, siguiente límite humano/externo. Historiales
+remotos/locales integrados sin conflictos en 5c52451 + 880334c; branch
+accelerator/portal-readiness preservado y contenido. Push todavía bloqueado por
+SSH; fetch HTTPS confirma remoto 6a6d07c, ningún commit remoto desconocido.
+Mapa completo: research/ACCELERATOR_SECOND_WAVE_GIT.md.
+
+SEC-DEPS-01: cinco avisos remediados (73faa8a); únicamente lockfile frontend,
+fast-uri 3.1.6, Vitest 4.1.11. 155 tests frontend, lint/build y smoke PWA offline
+PASS; audit cero en frontend/frontend-next/demo/portal. Sin fuente o UX modificada.
+ADR-038 Aceptada: app/api/id same-site, dominio HUMAN_DOMAIN_SELECTION_PENDING.
+Chromium sintético verifica cookies; no evidencia de TLS/BFF/IdP reales.
+
+ADR-039 (7e908e7): exclusión de refresh entre instancias antes de llamar IdP,
+relectura de generación, negativa de escritura expirada y HTTP 429/5xx temporal.
+Full backend 834 PASS / 38 SKIP con nginx desechable; PostgreSQL 48 PASS / 2 SKIP
+más reinicio real del cluster privado PASS, limpieza confirmada. Residual: IdP y
+DB no comparten transacción; un fallo después de rotación puede requerir login.
+
+Portal: ADR-040/modelo 1.2 con cinco medidas independientes, scope y denominadores;
+11 tests modelo + 4 componente/i18n + 3 exportador Python PASS, lint/build PASS.
+E2E inicial 12 PASS/1 FAIL detectó fallback 200 en rutas privadas inexistentes;
+corregido antes de cierre, ampliado a archivo sintético y codificación: 14/14 PASS.
+No datos privados expuestos observados. No afirmar despliegue publicado.
+
+Runbook humano compacto: compliance/IDENTITY_OPERATOR_CHECKPOINT.md (migración,
+RF03, backup/restauración). Ejecución RF03 y migración live no autorizadas.
+Control 6 PARTIALLY_SATISFIED. Real login NOT_VERIFIED, baseline redirect no
+establecido, ninguna mutación ni cleanup inferido. N-1 lab verificado; D-1 y
+nginx/FusionAuth real esperan evidencia del login. N-3 parcial, sin nuevas
+cabeceras incompatibles ni ampliación de allow-list. SSH/Admin/dominio/live/RF03/
+destino off-host/owner/ventana mantenimiento en cola humana. Sin reboot, upgrades,
+UFW/SSH, apertura de puertos, secretos, compras o envío Amazon.

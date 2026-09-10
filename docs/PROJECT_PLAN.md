@@ -676,7 +676,7 @@ FusionAuth selected and installed (ADR-028/031); BFF, RBAC, CSRF and session
 storage implemented (ADR-034/036). Control 6 mitigation implemented with residual
 (ADR-035). Remaining acceptance: public hosted-login surface and MFA compatibility,
 TLS/hostname/browser site topology, live session migration, human RF03 and
-production-path role/revocation tests. ADR-038 is a proposal; Clerk/Okta are not
+production-path role/revocation tests. ADR-038 accepts same-site subdomains; actual domain selection remains pending. Clerk/Okta are not
 candidates awaiting implementation. No code/test count establishes Amazon
 compliance. Exact next tasks and human queue: `IDENTITY_SECURITY_READINESS.md`.
 

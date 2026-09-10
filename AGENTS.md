@@ -14,7 +14,8 @@ evidencia, bloqueos y procedimiento humano están centralizados en
 Fase activa: identidad/seguridad, PARTIALLY IMPLEMENTED, producción no activada.
 Tenant y aplicación exactos existen; nombres/roles no re-verificados. No recrear.
 N-1 corregido en plantilla/lab; real login y D-1 siguen NOT_VERIFIED.
-Frontend existente y congelado (`frontend/`, `frontend-next/`, `demo/`).
+Frontend existente y congelado (`frontend/`, `frontend-next/`, `demo/`), con
+excepción autorizada solo para remediación mínima de vulnerabilidades confirmadas.
 No usar recuentos históricos de tests, estados de instalación o marcadores
 literales como evidencia actual. Ver mediciones fechadas en PROJECT_STATUS.
 
@@ -292,8 +293,8 @@ PWA (ADR-014), FastAPI (ADR-016), React/Vite, Supabase/PostgreSQL
 están implementados/probados con el alcance de cada ADR. No equiparar esto
 con producción activa. Clerk/Okta no son trabajo pendiente a implementar.
 
-Dominio público, túnel/TLS, topología de sitios del navegador (ADR-038,
-Propuesta), migración live de sesiones, pruebas humanas RF03 y envío Amazon
+Topología same-site app/api/id aprobada (ADR-038). Dominio concreto, túnel/TLS,
+migración live de sesiones, pruebas humanas RF03 y envío Amazon
 siguen bloqueados. No desplegar ni migrar producción implícitamente. Frontend
 permanece congelado hasta autorización o cierre del gate aplicable.
 
@@ -347,7 +348,7 @@ No aplicar migraciones live mediante tests. Nginx: lab desechable con
 ## 18. Documentación y ADR
 
 Consultar el estado explícito del ADR antes de usarlo como autoridad. ADR-009,
-ADR-021, ADR-033 y ADR-038 siguen Propuesta; ADR-022 RECHAZADA/SUPERSEDED;
+ADR-021 y ADR-033 siguen Propuesta; ADR-038/039/040 Aceptadas; ADR-022 RECHAZADA/SUPERSEDED;
 ADR-027 enmendada por ADR-031. Respetar alcance/enmiendas de los Aceptados;
 no convertir una propuesta en aprobación porque resulte conveniente.
 Estado/evidencia central en `docs/IDENTITY_SECURITY_READINESS.md`; snapshots
