@@ -221,3 +221,17 @@ run; `tools/nginx_surface_lab.py` is idempotent and leaves nothing behind.
    `http {}` block happens to set.
 3. The five provider-side questions of §5 still require a fresh FusionAuth
    1.69.0 lab. Unchanged from 2026-09-09.
+
+## 10. Accelerator remediation — 2026-09-10 (supersedes open N-1 above)
+
+ADR-037 pins relative nginx redirects and suppresses version disclosure in the
+inactive template. Fresh lab: **90 passed, 0 skipped**. N-1 is
+`REMEDIATED_TEMPLATE / LAB_BEHAVIOURALLY_VERIFIED`; not production verified.
+`/css`, `/js`, `/images` return relative 301 with queries preserved, under three
+Host variants each; none reach upstream. N-3 version disclosure is fixed in
+generated 301/400/404 responses. Other headers and rate limits remain pending
+compatibility/policy. The historical measurements above describe the old file.
+
+The allow-list is unchanged. D-1 and the real-login asset inventory remain
+blocked by redirect baseline/Admin UI access. No service activation or public
+TLS occurred. Reproduce with the test command above and a user-space nginx.

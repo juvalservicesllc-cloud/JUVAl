@@ -617,3 +617,12 @@ approval of a new deployment policy.
 
 Overall **PARTIALLY IMPLEMENTED**: discovery recovery validated; the controlled
 redirect experiment is **BLOCKED**, real-login surface **NOT_VERIFIED**.
+
+## 16. Accelerator boundary update — 2026-09-10
+
+ADR-037 resolves nginx-generated N-1 in the inactive template with relative
+redirects and suppresses nginx version disclosure (N-3 partial), measured by
+90 disposable nginx tests. This is independent proxy evidence; it does not
+change the generic asset inventory, establish real JUVAl login requirements,
+resolve D-1, or activate public auth. Baseline/temporary redirect mutation still
+NOT_EXECUTED; no cleanup claim may be inferred from the new proxy tests.

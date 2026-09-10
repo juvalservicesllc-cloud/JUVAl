@@ -272,24 +272,15 @@ def test_x_forwarded_for_appends_rather_than_replaces(lab):
 
 
 @nginx_required
-def test_bare_asset_prefixes_redirect_and_reflect_the_client_host(lab):
-    """Finding N-1 -- pinned as measured, not as desired.
-
-    `/css`, `/js` and `/images` answer 301, not the 404 the file's own route
-    inventory promises, because nginx redirects an unslashed URI to a
-    slash-terminated prefix location that proxies. The `Location` is built from
-    the client's `Host`, carries the listener's port, and uses `http`.
-
-    This test asserts today's behaviour so the exposure is visible in CI. If
-    `absolute_redirect off;` is ever approved for this file, this test is
-    expected to change -- that is the signal that the finding was addressed,
-    and it must not be edited for any other reason.
-    """
-    measured = measure_bare_prefix_redirect(lab)
-    assert measured["status"] == 301
-    assert measured["reflects_client_host"] is True
-    assert measured["scheme_is_http"] is True
-    assert measured["leaks_listen_port"] is True
+@pytest.mark.parametrize("prefix", ["/css", "/js", "/images"])
+@pytest.mark.parametrize("host", ["attacker.example", "attacker.example:8443", LAB_PUBLIC_HOST])
+def test_bare_asset_prefix_redirect_is_relative_and_preserves_query(lab, prefix, host):
+    before = len(lab.upstream.seen)
+    status, headers, _body = lab.request("GET", prefix + "?version=1.69.0&x=a%2Fb",
+                                        {"Host": host, "X-Forwarded-Proto": "http"})
+    assert status == 301
+    assert headers["location"] == prefix + "/?version=1.69.0&x=a%2Fb"
+    assert len(lab.upstream.seen) == before
 
 
 @nginx_required
@@ -310,16 +301,14 @@ def test_template_cannot_be_enabled_without_the_host_include(lab):
 
 
 @nginx_required
-def test_denied_response_carries_no_security_headers_and_names_the_server(lab):
-    """Recorded as a limitation of the template, not as an approved posture.
+@pytest.mark.parametrize("target,status", [("/admin", 404), ("/css", 301), ("/../admin", 400)])
+def test_nginx_generated_responses_do_not_disclose_version(lab, target, status):
+    result, headers, body = lab.request("GET", target)
+    assert result == status
+    assert headers["server"] == "nginx"
+    assert b"nginx/" not in body
 
-    The file sets no `server_tokens`, HSTS, `X-Frame-Options`,
-    `X-Content-Type-Options` or CSP. Whether production supplies them depends
-    on `/etc/nginx/nginx.conf`, which is not in this repository -- so the
-    template alone does not pin them. Asserting the absence keeps the gap from
-    being quietly assumed closed.
-    """
-    measured = measure_denied_response(lab)
-    assert measured["status"] == 404
-    assert measured["security_headers"] == []
-    assert measured["server_header"].startswith("nginx/")
+
+def test_redirect_and_version_policy_are_pinned_in_the_template():
+    assert re.search(r"^\s*absolute_redirect off;", TEMPLATE_TEXT, re.MULTILINE)
+    assert re.search(r"^\s*server_tokens off;", TEMPLATE_TEXT, re.MULTILINE)

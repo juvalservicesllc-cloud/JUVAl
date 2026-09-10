@@ -1166,3 +1166,16 @@ PostgreSQL requieren el DSN de tests; verificación real separada: **44 passed /
 preflight; sin migración implícita; sin fallback. Self-review y diff check sin
 hallazgos pendientes del cambio. Límites: no prueba completa de tipos/índices,
 no garantiza disponibilidad después del arranque.
+
+### Accelerator — nginx N-1 and N-3
+
+ADR-037: inactive template pins relative nginx redirects and suppresses version
+emission. **90 nginx tests passed**, no skips with disposable nginx. N-1 =
+REMEDIATED_TEMPLATE / LAB_BEHAVIOURALLY_VERIFIED; N-3 partial (version only).
+No asset allow-list expansion; D-1/real login remain blocked, no production
+activation. Runtime FusionAuth untouched; frontend diff remains empty.
+
+Gate nginx ampliado: **224 tests compliance passed** con nginx real; script de
+lab 0 fallos, `Location: /css/`, sin Host/scheme/port reflejado y `Server: nginx`.
+Self-review: ninguna ruta añadida, ninguna cabecera de upstream reinterpretada;
+el gate de compatibilidad real y producción permanece abierto.
