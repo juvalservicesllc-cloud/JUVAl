@@ -9,3 +9,7 @@ No GitHub token is shipped to the browser. Public GitHub metadata is queried at 
 Refresh reloads the latest published snapshot; it does not write to Git or initiate a deployment. Updates occur on Git pushes, not on local uncommitted changes or a timer. Generated data, environment files, local reports and test artifacts are ignored. No commercial frontend code is changed.
 
 Validation: npm run build:vercel with a full VERCEL_GIT_COMMIT_SHA exercises the same cloud pipeline. Existing model and browser tests cover provenance, separate runtime evidence, bilingual UI and hosted refresh. No new dependency, scheduler or token distribution is needed (Ponytail review).
+
+## Connection verified — 2026-09-10
+
+The GitHub App installation is authorized for JUVAl and the Vercel project is now connected. Production branch: master. Root: project-portal. Build: npm run build:vercel. Authentication remains enabled for all deployment URLs. This documentation update also exercises the actual Git-push deployment trigger; the deployed snapshot must identify this commit before activation is considered verified.
