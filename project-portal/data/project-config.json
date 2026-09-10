@@ -1,0 +1,384 @@
+{
+  "repository": "juvalservicesllc-cloud/JUVAl",
+  "modelVersion": "1.0",
+  "scope": "Repository plan phases 0–10; conservative evidence-weighted acceptance criteria. Weights are portal planning metadata, not an approved business completion estimate.",
+  "phases": [
+    "Foundation",
+    "Domain & Processing",
+    "Excel Vertical Slice",
+    "Quality & Auditability",
+    "Product Experience",
+    "Decision Intelligence",
+    "Authorized Data",
+    "AI Analyst",
+    "Persistence",
+    "Identity & Access",
+    "Production Hardening"
+  ],
+  "criteria": [
+    {
+      "id": "foundation",
+      "title": "Architecture and repository foundation",
+      "phase": 0,
+      "workstream": "Core Architecture",
+      "weight": 2,
+      "rule": "gate",
+      "source": "docs/PHASE_GATES.md",
+      "section": "Fase 0",
+      "dependsOn": []
+    },
+    {
+      "id": "domain",
+      "title": "Domain invariants and processing core",
+      "phase": 1,
+      "workstream": "Domain Processing",
+      "weight": 3,
+      "rule": "gate",
+      "source": "docs/PHASE_GATES.md",
+      "section": "Fase 1",
+      "dependsOn": [
+        "foundation"
+      ]
+    },
+    {
+      "id": "excel",
+      "title": "Excel import, validation and export",
+      "phase": 2,
+      "workstream": "Import Pipeline",
+      "weight": 3,
+      "rule": "gate",
+      "source": "docs/PHASE_GATES.md",
+      "section": "Fase 2",
+      "dependsOn": [
+        "domain"
+      ]
+    },
+    {
+      "id": "quality",
+      "title": "Data quality and execution audit trail",
+      "phase": 3,
+      "workstream": "ExecutionRun",
+      "weight": 2,
+      "rule": "gate",
+      "source": "docs/PHASE_GATES.md",
+      "section": "Fase 3",
+      "dependsOn": [
+        "excel"
+      ]
+    },
+    {
+      "id": "api",
+      "title": "REST API implementation",
+      "phase": 4,
+      "workstream": "Backend API",
+      "weight": 3,
+      "rule": "code",
+      "source": "src/juval/interfaces/api/main.py",
+      "dependsOn": [
+        "quality"
+      ]
+    },
+    {
+      "id": "catalog",
+      "title": "Catalog and product experience",
+      "phase": 4,
+      "workstream": "Frontend/PWA",
+      "weight": 3,
+      "rule": "code",
+      "source": "frontend-next/src/app/App.tsx",
+      "dependsOn": [
+        "api"
+      ]
+    },
+    {
+      "id": "batch",
+      "title": "Multi-file batch ingestion",
+      "phase": 4,
+      "workstream": "Multi-file Upload",
+      "weight": 2,
+      "rule": "code",
+      "source": "src/juval/domain/batch.py",
+      "dependsOn": [
+        "api"
+      ]
+    },
+    {
+      "id": "pwa-gate",
+      "title": "Close the product release gate",
+      "phase": 4,
+      "workstream": "Release Engineering",
+      "weight": 2,
+      "rule": "gate",
+      "source": "docs/PHASE_GATES.md",
+      "section": "Fase 4",
+      "dependsOn": [
+        "api",
+        "catalog",
+        "batch"
+      ]
+    },
+    {
+      "id": "scoring",
+      "title": "Approve commercial scoring formulas",
+      "phase": 5,
+      "workstream": "Decision Engine",
+      "weight": 2,
+      "rule": "plan",
+      "source": "docs/PROJECT_PLAN.md",
+      "section": "FASE 5",
+      "dependsOn": [
+        "domain"
+      ]
+    },
+    {
+      "id": "external",
+      "title": "Approve and integrate authorized data sources",
+      "phase": 6,
+      "workstream": "Amazon SP-API",
+      "weight": 3,
+      "rule": "plan",
+      "source": "docs/PROJECT_PLAN.md",
+      "section": "FASE 6",
+      "dependsOn": [
+        "excel"
+      ]
+    },
+    {
+      "id": "ai",
+      "title": "Read-only AI analyst",
+      "phase": 7,
+      "workstream": "AI Analyst",
+      "weight": 2,
+      "rule": "plan",
+      "source": "docs/PROJECT_PLAN.md",
+      "section": "FASE 7",
+      "dependsOn": [
+        "scoring"
+      ]
+    },
+    {
+      "id": "persistence",
+      "title": "Supabase record persistence adapter",
+      "phase": 8,
+      "workstream": "Supabase",
+      "weight": 3,
+      "rule": "code",
+      "source": "src/juval/infrastructure/persistence/supabase_execution_run_store.py",
+      "dependsOn": [
+        "quality"
+      ]
+    },
+    {
+      "id": "persistence-live",
+      "title": "Persistence behavioral evidence",
+      "phase": 8,
+      "workstream": "Supabase",
+      "weight": 2,
+      "rule": "documented",
+      "status": "COMPLETE",
+      "verificationLevel": "BEHAVIORALLY_VERIFIED",
+      "source": "docs/architecture/SUPABASE.md",
+      "notes": "Dated repository evidence of real Supabase operations and API integration; not re-executed by the portal.",
+      "dependsOn": [
+        "persistence"
+      ],
+      "section": "1. Estado"
+    },
+    {
+      "id": "rbac",
+      "title": "OIDC / JWT authorization boundary",
+      "phase": 9,
+      "workstream": "Identity",
+      "weight": 3,
+      "rule": "code",
+      "source": "src/juval/interfaces/api/auth.py",
+      "dependsOn": [
+        "api"
+      ]
+    },
+    {
+      "id": "identity-runtime",
+      "title": "Activate JUVAl identity boundary (separate from FusionAuth service)",
+      "phase": 9,
+      "workstream": "FusionAuth",
+      "weight": 3,
+      "rule": "identity",
+      "source": "docs/compliance/SP_API_REGISTRATION_REMEDIATION.md",
+      "dependsOn": [
+        "rbac"
+      ]
+    },
+    {
+      "id": "control-6",
+      "title": "Control 6: name exclusion in passwords",
+      "phase": 9,
+      "workstream": "Control 6",
+      "weight": 2,
+      "rule": "control6",
+      "source": "docs/compliance/SP_API_REGISTRATION_REMEDIATION.md",
+      "dependsOn": [
+        "identity-runtime"
+      ]
+    },
+    {
+      "id": "issuer",
+      "title": "Approve public TLS / issuer boundary",
+      "phase": 10,
+      "workstream": "Infrastructure",
+      "weight": 2,
+      "rule": "documented",
+      "status": "BLOCKED",
+      "verificationLevel": "NOT_VERIFIED",
+      "source": "docs/compliance/SP_API_REGISTRATION_REMEDIATION.md",
+      "section": "54.5",
+      "notes": "Latest repository status: public surface is template only; five of ten rules not verified. Production activation remains blocked.",
+      "dependsOn": [
+        "identity-runtime"
+      ],
+      "evidenceMatch": "PUBLIC_SURFACE (nginx)"
+    },
+    {
+      "id": "rf-01",
+      "title": "RF-01 · 24-hour incident reporting",
+      "phase": 10,
+      "workstream": "Incident Response",
+      "weight": 2,
+      "rule": "rf",
+      "source": "docs/compliance/SP_API_REGISTRATION_REMEDIATION.md",
+      "dependsOn": []
+    },
+    {
+      "id": "rf-02",
+      "title": "RF-02 · Network controls",
+      "phase": 10,
+      "workstream": "Network Controls",
+      "weight": 2,
+      "rule": "rf",
+      "source": "docs/compliance/SP_API_REGISTRATION_REMEDIATION.md",
+      "dependsOn": []
+    },
+    {
+      "id": "rf-03",
+      "title": "RF-03 · Password policy and MFA",
+      "phase": 9,
+      "workstream": "Security",
+      "weight": 3,
+      "rule": "rf",
+      "source": "docs/compliance/SP_API_REGISTRATION_REMEDIATION.md",
+      "dependsOn": [
+        "identity-runtime",
+        "control-6"
+      ]
+    },
+    {
+      "id": "rf-04",
+      "title": "RF-04 · Job function / least privilege",
+      "phase": 9,
+      "workstream": "RBAC",
+      "weight": 2,
+      "rule": "rf",
+      "source": "docs/compliance/SP_API_REGISTRATION_REMEDIATION.md",
+      "dependsOn": [
+        "rbac",
+        "identity-runtime"
+      ]
+    },
+    {
+      "id": "rf-05",
+      "title": "RF-05 · Security program and response roles",
+      "phase": 10,
+      "workstream": "Compliance",
+      "weight": 2,
+      "rule": "rf",
+      "source": "docs/compliance/SP_API_REGISTRATION_REMEDIATION.md",
+      "dependsOn": [
+        "rf-01"
+      ]
+    },
+    {
+      "id": "amazon-approval",
+      "title": "Amazon external approval",
+      "phase": 10,
+      "workstream": "Amazon SP-API",
+      "weight": 3,
+      "rule": "documented",
+      "status": "BLOCKED",
+      "verificationLevel": "NOT_VERIFIED",
+      "source": "docs/compliance/SP_API_REGISTRATION_REMEDIATION.md",
+      "notes": "Registration rejected; reapplication gate remains blocked. Only Amazon can provide approval.",
+      "dependsOn": [
+        "rf-01",
+        "rf-02",
+        "rf-03",
+        "rf-04",
+        "rf-05"
+      ],
+      "section": "54.5",
+      "evidenceMatch": "REAPPLICATION GATE          = BLOCKED"
+    },
+    {
+      "id": "bff",
+      "title": "Server-side BFF / OIDC browser flow",
+      "phase": 9,
+      "workstream": "BFF",
+      "weight": 2,
+      "rule": "code",
+      "source": "src/juval/interfaces/api/bff.py",
+      "dependsOn": [
+        "rbac"
+      ]
+    },
+    {
+      "id": "sessions",
+      "title": "Encrypted durable session store",
+      "phase": 9,
+      "workstream": "Sessions",
+      "weight": 2,
+      "rule": "documented",
+      "status": "COMPLETE",
+      "verificationLevel": "VERIFIED_TEST",
+      "source": "docs/adr/ADR-036-durable-session-store.md",
+      "section": "Estado",
+      "notes": "36 contract tests documented against disposable PostgreSQL; migration not applied to production.",
+      "dependsOn": [
+        "bff"
+      ]
+    },
+    {
+      "id": "rf03-behavior",
+      "title": "Execute RF-03 production behavioral verification",
+      "phase": 9,
+      "workstream": "Security",
+      "weight": 2,
+      "rule": "documented",
+      "status": "BLOCKED",
+      "verificationLevel": "NOT_TESTED",
+      "source": "docs/compliance/SP_API_REGISTRATION_REMEDIATION.md",
+      "section": "54.5",
+      "notes": "RF03_BEHAVIORAL = NOT_EXECUTED in latest status. Production evidence remains empty.",
+      "dependsOn": [
+        "identity-runtime",
+        "sessions",
+        "issuer"
+      ],
+      "evidenceMatch": "RF03_BEHAVIORAL             = NOT_EXECUTED"
+    },
+    {
+      "id": "control6-mitigation",
+      "title": "Control 6 mitigation code and tests",
+      "phase": 9,
+      "workstream": "Control 6",
+      "weight": 1,
+      "rule": "documented",
+      "status": "COMPLETE",
+      "verificationLevel": "VERIFIED_TEST",
+      "source": "docs/compliance/SP_API_REGISTRATION_REMEDIATION.md",
+      "section": "54.5",
+      "evidenceMatch": "VERIFIED_CODE + VERIFIED_TEST (30 tests)",
+      "notes": "Mitigation has code and test evidence; Amazon Control 6 remains partial and production evidence is none.",
+      "dependsOn": [
+        "rbac"
+      ]
+    }
+  ]
+}

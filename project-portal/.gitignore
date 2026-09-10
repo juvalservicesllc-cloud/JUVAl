@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.env
+test-results/
+playwright-report/
+.verification/
+public/project-state.json
+data/generated/*.tmp
+data/generated/backend-junit.xml
+.vercel
+.env*
+
+data/generated/
+DELIVERY_REPORT.md
+SOURCE_RECONCILIATION.md

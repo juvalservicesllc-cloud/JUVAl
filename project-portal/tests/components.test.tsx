@@ -1,0 +1,10 @@
+import React from 'react';
+import {render,screen,fireEvent,cleanup} from '@testing-library/react';
+import {afterEach,expect,test,vi} from 'vitest';
+import {Badge,Metric,Evidence} from '../src/main';
+import snapshot from '../data/generated/project-state.json';
+import type {State} from '../src/model';
+afterEach(cleanup);
+test('metric exposes criteria and opens explainable progress',()=>{const open=vi.fn();render(<Metric label="Project" items={(snapshot as State).criteria} onClick={open}/>);fireEvent.click(screen.getByRole('button'));expect(open).toHaveBeenCalledOnce();expect(screen.getByText(/criteria implemented/)).toBeTruthy();});
+test('roadmap status stays distinct from verification',()=>{render(<><Badge value="PARTIAL"/><Badge value="NOT_VERIFIED"/></>);expect(screen.getByText('PARTIAL')).toBeTruthy();expect(screen.getByText('NOT VERIFIED')).toBeTruthy();});
+test('evidence detail contains commit, source and classification',()=>{HTMLDialogElement.prototype.showModal=vi.fn();HTMLDialogElement.prototype.close=vi.fn();const c=(snapshot as State).criteria[0];render(<Evidence detail={{title:c.title,criterion:c}} state={snapshot as State} open={vi.fn()} close={vi.fn()}/>);expect(screen.getByText(c.sourceReference)).toBeTruthy();expect(screen.getByText(c.commit)).toBeTruthy();expect(screen.getByText('Confidence')).toBeTruthy();});

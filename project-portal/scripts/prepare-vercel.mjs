@@ -1,0 +1,10 @@
+import {cpSync,mkdirSync,readFileSync,writeFileSync} from 'node:fs';
+import {resolve} from 'node:path';
+const portal=resolve(import.meta.dirname,'..');
+const output=resolve(portal,'.vercel/output');
+mkdirSync(output,{recursive:true});
+cpSync(resolve(portal,'dist'),resolve(output,'static'),{recursive:true});
+const config=JSON.parse(readFileSync(resolve(portal,'vercel.json'),'utf8'));
+const headers=Object.fromEntries(config.headers[0].headers.map(h=>[h.key,h.value]));
+writeFileSync(resolve(output,'config.json'),JSON.stringify({version:3,routes:[{src:'/(.*)',headers,continue:true},{handle:'filesystem'},{src:'/(.*)',dest:'/index.html'}]},null,2));
+console.log('Static deployment prepared from validated dist. No source files or environment files included.');
