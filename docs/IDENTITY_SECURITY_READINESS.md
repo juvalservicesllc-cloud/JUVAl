@@ -194,3 +194,33 @@ present in two newly fetched remote-only commits. It must be preserved during
 history reconciliation; its publication is connected to Git according to remote
 docs (not independently reverified in Vercel). All five accelerator progress
 percentages are **NOT_MEASURED**, not inferred from the portal weighted model.
+
+## Final integration rehearsal and resume boundary
+
+Core tested revision `3a17e125397b975efb582c87f614d1538ec15b10`; preserved portal
+branch `accelerator/portal-readiness` at
+`29e90a6ae71266d15b61a976edfa972a25f96da5` (remote portal history plus two draft
+updates). A disposable detached worktree merged them **without committing**:
+no conflicts, integrated tree `92c0529328c6c1de6d5245f8726164d33a7b7f18`.
+Gate: **825 passed / 36 skipped**, compliance **9 PASS / 1 WARN / 0 FAIL**,
+secret scan clean (457 files). Product frontend diff empty. Preview aborted and
+worktrees removed; the portal branch/commits remain durable locally.
+
+After explicit integration authorization, the concrete reviewed operation is
+`git merge --no-ff accelerator/portal-readiness` on clean authoritative master,
+followed by gates, a fresh fetch and fast-forward push only if remote-only=0.
+This command is **not executed on master**. It preserves both remote commits,
+all Linux identity history and the portal updates; no rebase or force push.
+SSH authentication must be restored locally for the configured push transport.
+
+The full backend gate above tested the integrated tree, not an invented merge
+commit. The portal's separate JUnit record accurately retains the earlier clean
+`63568c4` measurement (821/36); it is not relabelled with a different revision.
+Portal: 10 model + 4 component/i18n + 3 exporter tests; lint/build/audit passed.
+No new browser E2E or hosted deployment claim. Generated snapshots/builds were
+removed with the disposable worktree; committed scripts/config reproduce them.
+
+All task-created nginx/PostgreSQL scratch and listeners removed. FusionAuth
+PID 369334/NRestarts 0 unchanged; baseline listener inventory unchanged. No
+redirect mutation was made, so original Admin configuration remains unverified,
+not "restored successfully". No paid purchase, public DNS or migration occurred.

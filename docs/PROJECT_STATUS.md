@@ -1145,3 +1145,23 @@ Validation: 10 model + 4 component/i18n + 3 Python exporter tests, lint/build,
 portal npm audit clean. No hosted deployment or product-frontend changes.
 The source scanner now covers JS/TS module suffixes used by the portal;
 23 compliance-check tests pass; portal pattern scan clean (38 files).
+
+### Accelerator stop checkpoint — 2026-09-10
+
+Nine coherent work loops completed; phase remains **PARTIALLY IMPLEMENTED**.
+Portal branch `accelerator/portal-readiness` = `29e90a6`; core tested at
+`3a17e12`. Noncommitting integration rehearsal clean, tree
+`92c0529328c6c1de6d5245f8726164d33a7b7f18`: **825 passed / 36 skipped**, compliance
+9 PASS / 1 WARN / 0 FAIL, secret scan clean (457 files). Skips: unavailable live
+DB tests and structural cases; disposable session tests verified separately.
+No runtime activation, no merge on master and no push. Both temporary worktrees
+and nginx/PostgreSQL scratch removed. Main worktree and protected frontend
+integrity checked. Resume and batched human queue: `IDENTITY_SECURITY_READINESS.md`.
+
+Self-review: correctness regressions covered; evidence scope distinguishes code,
+lab, runtime and production; provenance/domain unchanged; no silent fallback or
+secret-bearing output added; migrations isolated; no speculative business rule;
+no product frontend changes. Ponytail unavailable, manual simplicity review only.
+ADRs 034/036 updated, 037 accepted under scoped accelerator authorization,
+038 proposed. Estimates for implementation, verification, production, security
+and Amazon readiness: NOT_MEASURED. Public/production/control gates stay blocked.
