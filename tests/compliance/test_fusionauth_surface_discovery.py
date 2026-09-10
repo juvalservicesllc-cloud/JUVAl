@@ -522,3 +522,51 @@ def test_arbitrary_provider_error_text_is_not_reported():
     reason = discovery.oauth_error_reason('{"error_reason":"private-provider-value"}')
     assert reason == 'unrecognized_error_reason'
     assert discovery.classify_application_reason(reason) == discovery.INDETERMINATE
+
+
+def test_real_login_probe_requires_redirect_baseline_confirmation(monkeypatch):
+    monkeypatch.setattr(discovery, "fetch", lambda *args: pytest.fail("must not contact IdP"))
+    with pytest.raises(discovery.UnsafeRequest, match="baseline"):
+        discovery.probe_real_login(BASE)
+
+
+@pytest.mark.parametrize("html,status,expected", [
+    ('<form action="/oauth2/authorize" method="post"><input name="loginId">'
+     '<input type="password" name="password"></form><script src="/js/login.js?state=never-output"></script>',
+     200, "OBSERVED_REAL_JUVAL_LOGIN"),
+    ('<html>invalid_redirect_uri</html>', 200, "NOT_VERIFIED"),
+    ('<form action="/password/forgot" method="post"><input name="loginId">'
+     '<input type="password" name="password"></form>', 200, "NOT_VERIFIED"),
+    ('<form action="/oauth2/authorize" method="post"><input name="loginId">'
+     '<input type="password" name="password"></form>', 500, "NOT_VERIFIED"),
+])
+def test_real_login_probe_is_pkce_get_and_emits_only_paths(monkeypatch, html, status, expected):
+    import json
+    from urllib.parse import urlsplit, parse_qs
+
+    calls = []
+    def fake_fetch(url, method="GET"):
+        assert method == "GET"
+        parts = urlsplit(url)
+        query = parse_qs(parts.query)
+        assert parts.path == "/oauth2/authorize"
+        assert query["client_id"] == [discovery.REAL_CLIENT_ID]
+        assert query["redirect_uri"] == [discovery.TEMP_REDIRECT_URI]
+        assert query["response_type"] == ["code"]
+        assert query["code_challenge_method"] == ["S256"]
+        assert len(query["code_challenge"][0]) == 43
+        assert "client_secret" not in query and "code_verifier" not in query
+        calls.append(query)
+        return discovery.Response(status, {"content-type": "text/html"}, html.encode(), url)
+
+    monkeypatch.setattr(discovery, "fetch", fake_fetch)
+    result = discovery.probe_real_login(BASE, temporary_redirect_confirmed=True)
+    assert len(calls) == 1
+    assert result["classification"] == expected
+    rendered = json.dumps(result)
+    for name in ("state", "nonce", "code_challenge"):
+        assert calls[0][name][0] not in rendered
+    assert "never-output" not in rendered
+    assert all("?" not in path for path in result["resources"])
+    if expected == "NOT_VERIFIED":
+        assert result["resources"] == []

@@ -626,3 +626,16 @@ redirects and suppresses nginx version disclosure (N-3 partial), measured by
 change the generic asset inventory, establish real JUVAl login requirements,
 resolve D-1, or activate public auth. Baseline/temporary redirect mutation still
 NOT_EXECUTED; no cleanup claim may be inferred from the new proxy tests.
+
+### Prepared exact-client probe (accelerator)
+
+`--real-login --temporary-redirect-confirmed` prepares the already-approved
+code+PKCE S256 request only after operator baseline/add/readback. One GET,
+exact JUVAl client/temporary URI, no client secret, no callback or cookie reuse;
+output contains same-origin path references only. A recognized authorize form
+is labelled OBSERVED_REAL_JUVAL_LOGIN with HTML-only evidence scope, never
+browser completeness. Unknown/error/generic pages fail closed. **103 discovery
+tests passed**; the real-client mode has NOT been executed against runtime.
+Fresh existence-only probes still return tenant 200 vs four 500 controls and
+real-client invalid_redirect_uri vs random-client invalid_client_id.
+The cleanup/runbook is `docs/IDENTITY_SECURITY_READINESS.md`.

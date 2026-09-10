@@ -38,6 +38,9 @@ Stdlib only.
 from __future__ import annotations
 
 import argparse
+import base64
+import hashlib
+import secrets
 import html
 import ipaddress
 import json
@@ -605,13 +608,89 @@ def discover(base: str) -> Discovery:
 
 
 
+REAL_CLIENT_ID = "84f077a0-b2b0-4655-8168-082b2233d029"
+TEMP_REDIRECT_URI = "http://127.0.0.1:18080/oauth/callback"
+
+
+class _LoginFormParser(HTMLParser):
+    """Recognize a credential form, never retain input values or HTML."""
+    def __init__(self):
+        super().__init__()
+        self.in_authorize = False
+        self.has_login = False
+        self.has_password = False
+        self.found = False
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag == "form":
+            action = attrs.get("action") or ""
+            self.in_authorize = action.split("?", 1)[0] == "/oauth2/authorize" and (
+                (attrs.get("method") or "get").lower() == "post"
+            )
+            self.has_login = self.has_password = False
+        elif tag == "input" and self.in_authorize:
+            self.has_login |= attrs.get("name") == "loginId"
+            self.has_password |= attrs.get("name") == "password" and attrs.get("type") == "password"
+
+    def handle_endtag(self, tag):
+        if tag == "form":
+            self.found |= self.in_authorize and self.has_login and self.has_password
+            self.in_authorize = False
+
+
+def probe_real_login(base: str, *, temporary_redirect_confirmed: bool = False) -> dict:
+    """One no-credential PKCE GET, only after operator baseline/add/readback.
+
+    Does not submit, follow redirects, retain cookies, or complete a callback.
+    Recognized HTML references are evidence of this response, never a complete
+    browser asset inventory, MFA evidence or production compatibility.
+    """
+    if not temporary_redirect_confirmed:
+        raise UnsafeRequest("temporary redirect baseline/add/readback must be confirmed first")
+    # Verifier and protocol correlation values are ephemeral, never returned.
+    verifier = secrets.token_urlsafe(32)
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+    query = urlencode({"client_id": REAL_CLIENT_ID, "redirect_uri": TEMP_REDIRECT_URI,
+                       "response_type": "code", "scope": "openid", "code_challenge": challenge,
+                       "code_challenge_method": "S256", "state": secrets.token_urlsafe(32),
+                       "nonce": secrets.token_urlsafe(32)})
+    response = fetch(base.rstrip("/") + "/oauth2/authorize?" + query)
+    parser = _LoginFormParser()
+    parser.feed(response.text())
+    observed = response.status == 200 and response.content_type == "text/html" and parser.found
+    return {
+        "status": response.status,
+        "classification": "OBSERVED_REAL_JUVAL_LOGIN" if observed else "NOT_VERIFIED",
+        "evidence_scope": "HTML_REFERENCES_ONLY; BROWSER_COMPLETENESS_NOT_MEASURED",
+        "resources": sorted({urlsplit(ref.path).path for ref in extract_assets(
+            response.text(), base.rstrip("/") + "/oauth2/authorize") if ref.same_origin}) if observed else [],
+        "temporary_redirect_cleanup": "REQUIRED_OPERATOR_READBACK",
+    }
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--base", default="http://127.0.0.1:9011")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--tenant-id", help="probe whether this tenant id resolves")
     parser.add_argument("--client-id", help="probe whether this client id resolves")
+    parser.add_argument("--real-login", action="store_true", help="exact JUVAl PKCE HTML probe")
+    parser.add_argument("--temporary-redirect-confirmed", action="store_true",
+                        help="operator has preserved baseline, added temporary URI and read it back")
     args = parser.parse_args(argv)
+
+    if args.real_login:
+        if not args.temporary_redirect_confirmed:
+            parser.error("--real-login requires --temporary-redirect-confirmed")
+        try:
+            result = probe_real_login(args.base, temporary_redirect_confirmed=True)
+        except (OSError, UnsafeRequest, ValueError):
+            print("NOT_VERIFIED: loopback probe failed; temporary redirect cleanup still required")
+            return 2
+        print(json.dumps(result, indent=2))
+        return 0 if result["classification"] == "OBSERVED_REAL_JUVAL_LOGIN" else 2
+
 
     if args.tenant_id or args.client_id:
         import uuid as _uuid
