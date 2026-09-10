@@ -411,3 +411,28 @@ def test_startup_database_readiness_requires_the_table_owner(session_db_dsn):
         with psycopg.connect(session_db_dsn) as conn:
             conn.execute(sql.SQL("drop owned by {}").format(sql.Identifier(role)))
             conn.execute(sql.SQL("drop role {}").format(sql.Identifier(role)))
+
+
+def test_refresh_guard_excludes_other_instances_and_releases_after_error(stores):
+    sessions, _ = stores
+    peer = sessions
+    if hasattr(sessions, '_dsn'):
+        peer = type(sessions)(sessions._dsn, sessions._cipher)
+    session_id = _session().session_id
+    with pytest.raises(RuntimeError, match='simulated interruption'):
+        with sessions.refresh_guard(session_id) as acquired:
+            assert acquired
+            with peer.refresh_guard(session_id) as competing:
+                assert not competing
+            with peer.refresh_guard(session_id + '-independent') as independent:
+                assert independent
+            raise RuntimeError('simulated interruption')
+    with peer.refresh_guard(session_id) as recovered:
+        assert recovered
+
+
+def test_refresh_cannot_update_expired_session(stores):
+    sessions, _ = stores
+    session = _session(ttl=timedelta(seconds=-1))
+    sessions.save(session)
+    assert not sessions.replace_tokens(session.session_id, 0, 'new', 'new', None, _now())

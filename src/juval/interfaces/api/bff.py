@@ -669,31 +669,29 @@ _REFRESH_SKEW = timedelta(seconds=120)
 
 
 def refresh_if_needed(session_id: str, record: SessionRecord) -> Optional[SessionRecord]:
-    """Renew the access token when it is close to expiring.
+    """Renew under store-wide exclusion; preserve session id and CAS writes.
 
-    Returns the updated record, or None when nothing was done. Never raises for
-    an ordinary refresh failure: a session whose access token could not be
-    renewed is still a valid session for JUVAl's own RBAC, which authorises
-    from the roles captured at login and does not call the IdP per request.
-
-    Design decisions, each of which prevents a specific failure:
-
-    * **The session id does not rotate.** Rotating it would invalidate the
-      cookie on every other in-flight request from the same browser -- a
-      self-inflicted logout under normal concurrency. The refresh *token* is
-      replaced, which is what OAuth rotation is actually about.
-    * **Concurrent refreshes cannot clobber each other.** The write is
-      conditional on `refresh_generation`; the loser is told it lost and
-      re-reads the winner's tokens rather than overwriting them with a refresh
-      token the IdP has already invalidated.
-    * **A rejected refresh revokes the session.** If the IdP refuses the
-      refresh token, that token is either expired or has been replayed. Either
-      way the session must not continue holding it.
-    * **A database failure after a successful refresh does not strand the
-      user.** The new tokens are simply not persisted; the next attempt starts
-      from the stored generation again. The cost is one wasted refresh, not a
-      broken session.
+    Reload after acquiring the guard: the caller may hold an older generation.
+    Busy refreshers skip provider I/O. Guard failure propagates fail-closed.
+    A process/DB failure after provider rotation can still require a new login;
+    the database and external provider do not share an atomic transaction.
     """
+    if record.refresh_token is None or record.access_token_expires_at is None:
+        return None
+    if record.access_token_expires_at - _now() > _REFRESH_SKEW:
+        return None
+    with session_store().refresh_guard(session_id) as acquired:
+        if not acquired:
+            return None
+        current = session_store().load(session_id, _now())
+        if current is None:
+            return None
+        if current.refresh_generation != record.refresh_generation:
+            return current
+        return _refresh_exclusive(session_id, current)
+
+
+def _refresh_exclusive(session_id: str, record: SessionRecord) -> Optional[SessionRecord]:
     if record.refresh_token is None or record.access_token_expires_at is None:
         return None
     if record.access_token_expires_at - _now() > _REFRESH_SKEW:
@@ -763,7 +761,9 @@ def _refresh_tokens(config: BffConfig, refresh_token: str) -> Mapping[str, Any]:
             return json.loads(raw.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         # The body may quote the refresh token; it is never read or logged.
-        raise _RefreshRejected(f"HTTP {exc.code}") from exc
+        if exc.code == 429 or exc.code >= 500:
+            raise RuntimeError("identity provider temporarily unavailable") from None
+        raise _RefreshRejected(f"HTTP {exc.code}") from None
 
 
 # --- IdP calls --------------------------------------------------------

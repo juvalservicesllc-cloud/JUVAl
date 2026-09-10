@@ -20,6 +20,7 @@ their port docstrings give.
 from __future__ import annotations
 
 import threading
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, Optional
@@ -83,6 +84,21 @@ class InMemorySessionStore:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._items: Dict[str, _StoredSession] = {}
+        self._refreshing: set[str] = set()
+
+    @contextmanager
+    def refresh_guard(self, session_id: str):
+        key = digest(session_id)
+        with self._lock:
+            acquired = key not in self._refreshing
+            if acquired:
+                self._refreshing.add(key)
+        try:
+            yield acquired
+        finally:
+            if acquired:
+                with self._lock:
+                    self._refreshing.remove(key)
 
     def save(self, session: Session) -> None:
         record = SessionRecord(
@@ -129,7 +145,7 @@ class InMemorySessionStore:
         key = digest(session_id)
         with self._lock:
             stored = self._items.get(key)
-            if stored is None or stored.revoked_at is not None:
+            if stored is None or stored.revoked_at is not None or stored.record.expires_at <= now:
                 return False
             if stored.record.refresh_generation != expected_generation:
                 return False  # a concurrent refresh already won

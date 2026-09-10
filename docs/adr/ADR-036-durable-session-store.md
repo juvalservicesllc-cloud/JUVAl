@@ -140,7 +140,8 @@ la misma en todos los casos.
 `replace_tokens` es un `UPDATE ... WHERE refresh_generation = %s`. De dos
 refrescos concurrentes gana exactamente uno; al perdedor se le **dice** que
 perdió y relee en vez de sobrescribir un refresh token que el ganador ya usó.
-Eso es lo que impide la actualización perdida.
+Eso impide la actualización perdida, pero no serializa llamadas al proveedor.
+ADR-039 añade exclusión no bloqueante antes de la llamada y relectura del estado.
 
 **El id de sesión no rota en el refresco.** Rotarlo invalidaría la cookie de
 todas las demás peticiones en vuelo del mismo navegador — un cierre de sesión
@@ -150,11 +151,12 @@ token*, que es de lo que trata la rotación en OAuth.
 - IdP rechaza el refresh → la sesión se **revoca**: conservar un refresh token
   rechazado es peor que no tener ninguno, y un token repetido hace la sesión
   sospechosa.
-- IdP inalcanzable → la sesión se conserva: el RBAC de JUVAl autoriza con los
+- IdP inalcanzable o HTTP 429/5xx → la sesión se conserva: el RBAC de JUVAl autoriza con los
   roles capturados en el login y no llama al IdP por petición.
 - Fallo de escritura en base tras un refresh exitoso → no se persiste nada; el
-  siguiente intento parte de la generación almacenada. El coste es un refresh
-  desperdiciado, no una sesión rota.
+  siguiente intento parte de la generación almacenada. La rotación externa puede haber
+  invalidado el token anterior; puede requerir un nuevo login. No existe una
+  transacción atómica entre IdP y base de datos (ADR-039).
 
 ### Semántica multi-instancia y fallo
 
@@ -265,3 +267,12 @@ chaining to avoid credential-bearing diagnostics. It does not migrate, repair
 or activate anything. This implements the existing accepted boundary; it is
 not a new persistence policy. It verifies column presence, not a full schema
 fingerprint or continued availability after startup.
+
+
+### Second-wave concurrency verification — 2026-09-10
+
+ADR-039 adds cross-connection refresh exclusion and bounded connection attempts.
+Scratch PostgreSQL: 48 passed, 2 memory-only skips; full backend with nginx:
+834 passed, 38 external/optional skips. A SQL placeholder regression found by
+the scratch suite was corrected before commit; all revocation cases pass.
+No live migration, IdP login, pooler activation or production change performed.

@@ -39,7 +39,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, Protocol, Tuple
+from typing import ContextManager, Optional, Protocol, Tuple
 
 
 def digest(value: str) -> str:
@@ -148,6 +148,14 @@ class OAuthTransactionStore(Protocol):
 
 
 class SessionStore(Protocol):
+    def refresh_guard(self, session_id: str) -> ContextManager[bool]:
+        """Nonblocking exclusion across refresh callers sharing this store.
+
+        Yield True only to the sole refresher until context exit. A busy caller
+        skips refresh; it must not contact the provider with a stale token.
+        PostgreSQL implementations must coordinate across processes.
+        """
+
     def save(self, session: Session) -> None:
         """Create or replace a session."""
 

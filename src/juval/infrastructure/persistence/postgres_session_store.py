@@ -45,6 +45,8 @@ correct response is to make the caller log in again.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+
 import logging
 from datetime import datetime
 from typing import Any, Optional
@@ -127,7 +129,7 @@ class _PostgresBacked:
         self._cipher = cipher
 
     def _connect(self):
-        return _require_driver().connect(self._dsn)
+        return _require_driver().connect(self._dsn, connect_timeout=5)
 
 
 class PostgresOAuthTransactionStore(_PostgresBacked):
@@ -202,6 +204,20 @@ class PostgresOAuthTransactionStore(_PostgresBacked):
 
 
 class PostgresSessionStore(_PostgresBacked):
+    @contextmanager
+    def refresh_guard(self, session_id: str):
+        # Transaction-scoped lock: released on normal exit, exception or lost
+        # connection. Stable 64-bit namespace; collisions only defer refresh.
+        key = int(digest("juval-refresh:" + session_id)[:16], 16)
+        if key >= 2**63:
+            key -= 2**64
+        with self._connect() as conn:
+            conn.execute("set local statement_timeout = '5s'")
+            acquired = conn.execute(
+                "select pg_try_advisory_xact_lock(%s)", (key,)
+            ).fetchone()[0]
+            yield acquired
+
     def save(self, session: Session) -> None:
         session_digest = digest(session.session_id)
         access = self._seal(session.access_token, session_digest, _ACCESS)
@@ -340,6 +356,7 @@ class PostgresSessionStore(_PostgresBacked):
                  where session_digest     = %s
                    and refresh_generation = %s
                    and revoked_at is null
+                   and expires_at > %s
                 """,
                 (
                     access,
@@ -349,6 +366,7 @@ class PostgresSessionStore(_PostgresBacked):
                     now,
                     session_digest,
                     expected_generation,
+                    now,
                 ),
             )
             return (cur.rowcount or 0) == 1

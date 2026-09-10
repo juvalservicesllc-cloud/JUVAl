@@ -339,3 +339,52 @@ def test_postgres_readiness_failure_aborts_selection_without_exposing_dsn(monkey
     rendered = "".join(traceback.format_exception(error.value))
     assert "sensitive-driver-diagnostic" not in rendered
     assert "postgresql://" not in rendered
+
+
+def test_overlapping_refresh_calls_contact_provider_once(wired, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+
+    entered, release = Event(), Event()
+    calls = []
+    def rotating_provider(config, token):
+        calls.append(token)
+        entered.set()
+        assert release.wait(5)
+        return {'access_token': 'new', 'refresh_token': 'rotated', 'expires_in': 3600}
+    monkeypatch.setattr(bff, '_refresh_tokens', rotating_provider)
+    session_id, record = _session(wired, access_ttl=timedelta(seconds=5))
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(bff.refresh_if_needed, session_id, record)
+        try:
+            assert entered.wait(5)
+            assert pool.submit(bff.refresh_if_needed, session_id, record).result(timeout=5) is None
+        finally:
+            release.set()
+        assert first.result(timeout=5).refresh_generation == 1
+    assert calls == ['old-refresh']
+    # Even after release a stale request must not replay the consumed token.
+    assert bff.refresh_if_needed(session_id, record).refresh_generation == 1
+    assert calls == ['old-refresh']
+
+
+def test_logout_during_refresh_cannot_resurrect_session(wired, monkeypatch):
+    session_id, record = _session(wired, access_ttl=timedelta(seconds=5))
+    def provider(config, token):
+        wired.revoke(session_id, _now())
+        return {'access_token': 'new', 'refresh_token': 'rotated', 'expires_in': 3600}
+    monkeypatch.setattr(bff, '_refresh_tokens', provider)
+    assert bff.refresh_if_needed(session_id, record) is None
+    assert wired.load(session_id, _now()) is None
+
+
+@pytest.mark.parametrize('status', [429, 500, 502, 503, 504])
+def test_provider_http_outage_does_not_revoke_session(wired, monkeypatch, status):
+    import urllib.error
+    def unavailable(*args, **kwargs):
+        raise urllib.error.HTTPError('https://idp.test.invalid/token', status,
+                                     'unavailable', {}, None)
+    monkeypatch.setattr(bff.urllib.request, 'urlopen', unavailable)
+    session_id, record = _session(wired, access_ttl=timedelta(seconds=5))
+    assert bff.refresh_if_needed(session_id, record) is None
+    assert wired.load(session_id, _now()) is not None
