@@ -12,7 +12,7 @@ for(const width of [1440,1280,768,390])test(`responsive visual capture ${width}`
 test('sync and failure preserve snapshot',async({page})=>{await page.goto('/');await page.route('**/api/sync',route=>route.fulfill({status:503,contentType:'application/json',body:'{}'}));await page.getByRole('button',{name:'Sync repository'}).first().click();await expect(page.getByRole('alert')).toContainText('last successful snapshot');await expect(page.locator('.hero')).toBeVisible();});
 test('offline snapshot and invalid payload are handled gracefully',async({page})=>{await page.route('**/api/state',route=>route.fulfill({contentType:'application/json',body:'{"schemaVersion":99}'}));await page.goto('/');await expect(page.getByText(/OFFLINE SNAPSHOT ·/)).toBeVisible();await expect(page.locator('.hero')).toBeVisible();});
 test('ADR deep link, keyboard close and missing search state',async({page})=>{await page.goto('/?adr=ADR-036#ADRs');await expect(page.getByRole('dialog')).toContainText('ADR-036');await page.keyboard.press('Escape');await expect(page.getByRole('dialog')).not.toBeVisible();await expect(page.locator('main h1')).toHaveText('ADRs');});
-test('same-origin sync works and private filesystem routes are denied',async({request})=>{test.setTimeout(90000);const denied=await request.post('/api/sync',{headers:{Origin:'https://untrusted.example'}});expect(denied.status()).toBe(403);for(const path of ['/data/generated/backend-junit.xml','/.verification/repository/pyproject.toml']){const response=await request.get(path);expect(response.status()).toBe(403);}const result=await request.post('/api/sync',{headers:{Origin:'http://127.0.0.1:4317'}});expect(result.ok()).toBeTruthy();const s=await result.json();expect(s.sync.status).toBe('SUCCESS');expect(s.adrs.length).toBeGreaterThanOrEqual(36);});
+test('same-origin sync works and private filesystem routes are denied',async({request})=>{test.setTimeout(90000);const denied=await request.post('/api/sync',{headers:{Origin:'https://untrusted.example'}});expect(denied.status()).toBe(403);for(const path of ['/data/generated/backend-junit.xml','/.verification/repository/pyproject.toml','/%64ata/generated/missing.json','/.env.local','/missing.pem']){const response=await request.get(path);expect(response.status()).toBe(403);}const result=await request.post('/api/sync',{headers:{Origin:'http://127.0.0.1:4317'}});expect(result.ok()).toBeTruthy();const s=await result.json();expect(s.sync.status).toBe('SUCCESS');expect(s.adrs.length).toBeGreaterThanOrEqual(36);});
 test('roadmap source/date/risk filters and assurance views',async({page})=>{await page.setViewportSize({width:1440,height:1000});await page.goto('/#Roadmap');await page.getByLabel('Risk filter').selectOption('High');await expect(page.locator('.roadmap-line')).not.toHaveCount(0);await page.getByLabel('Source changed since').fill('2099-01-01');await expect(page.locator('.roadmap-line')).toHaveCount(0);await page.getByRole('button',{name:'Reset',exact:true}).click();await page.screenshot({path:'test-results/roadmap.png',fullPage:true,animations:'disabled'});await page.getByRole('navigation').getByRole('button',{name:'Amazon Readiness'}).click();await page.locator('.control-detail summary').first().click();await expect(page.locator('.control-columns').first()).toBeVisible();await page.screenshot({path:'test-results/amazon.png',fullPage:true,animations:'disabled'});await page.getByRole('navigation').getByRole('button',{name:'Architecture',exact:false}).click();await expect(page.locator('.architecture-node')).not.toHaveCount(0);await page.screenshot({path:'test-results/architecture.png',fullPage:true,animations:'disabled'});});
 
 test('English and Spanish preserve route, filter values, evidence and language preference',async({page})=>{
@@ -63,4 +63,20 @@ test('hosted build refreshes its published snapshot without calling local sync',
  await expect(page.getByRole('status')).toContainText('Repository snapshot refreshed.');
  expect(requests.filter(p=>p==='/project-state.json').length).toBe(2);
  expect(requests.some(p=>p.startsWith('/api/'))).toBe(false);
+});
+
+
+test('existing synthetic private artifact is denied before Vite fallback',async({request})=>{
+ const {mkdirSync,mkdtempSync,writeFileSync,rmSync}=await import('node:fs');
+ const {resolve}=await import('node:path');
+ mkdirSync('.verification',{recursive:true});
+ const directory=mkdtempSync(resolve('.verification','deny-probe-'));
+ try{
+  writeFileSync(resolve(directory,'synthetic.txt'),'SYNTHETIC_PRIVATE_SENTINEL');
+  for(const path of ['/'+directory.split('/').slice(-2).join('/')+'/synthetic.txt','/@fs'+directory+'/synthetic.txt']){
+   const response=await request.get(path);
+   expect(response.status()).toBe(403);
+   expect(await response.text()).not.toContain('SYNTHETIC_PRIVATE_SENTINEL');
+  }
+ }finally{rmSync(directory,{recursive:true,force:true});}
 });

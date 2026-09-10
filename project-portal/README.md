@@ -198,3 +198,12 @@ security evidence and Amazon evidence scopes, weights and credit rules. The
 output includes its indexed commit and denominators. This is curated repository
 evidence, not measured live coverage or Amazon approval. Unknown runtime evidence
 earns no production credit. No percentage authorizes deployment or submission.
+
+Local-server regression verified 2026-09-10: private data/.verification/.git,
+.env and PEM paths are rejected before SPA fallback, including absent files,
+encoded data path and an existing synthetic artifact through /@fs. A missing
+private file previously returned index HTML with 200; no private content exposure
+was observed. E2E gate now 14/14 PASS, plus 11 model/4 component tests and lint/build.
+Linux E2E used installed Playwright Chromium via a disposable config override;
+Chrome channel default is unchanged. Read-only refresh used an environment-only
+Git HTTPS URL rewrite because SSH authentication was unavailable.
