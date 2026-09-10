@@ -1,6 +1,9 @@
 # SEC-DEPS-01 — dependency exposure review
 
-Date: 2026-09-10. **REMEDIATED_LOCKFILE / VERIFIED_TEST**.
+Date: 2026-09-10. **Five-advisory frontend patch: REMEDIATED_LOCKFILE / VERIFIED_TEST**.
+Overall third-wave status: **DISCREPANCY_OPEN**; six GitHub alerts reported by the
+operator remain unclassified without their metadata. See
+[third-wave reconciliation](DEPENDENCY_THIRD_WAVE_RECONCILIATION.md).
 Review baseline: `16189b7`; second-wave authorization B permits only security remediation.
 Private GitHub alert status is NOT_VERIFIED; this is a fresh npm registry audit of committed lockfiles, not a claim
 that GitHub alerts were closed.

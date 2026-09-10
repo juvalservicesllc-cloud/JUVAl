@@ -7,25 +7,24 @@ dependencies = [
     "openpyxl>=3.1",
     "fastapi>=0.110",
     "uvicorn>=0.23",
-    "python-multipart>=0.0.9",
+    "python-multipart>=0.0.31",
     # OIDC/JWT verification for interfaces/api/auth.py and the ADR-034 BFF.
     # Provider decisions: ADR-028 (FusionAuth) + ADR-031 (self-hosted); the
     # earlier ADR-022 citation here was stale -- that ADR is RECHAZADA.
     # Required, not optional: JUVAl must never implement authentication
     # cryptography of its own (CLAUDE.md Sec. 16). [crypto] supplies RS256.
-    "pyjwt[crypto]>=2.8",
+    "pyjwt[crypto]>=2.13.0",
     # AES-256-GCM for OAuth tokens at rest (ADR-036,
     # infrastructure/crypto/token_cipher.py). It arrives transitively through
     # pyjwt[crypto], but JUVAl imports it *directly*, and a package you import
     # directly is a direct dependency: relying on the transitive path means an
     # upstream extras change silently removes JUVAl's session encryption. The
-    # floor is the version that ships the AEAD interface used here; no other
-    # dependency is touched.
-    "cryptography>=42.0",
+    # floor excludes reviewed vulnerable releases; see SEC_DEPS_01_REVIEW.md.
+    "cryptography>=50.0.0",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=7", "httpx>=0.27"]
+dev = ["pytest>=9.0.3", "httpx>=0.27"]
 postgres = ["psycopg[binary]>=3.1"]
 
 [tool.pytest.ini_options]
