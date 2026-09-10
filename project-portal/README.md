@@ -182,3 +182,10 @@ The exporter parses counts only and records the caller-declared provenance;
 it does not independently prove a JUnit file came from that checkout. Raw JUnit
 case names, failures and output are not exported. Generated snapshots remain
 ignored and are regenerated; no manual progress percentages were introduced.
+
+Validation of this update: source snapshot `63568c4`, 30 criteria / 38 ADRs;
+10 model tests + 4 component/i18n tests + 3 Python exporter tests passed; lint
+and build passed; npm audit reports zero advisories. Backend JUnit counters were
+reproduced on clean Linux `63568c4`: 821 passed / 36 skipped with real nginx.
+Browser E2E was not rerun (no portal UI change); this does not claim a new
+browser-rendering or live deployment verification.
