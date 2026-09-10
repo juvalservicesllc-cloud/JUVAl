@@ -225,3 +225,12 @@ hubiera servido `/login` respondía desde el marcador de pre-inicialización. Er
 fail-closed (401) pero la sesión duradera no se usaba. Ahora hay un único punto
 de inicialización (`bff.ensure_configured()`), al que llegan login, callback,
 resolución de sesión, refresh, CSRF y logout.
+
+## Session projection correction — 2026-09-10 accelerator
+
+After a rejected refresh, `/api/v1/auth/session` previously fell back to the
+pre-refresh record and reported authenticated despite revocation. It now
+reloads the store after refresh; absent/revoked state reports unauthenticated
+and clears cookies. A transport outage still preserves the session per ADR-036.
+HTTP-level tests exercise both outcomes. This corrects presentation of the
+existing security state without changing the role or refresh policy.

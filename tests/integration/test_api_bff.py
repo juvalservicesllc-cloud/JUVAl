@@ -619,3 +619,33 @@ def test_every_session_consumer_uses_the_store_startup_selected(unconfigured, rs
     # The pre-initialisation placeholder never served anything.
     assert placeholder is not spy
     assert not placeholder._items
+
+
+@pytest.mark.parametrize("failure", ["rejected", "unreachable"])
+def test_session_projection_uses_state_after_refresh(configured, rsa_key, monkeypatch, failure):
+    _stub_token_endpoint(monkeypatch, rsa_key)
+
+    def fail_refresh(*args):
+        if failure == "rejected":
+            raise bff._RefreshRejected("provider refusal")
+        raise OSError("provider unavailable")
+
+    monkeypatch.setattr(bff, "_refresh_tokens", fail_refresh)
+    with TestClient(app) as client:
+        _, query = _begin_login(client)
+        client.get("/api/v1/auth/callback", params={"code": "c", "state": query["state"][0]},
+                   follow_redirects=False)
+        session_id = client.cookies[bff.SESSION_COOKIE]
+        near_expiry = bff._now() + timedelta(seconds=3590)
+        monkeypatch.setattr(bff, "_now", lambda: near_expiry)
+        response = client.get("/api/v1/auth/session")
+        assert response.status_code == 200
+        if failure == "rejected":
+            assert response.json()["authenticated"] is False
+            assert set(response.json()) == {"authenticated"}
+            assert bff.session_store().load(session_id, bff._now()) is None
+            assert bff.SESSION_COOKIE not in client.cookies
+            assert bff.CSRF_COOKIE not in client.cookies
+        else:
+            assert response.json()["authenticated"] is True
+            assert bff.session_store().load(session_id, bff._now()) is not None

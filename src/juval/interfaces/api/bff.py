@@ -519,7 +519,14 @@ def session_view(request: Request) -> JSONResponse:
     # Opportunistic refresh: this is the endpoint the SPA polls, so it is the
     # natural place to keep the access token alive. Doing it on every request
     # instead would put a network call to the IdP in the hot path.
-    session = refresh_if_needed(session_id, session) or session
+    refresh_if_needed(session_id, session)
+    # None can mean either no refresh or revocation. Never revive the snapshot
+    # loaded before a rejected refresh (or a concurrent logout).
+    session = session_store().load(session_id, _now())
+    if session is None:
+        response = JSONResponse({"authenticated": False}, status_code=200)
+        _clear_session_cookies(response)
+        return response
 
     body = {
         "authenticated": True,
