@@ -86,7 +86,7 @@ def verify_session_database(dsn: str) -> None:
     """Read-only startup check of the selected database and ADR-036 boundary.
 
     Does not read rows, create tables, or run migrations. Missing tables,
-    incompatible columns, non-owner roles, disabled/forced RLS or any policy
+    incompatible columns/digest keys, non-owner roles, disabled/forced RLS or any policy
     abort startup. Driver diagnostics may contain credentials: suppress them.
     Connection and SQL waits are bounded independently.
     """
@@ -104,6 +104,23 @@ def verify_session_database(dsn: str) -> None:
             ).fetchall()
             if len(rows) != 2 or any(row != (True, False, True, True) for row in rows):
                 raise RuntimeError("session schema does not satisfy ADR-036")
+            # Both upserts and single-use transaction custody require a valid,
+            # nondeferrable primary key on exactly the digest column.
+            for table, column in (
+                ("identity_sessions", "session_digest"),
+                ("identity_oauth_transactions", "transaction_digest"),
+            ):
+                key_count = conn.execute(
+                    "select count(*) from pg_constraint c "
+                    "join pg_attribute a on a.attrelid = c.conrelid "
+                    "join pg_index i on i.indexrelid = c.conindid "
+                    "where c.conrelid = to_regclass(%s) and c.contype = 'p' "
+                    "and not c.condeferrable and c.convalidated and i.indisvalid "
+                    "and a.attname = %s and c.conkey = array[a.attnum]",
+                    (table, column),
+                ).fetchone()[0]
+                if key_count != 1:
+                    raise RuntimeError("session digest primary key is missing or incompatible")
             # Resolve every column used by the adapters without reading tokens.
             conn.execute(
                 "select session_digest, subject, roles, csrf_digest, "

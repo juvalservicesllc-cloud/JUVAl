@@ -436,3 +436,23 @@ def test_refresh_cannot_update_expired_session(stores):
     session = _session(ttl=timedelta(seconds=-1))
     sessions.save(session)
     assert not sessions.replace_tokens(session.session_id, 0, 'new', 'new', None, _now())
+
+
+@pytest.mark.parametrize('table,column', [
+    ('identity_sessions', 'session_digest'),
+    ('identity_oauth_transactions', 'transaction_digest'),
+])
+@pytest.mark.parametrize('defect', ['missing', 'deferrable'])
+def test_readiness_requires_digest_primary_key(session_db_dsn, table, column, defect):
+    import psycopg
+    from psycopg import sql
+    from juval.infrastructure.persistence.postgres_session_store import verify_session_database
+    with psycopg.connect(session_db_dsn) as conn:
+        conn.execute(Path(MIGRATION).read_text())
+        conn.execute(sql.SQL('alter table {} drop constraint {}').format(
+            sql.Identifier(table), sql.Identifier(table + '_pkey')))
+        if defect == 'deferrable':
+            conn.execute(sql.SQL('alter table {} add primary key ({}) deferrable').format(
+                sql.Identifier(table), sql.Identifier(column)))
+    with pytest.raises(RuntimeError, match='readiness failed'):
+        verify_session_database(session_db_dsn)

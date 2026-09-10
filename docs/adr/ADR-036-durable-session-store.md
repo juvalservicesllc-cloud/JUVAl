@@ -276,3 +276,14 @@ Scratch PostgreSQL: 48 passed, 2 memory-only skips; full backend with nginx:
 834 passed, 38 external/optional skips. A SQL placeholder regression found by
 the scratch suite was corrected before commit; all revocation cases pass.
 No live migration, IdP login, pooler activation or production change performed.
+
+
+### Third-wave digest-key preflight
+
+Read-only startup/preflight now requires a valid nondeferrable primary key on
+exactly session_digest and transaction_digest, respectively. Missing or
+DEFERRABLE keys previously passed column/RLS inspection but break ON CONFLICT
+or single-use custody. Four PostgreSQL negative cases verify both tables; the
+original migration passes. No SQL migration or automatic repair was introduced.
+This still is not a complete type/default/index fingerprint or proof of the
+production DB target, backup or pooler. Operators must review migration metadata.
