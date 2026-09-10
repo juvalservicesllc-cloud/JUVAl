@@ -639,3 +639,12 @@ tests passed**; the real-client mode has NOT been executed against runtime.
 Fresh existence-only probes still return tenant 200 vs four 500 controls and
 real-client invalid_redirect_uri vs random-client invalid_client_id.
 The cleanup/runbook is `docs/IDENTITY_SECURITY_READINESS.md`.
+
+## Continuación 2026-09-10 — login real observado
+
+El bloqueo de baseline queda superado: lista vacía / ExactMatch leída mediante
+Admin autenticado; callback temporal añadido, probado y eliminado con readback
+exacto en cada ciclo. Login inicial real renderizado en Chromium; nginx real
+loopback devuelve formulario y assets iniciales. D-1 PARTIAL: MFA/WebAuthn/fuentes
+y recuperación aún pendientes. No producción ni Control 6 satisfecho. Evidencia:
+`docs/research/REAL_JUVAL_LOGIN_20260910.md` y JSON sanitizados asociados.

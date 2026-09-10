@@ -1,0 +1,40 @@
+{
+  "status": 200,
+  "classification": "OBSERVED_REAL_JUVAL_LOGIN",
+  "evidence_scope": "HTML_REFERENCES_ONLY; BROWSER_COMPLETENESS_NOT_MEASURED",
+  "resources": [
+    "/css/entrypoints/fusionauth-hosted.css",
+    "/css/font-awesome-4.7.0.min.css",
+    "/images/apple-icon-114x114.png",
+    "/images/apple-icon-120x120.png",
+    "/images/apple-icon-144x144.png",
+    "/images/apple-icon-152x152.png",
+    "/images/apple-icon-180x180.png",
+    "/images/apple-icon-57x57.png",
+    "/images/apple-icon-60x60.png",
+    "/images/apple-icon-72x72.png",
+    "/images/apple-icon-76x76.png",
+    "/images/favicon-128.png",
+    "/images/favicon-16x16.png",
+    "/images/favicon-32x32.png",
+    "/images/favicon-96x96.png",
+    "/images/footer-logo.svg",
+    "/images/manifest.json",
+    "/js/Util.js",
+    "/js/entrypoints/oauth2/authorize.js",
+    "/js/identityProvider/InProgress.js",
+    "/js/jstz-min-1.0.6.js",
+    "/js/oauth2/Authorize.js",
+    "/js/oauth2/LocaleSelect.js",
+    "/js/prime-min-1.7.0.js",
+    "/oauth2/authorize",
+    "/password/forgot"
+  ],
+  "temporary_redirect_cleanup": "REQUIRED_OPERATOR_READBACK",
+  "cleanup_readback": {
+    "authorizedRedirectURLs": [],
+    "authorizedURLValidationPolicy": "ExactMatch",
+    "temporary_redirect_present": false,
+    "original_configuration_restored": true
+  }
+}

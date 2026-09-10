@@ -1,6 +1,6 @@
 # JUVAl identity/security — current readiness and operator runbook
 
-**2026-09-10 accelerator third wave. Status: PARTIALLY IMPLEMENTED.** Authoritative
+**2026-09-10 accelerator fourth wave continuation. Status: PARTIALLY IMPLEMENTED.** Authoritative
 workspace: `/home/juval/JUVAl/APP`. This ledger supersedes dated implementation
 snapshots in project plans, contracts and research; historical experiments are
 not reclassified as production evidence. Git commits identify the exact changes.
@@ -13,10 +13,10 @@ not reclassified as production evidence. Git commits identify the exact changes.
 | Durable Git checkpoint | VERIFIED via authenticated SSH fetch | `b338a67` matched origin/master 0/0 at third-wave resume; subsequent commits use normal gated pushes |
 | Exact tenant/application IDs exist | VERIFIED_RUNTIME_READ_ONLY | 2026-09-10 public controls: tenant 200 vs four 500 controls; real client invalid_redirect_uri vs random invalid_client_id; high for existence only |
 | Tenant/application names and role names | NOT_REVERIFIED | Admin readback not available; never recreate existing objects |
-| Real login surface | NOT_VERIFIED / BLOCKED_BY_REDIRECT_CONFIGURATION | No authenticated Admin browser capability in agent; baseline not read; no mutation |
+| Real login surface | INITIAL_LOGIN_BEHAVIORALLY_VERIFIED / RUNTIME_LOOPBACK_VERIFIED | Real Chromium render and nginx GET probes; exact redirect restoration verified; docs/research/REAL_JUVAL_LOGIN_20260910.md |
 | BFF/session store | IMPLEMENTED_TESTED_NOT_ACTIVATED | ADR-034/036; startup readiness and revoked-session projection corrected |
 | N-1 | REMEDIATED_TEMPLATE / LAB_BEHAVIOURALLY_VERIFIED | ADR-037; relative 301, query retention, no upstream contact; 90 nginx tests |
-| D-1 / final asset allow-list | BLOCKED | Generic CSS fonts/icon evidence only; real login needed |
+| D-1 / final asset allow-list | PARTIAL | Initial render verified; fonts/WebAuthn/MFA and blocked recovery navigation remain unresolved |
 | N-3 | PARTIAL | nginx version suppressed; other headers/rate policy await flow compatibility |
 | Public TLS/hostname/issuer | NOT_ESTABLISHED | ADR-031 approved network boundary; actual names/provider pending |
 | Browser site topology | APPROVED_SAME_SITE_SUBDOMAINS | ADR-038 accepted; Chromium semantics lab passed; actual domain/public browser flow pending |

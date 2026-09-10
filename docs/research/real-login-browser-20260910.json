@@ -1,0 +1,95 @@
+{
+  "classification": "OBSERVED_REAL_JUVAL_LOGIN",
+  "forms": [
+    {
+      "action": "/oauth2/authorize",
+      "method": "post"
+    }
+  ],
+  "paths": [
+    {
+      "path": "/oauth2/authorize",
+      "status": 200,
+      "type": "document",
+      "mime": "text/html; charset=UTF-8"
+    },
+    {
+      "path": "/css/font-awesome-4.7.0.min.css",
+      "status": 200,
+      "type": "stylesheet",
+      "mime": "text/css"
+    },
+    {
+      "path": "/css/entrypoints/fusionauth-hosted.css",
+      "status": 200,
+      "type": "stylesheet",
+      "mime": "text/css"
+    },
+    {
+      "path": "/js/Util.js",
+      "status": 200,
+      "type": "script",
+      "mime": "text/javascript"
+    },
+    {
+      "path": "/js/oauth2/LocaleSelect.js",
+      "status": 200,
+      "type": "script",
+      "mime": "text/javascript"
+    },
+    {
+      "path": "/js/prime-min-1.7.0.js",
+      "status": 200,
+      "type": "script",
+      "mime": "text/javascript"
+    },
+    {
+      "path": "/js/oauth2/Authorize.js",
+      "status": 200,
+      "type": "script",
+      "mime": "text/javascript"
+    },
+    {
+      "path": "/js/identityProvider/InProgress.js",
+      "status": 200,
+      "type": "script",
+      "mime": "text/javascript"
+    },
+    {
+      "path": "/js/jstz-min-1.0.6.js",
+      "status": 200,
+      "type": "script",
+      "mime": "text/javascript"
+    },
+    {
+      "path": "/images/footer-logo.svg",
+      "status": 200,
+      "type": "image",
+      "mime": "image/svg+xml"
+    },
+    {
+      "path": "/js/entrypoints/oauth2/authorize.js",
+      "status": 200,
+      "type": "script",
+      "mime": "text/javascript"
+    },
+    {
+      "path": "/images/favicon-128.png",
+      "status": 200,
+      "type": "other",
+      "mime": "image/png"
+    },
+    {
+      "path": "/images/favicon-32x32.png",
+      "status": 200,
+      "type": "other",
+      "mime": "image/png"
+    }
+  ],
+  "cleanup_readback": {
+    "authorizedRedirectURLs": [],
+    "authorizedURLValidationPolicy": "ExactMatch",
+    "temporary_redirect_present": false,
+    "original_configuration_restored": true
+  }
+}

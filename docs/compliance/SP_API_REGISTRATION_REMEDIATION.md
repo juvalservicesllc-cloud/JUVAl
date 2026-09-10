@@ -4458,3 +4458,12 @@ AMAZON_COMPLIANCE_READINESS = BLOCKED
 Temporary redirect not mutated; baseline unavailable, cleanup not applicable.
 No public TLS/issuer, production migration, DNS/firewall/SSH changes or Amazon
 submission. The prior literal marker remains no evidence of successful login.
+
+## Continuación 2026-09-10 — login real observado
+
+El bloqueo de baseline queda superado: lista vacía / ExactMatch leída mediante
+Admin autenticado; callback temporal añadido, probado y eliminado con readback
+exacto en cada ciclo. Login inicial real renderizado en Chromium; nginx real
+loopback devuelve formulario y assets iniciales. D-1 PARTIAL: MFA/WebAuthn/fuentes
+y recuperación aún pendientes. No producción ni Control 6 satisfecho. Evidencia:
+`docs/research/REAL_JUVAL_LOGIN_20260910.md` y JSON sanitizados asociados.

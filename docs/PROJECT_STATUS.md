@@ -1242,3 +1242,12 @@ con cambio obligatorio y correo .invalid. Backend 839 PASS / 43 SKIP; PostgreSQL
 Admin preparada para autenticación privada. Dependabot no bloquea trabajo
 independiente: PARTIAL / GITHUB_METADATA_REQUIRED. Evidencia y límites en
 `docs/research/ACCELERATOR_FOURTH_WAVE_RESULTS.md`. Sin activación de producción.
+
+## Continuación 2026-09-10 — login real observado
+
+El bloqueo de baseline queda superado: lista vacía / ExactMatch leída mediante
+Admin autenticado; callback temporal añadido, probado y eliminado con readback
+exacto en cada ciclo. Login inicial real renderizado en Chromium; nginx real
+loopback devuelve formulario y assets iniciales. D-1 PARTIAL: MFA/WebAuthn/fuentes
+y recuperación aún pendientes. No producción ni Control 6 satisfecho. Evidencia:
+`docs/research/REAL_JUVAL_LOGIN_20260910.md` y JSON sanitizados asociados.
