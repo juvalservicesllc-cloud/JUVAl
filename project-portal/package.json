@@ -1,0 +1,33 @@
+{
+  "name": "juval-project-intelligence",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "sync": "node scripts/sync.mjs",
+    "dev": "node scripts/server.mjs",
+    "build": "node scripts/prepare-build.mjs && tsc --noEmit && vite build",
+    "lint": "oxlint src scripts tests",
+    "test": "node --test tests/model.test.mjs && vitest run",
+    "test:e2e": "playwright test",
+    "sync:github": "node scripts/github.mjs",
+    "refresh": "node scripts/refresh.mjs",
+    "build:vercel": "node scripts/sync-build.mjs && npm run test && npm run lint && npm run build"
+  },
+  "dependencies": {
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "~6.0.2",
+    "vite": "^8.2.0",
+    "vitest": "^4.1.10",
+    "oxlint": "^1.75.0",
+    "jsdom": "^28.0.2",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/dom": "^10.4.1",
+    "@playwright/test": "^1.62.1"
+  }
+}
