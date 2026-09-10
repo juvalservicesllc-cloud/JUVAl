@@ -327,8 +327,13 @@ def _jwks_uri_for(monkeypatch, issuer: str, override: str | None = None) -> str:
     captured: dict[str, str] = {}
 
     class _Recorder:
-        def __init__(self, uri: str) -> None:
+        # **options absorbs the explicit JWKS cache parameters build_verifier
+        # now passes (cache lifespan, max keys, HTTP timeout). This helper only
+        # asserts on the URI; those parameters have their own test in
+        # tests/unit/test_auth_hardening.py.
+        def __init__(self, uri: str, **options) -> None:
             captured["uri"] = uri
+            captured["options"] = options
 
         def get_signing_key_from_jwt(self, token):  # pragma: no cover - never called
             raise AssertionError("no token is verified in this test")

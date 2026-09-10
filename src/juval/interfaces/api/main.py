@@ -22,6 +22,7 @@ See docs/architecture/API_CONTRACT.md for the full contract.
 
 from __future__ import annotations
 
+import contextlib
 import csv
 import json
 import logging
@@ -53,8 +54,8 @@ from juval.infrastructure.excel.importer import SUPPORTED_INPUT_SUFFIXES, Unsupp
 from juval.infrastructure.logging.sqlite_execution_run_store import SqliteExecutionRunStore
 from juval.infrastructure.persistence.supabase_execution_run_store import SupabaseExecutionRunStore
 
-from . import service
-from .auth import RUNS_CREATE, RUNS_EXPORT, RUNS_READ, auth_mode, require
+from . import bff, service
+from .auth import RUNS_CREATE, RUNS_EXPORT, RUNS_READ, auth_mode, require, set_session_resolver
 from .models import (
     FeesIn,
     RecordOut,
@@ -78,23 +79,63 @@ _EXPORT_MAX_RECORDS = 100_000
 
 logger = logging.getLogger("juval.interfaces.api")
 
-app = FastAPI(title="Juval API", version=juval.__version__)
+
+@contextlib.asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    """Validate the identity configuration before the first request is served.
+
+    ADR-036 promises fail-closed session storage. Validating lazily made that
+    promise weaker than it reads: a bad DSN, a missing encryption key or a
+    half-configured browser flow would surface as an intermittent 500 on
+    whichever request happened to touch the BFF first, on whichever instance
+    happened to serve it. Doing it here means an invalid production
+    configuration stops the process from starting at all, which is the only
+    failure mode an operator cannot miss.
+
+    `ensure_configured()` is idempotent, so a test that installed its own
+    stores keeps them; this never overwrites an explicit `bff.configure()`.
+    """
+    bff.ensure_configured()
+    yield
+
+
+app = FastAPI(title="Juval API", version=juval.__version__, lifespan=_lifespan)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=service.cors_origins(),  # never "*"; empty by default (JUVAL_CORS_ORIGINS unset)
-    allow_credentials=False,
+    # Cookie-based sessions (ADR-034) require credentialed CORS: the browser
+    # will not attach the HttpOnly session cookie to a cross-origin request
+    # otherwise, and JUVAl's PWA and API are on different origins (Vercel /
+    # Railway). This is only safe because `allow_origins` is an explicit
+    # allow-list that is empty by default and can never be "*" -- the CORS spec
+    # itself forbids "*" together with credentials, and `cors_origins()` would
+    # have to be changed for that combination to arise.
+    allow_credentials=True,
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
+# The BFF owns the browser's half of OIDC (ADR-034). Mounted unconditionally so
+# its routes exist and answer 404 "authentication is not enabled" when
+# JUVAL_AUTH_MODE is unset -- a missing route and a disabled feature would
+# otherwise be indistinguishable to the frontend.
+app.include_router(bff.router)
+
+# Teach auth.py how to turn a session cookie into a Principal, without auth.py
+# importing the BFF (see auth.py::set_session_resolver).
+set_session_resolver(bff.principal_from_session)
+
 if auth_mode() == "disabled":
     # Loud on purpose: an unauthenticated deployment cannot satisfy Amazon
-    # RF-03/RF-04. Production must set JUVAL_AUTH_MODE=oidc (ADR-022).
+    # RF-03/RF-04. Production must set JUVAL_AUTH_MODE=oidc (ADR-028 provider,
+    # ADR-031 hosting; the ADR-022 citation here was stale -- that ADR is
+    # RECHAZADA). See docs/compliance/ACCESS_CONTROL.md.
     logger.warning(
         "JUVAL_AUTH_MODE=disabled -- every endpoint is UNAUTHENTICATED. "
         "This is acceptable only for local development; production must set "
-        "JUVAL_AUTH_MODE=oidc (see docs/adr/ADR-022, SECURITY.md)."
+        "JUVAL_AUTH_MODE=oidc once the ADR-034 BFF, the public issuer surface "
+        "and a durable session store (ADR-036) are all in place."
     )
 
 
@@ -199,6 +240,7 @@ async def create_run(
     fees: str = Form(...),
     persist: bool = Form(False),
     _principal=Depends(require(RUNS_CREATE)),
+    _csrf: None = Depends(bff.csrf_guard),
 ) -> JSONResponse:
     thresholds_in = _parse_json_form(thresholds, ThresholdsIn, "thresholds")
     fees_in = _parse_json_form(fees, FeesIn, "fees")
@@ -292,6 +334,7 @@ async def create_batch(
     fees: str = Form(...),
     persist: bool = Form(False),
     _principal=Depends(require(RUNS_CREATE)),
+    _csrf: None = Depends(bff.csrf_guard),
 ) -> JSONResponse:
     """Process up to ten independent child runs as one auditable batch.
 
