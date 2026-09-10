@@ -439,13 +439,13 @@
       "workstream": "Security",
       "weight": 2,
       "rule": "documented",
-      "source": "docs/compliance/SEC_DEPS_01_REVIEW.md",
-      "section": "Authorized remediation",
-      "status": "COMPLETE",
-      "verificationLevel": "VERIFIED_TEST",
-      "evidenceMatch": "155 frontend tests",
+      "source": "docs/compliance/DEPENDENCY_THIRD_WAVE_RECONCILIATION.md",
+      "section": "Current checked artifacts",
+      "status": "PARTIAL",
+      "verificationLevel": "NOT_VERIFIED",
+      "evidenceMatch": "No frontend patch is justified",
       "dependsOn": [],
-      "notes": "Five advisories patched in frontend lock; deployed versions and private GitHub closure not verified."
+      "notes": "Registry and installed audits pass, but six operator-reported GitHub alerts require exact metadata. Python support floors corrected separately; no global clean claim."
     }
   ],
   "measurements": {

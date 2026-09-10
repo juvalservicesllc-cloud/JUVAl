@@ -40,3 +40,13 @@ test('readiness requires closed scope-specific evidence and retains deferred blo
  assert.throws(()=>readiness(criteria,{ids:['missing'],levels:['PRODUCTION_VERIFIED']}));
  assert.throws(()=>readiness(criteria,{ids:['lab','lab'],levels:['PRODUCTION_VERIFIED']}));
 });
+
+test('unreconciled GitHub alerts cannot retain complete dependency credit',()=>{
+ const s=JSON.parse(readFileSync(new URL('../data/generated/project-state.json',import.meta.url)));
+ const source=s.files.find(f=>f.path==='docs/compliance/DEPENDENCY_THIRD_WAVE_RECONCILIATION.md');
+ if(source?.content.includes('GITHUB_ALERT_RECONCILIATION = BLOCKED_METADATA_REQUIRED')){
+  const dependency=s.criteria.find(c=>c.id==='dependency-remediation');
+  assert.equal(dependency.status,'PARTIAL');
+  assert.equal(dependency.verificationLevel,'NOT_VERIFIED');
+ }
+});
