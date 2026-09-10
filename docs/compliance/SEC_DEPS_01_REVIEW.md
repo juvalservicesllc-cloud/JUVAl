@@ -1,9 +1,8 @@
 # SEC-DEPS-01 — dependency exposure review
 
-Date: 2026-09-10. **REVIEWED / REMEDIATION_BLOCKED_FRONTEND_FREEZE**.
-Source baseline: `16189b7`; all three frontend trees unchanged in accelerator.
-Private GitHub alert status is NOT_VERIFIED because SSH fetch authentication
-failed; this is a fresh npm registry audit of committed lockfiles, not a claim
+Date: 2026-09-10. **REMEDIATED_LOCKFILE / VERIFIED_TEST**.
+Review baseline: `16189b7`; second-wave authorization B permits only security remediation.
+Private GitHub alert status is NOT_VERIFIED; this is a fresh npm registry audit of committed lockfiles, not a claim
 that GitHub alerts were closed.
 
 ## Reproduction and results
@@ -43,15 +42,22 @@ assessment, not dynamic exploitation proof or an assertion about future configs.
 | [GHSA-jqff-g426-hqxp](https://github.com/fastify/fast-uri/security/advisories/GHSA-jqff-g426-hqxp) | ≥3.0.0, <3.1.6 | Encoded-scheme host confusion | Same dependency path and tooling-only exposure; same build regression gate |
 | [GHSA-82fw-gwwq-j7x9](https://github.com/vitest-dev/vitest/security/advisories/GHSA-82fw-gwwq-j7x9) | ≥2.1.0, <4.1.11 | Redirect mock arbitrary file read | Direct dev dependency `vitest@4.1.10 → @vitest/mocker@4.1.10`. Patched target **4.1.11** for both. Checked Vitest config uses jsdom and `vitest run`, no browser mode or exported mocker plugins; vulnerable unauthenticated WebSocket registration not enabled. NOT_REACHABLE_IN_REVIEWED_CONFIG. Patch risk: mock resolution changes; run complete frontend unit suite |
 
-## Concrete remediation after the freeze exception
+## Authorized remediation — second wave
 
-Authorize dependency-only changes in `frontend/package-lock.json` (and package
-manifest only if needed). Resolve fast-uri to 3.1.6 and Vitest/mocker to 4.1.11
-with matching Vitest internal packages, preserving all unrelated dependency
-versions. No broad `npm audit fix --force`, no unrelated major upgrades.
-Verify lock diff, clean install, npm audit, lint, all frontend tests, build,
-relevant service-worker E2E, full backend and compliance gates. Commit separately.
+Only frontend/package-lock.json changed: fast-uri 3.1.5 → 3.1.6 and Vitest
+4.1.10 → 4.1.11 with its eight matching package entries (Vitest plus seven
+@vitest packages). Existing manifest ranges unchanged; no product source,
+UX, styles or other lockfiles modified. Targeted npm resolution initially chose
+fast-uri 3.1.7; the final lock entry uses the minimum patched 3.1.6 with registry
+resolved URL/integrity, verified by clean npm ci. No force audit fix.
 
-This session did not change any frontend files or claim a patched deployment.
-The reviewed narrow change remains in the human action queue because the
-operator explicitly froze all three frontend directories during security work.
+Fresh npm audit confirms zero advisories in the final frontend lock. Clean
+install, 155 frontend tests, lint and production/PWA build pass. Chromium smoke
+against the built output verifies nonempty shell, service-worker activation and
+control, then offline reload; external API requests blocked for this isolated
+shell test. It is not a backend sourcing E2E or production deployment claim.
+Full backend after concurrent session correction: 834 passed, 38 skipped;
+PostgreSQL scratch: 48 passed, 2 skips. Existing bundle-size warning remains,
+and npm reports a glob deprecation while registry audit is clean; neither is
+hidden or used to justify unrelated upgrades. GitHub alert closure and deployed
+artifact versions remain NOT_VERIFIED until publication/provider evidence.
