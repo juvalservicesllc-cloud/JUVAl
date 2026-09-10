@@ -56,3 +56,10 @@ Disposable PostgreSQL evidence is separate from live Supabase and FusionAuth
 behavior. Public production behavior remains NOT_VERIFIED.
 
 Primary reference: [PostgreSQL 16 advisory locks](https://www.postgresql.org/docs/16/explicit-locking.html#ADVISORY-LOCKS), checked 2026-09-10. Transaction locks release at transaction end; this does not make external HTTP atomic.
+
+Follow-up lab: tools/session_store_lab.py now performs an actual fast restart of
+its private PostgreSQL cluster after saving/revoking synthetic sessions and
+consuming an OAuth transaction. A new adapter after restart observes the live
+session, rejects the revoked session and refuses transaction replay. PASS on
+2026-09-10; private cluster and synthetic artifacts removed. This does not
+substitute for a deployment restart/pooler test.
