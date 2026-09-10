@@ -1042,3 +1042,83 @@ conductual de producción, y no puede citarse a Amazon.
 Amazon `BLOCKED`. La activación necesita, en este orden: medir la superficie de
 nginx, aplicar la migración a Supabase, integrar el frontend, crear el tenant
 con usuarios reales, y sólo entonces `JUVAL_AUTH_MODE=oidc`.
+
+---
+
+## Sesión 2026-09-10 (bloque 2) — laboratorio de la superficie pública nginx
+
+**Estado: PARTIALLY IMPLEMENTED.** La plantilla `deploy/fusionauth/nginx-fusionauth-public.conf`
+se ejecutó por primera vez bajo un nginx real. Hasta ahora toda afirmación
+sobre ese archivo provenía de leerlo.
+
+**Nada productivo se tocó**: nginx **no** se activó, `/etc/nginx` no se leyó ni
+se escribió, FusionAuth no se contactó, no se abrió ningún puerto LAN,
+`JUVAL_AUTH_MODE` sigue sin definir y no se aplicó ninguna migración.
+`frontend/` intacto.
+
+### Cómo
+
+Binario nginx 1.24.0 obtenido con `apt-get download` + `dpkg-deb -x` a un
+directorio scratch — **sin `sudo`, sin `apt install`, sin estado de paquetes del
+sistema**. Prefijo, pid, logs y temporales bajo un único `mktemp -d`, borrado en
+`finally`. Listener en un puerto efímero de `127.0.0.1` (nunca `8080`); upstream
+= servidor eco desechable (nunca `9011`/`9012`), de modo que **el laboratorio es
+estructuralmente incapaz de alcanzar FusionAuth**. Se sustituyen exactamente
+tres cosas de la plantilla y se **afirma** que ninguna línea `location`,
+`limit_except`, `return` ni `proxy_set_header` cambió.
+
+Herramienta: `tools/nginx_surface_lab.py` (59 sondas + 4 mediciones).
+Tests: `tests/compliance/test_nginx_public_surface.py` (11 estáticos siempre,
+68 conductuales que hacen `skip` sin binario nginx).
+Evidencia completa: `docs/research/NGINX_PUBLIC_SURFACE_LAB.md`.
+
+### Qué quedó medido (`LAB_BEHAVIOURALLY_VERIFIED`)
+
+- **Ninguna petición denegada llegó al upstream**: 0 de 45 sondas no-proxied.
+  Es la única propiedad que justifica una allow-list, y no estaba probada.
+- La lista de nunca-publicar de ADR-035 Condición 2 (`/admin`, `/api`,
+  `/account`, `/password`) responde 404 para todos los verbos sondeados, igual
+  que los siete flujos OAuth no usados.
+- Las siete rutas exactas son exactas: `/oauth2/authorize/`, `/oauth2/authorizex`,
+  `/oauth2/token/x` y `/OAuth2/authorize` son 404.
+- Cada `limit_except` rechaza con 403 los verbos que excluye.
+- Las cinco cabeceras reenviadas llegan con los valores escritos **aunque el
+  cliente envíe valores hostiles**; `X-Forwarded-For` **añade**, no reemplaza.
+  Importa más allá de la higiene: FusionAuth construye su emisor con ellas.
+- El query string de autorización se reenvía byte a byte (PKCE y `state` intactos).
+- Sin el include del host, `nginx -t` **rechaza** el archivo — fail-closed.
+
+### Hallazgos
+
+- **N-1 (abierto, con exposición)**: el inventario del archivo dice «Everything
+  else: 404» y para tres URIs es **falso**. `/css`, `/js` e `/images` responden
+  **301**, con `Location` construido a partir del `Host` **del cliente**, en
+  `http://`, y filtrando el puerto del listener. `proxy_set_header Host` no
+  puede influirlo: el redirect se genera antes de proxyear. `absolute_redirect off;`
+  lo resuelve, pero **no se aplicó** — es un cambio de comportamiento en una
+  plantilla de despliegue, o sea una decisión, no una limpieza.
+- **N-2 (bueno)**: el traversal por encima de la raíz se rechaza con **400**
+  antes de elegir location. Se esperaba 404; 400 es más fuerte.
+- **N-3 (registrado)**: la plantilla no fija ninguna cabecera de seguridad,
+  ni `server_tokens`, ni `limit_req` sobre `/oauth2/authorize` — el endpoint al
+  que el formulario hospedado envía credenciales. Depende de un
+  `/etc/nginx/nginx.conf` que no está en el repositorio.
+
+### Qué NO cambió
+
+Las cinco reglas `NOT_VERIFIED` **siguen `NOT_VERIFIED`** y **siguen bloqueando
+la Fase 2**. No lo estaban por falta de medición del proxy: lo están porque
+nadie ha establecido qué sirve FusionAuth 1.69.0 (`/oauth2/two-factor`,
+`/oauth2/two-factor-methods`, y qué prefijos de assets piden sus páginas). Eso
+es una pregunta sobre el proveedor y necesita una instancia de FusionAuth, no un
+proxy. Este laboratorio no puede responderla y no la promueve.
+
+`CONTROL_6_AMAZON` = `PARTIALLY_SATISFIED`; RF-03 behavioral = `NOT_EXECUTED`;
+reaplicación a Amazon = `BLOCKED`; `IDENTITY_SECURITY_GATE` = `BLOCKED`. Sin
+cambios. **Nada de esto es evidencia de producción ni puede citarse a Amazon.**
+
+### Fuera de alcance, registrado
+
+`SEC-DEPS-01 = PENDING_REVIEW` — Dependabot reporta 5 vulnerabilidades (4 high,
+1 moderate) en `frontend/`. No se inspeccionó la rama, no se mergeó, no se tocó
+`frontend/`. Sin inferencia de impacto.

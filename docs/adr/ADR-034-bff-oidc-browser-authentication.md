@@ -161,14 +161,32 @@ mínimas que el BFF necesita. **Corregido 2026-09-10** — el texto anterior dec
 contiene diez reglas, y las dos «sin medir» sí estaban escritas. El inventario
 real es:
 
-| Regla | Clase |
-|---|---|
-| `/.well-known/openid-configuration`, `/.well-known/jwks.json`, `/oauth2/authorize`, `/oauth2/token`, `/oauth2/logout` (exactas) | Justificadas por el propio protocolo |
-| `/oauth2/two-factor`, `/oauth2/two-factor-methods` (exactas) | **`NOT_VERIFIED`** |
-| `/css/`, `/js/`, `/images/` (prefijos) | **`NOT_VERIFIED`** |
+| Regla | Necesidad ante el proveedor | Despacho del proxy (lab 2026-09-10) |
+|---|---|---|
+| `/.well-known/openid-configuration`, `/.well-known/jwks.json`, `/oauth2/authorize`, `/oauth2/token`, `/oauth2/logout` (exactas) | Justificadas por el propio protocolo | `LAB_BEHAVIOURALLY_VERIFIED` |
+| `/oauth2/two-factor`, `/oauth2/two-factor-methods` (exactas) | **`NOT_VERIFIED`** | `LAB_BEHAVIOURALLY_VERIFIED` |
+| `/css/`, `/js/`, `/images/` (prefijos) | **`NOT_VERIFIED`** | `LAB_BEHAVIOURALLY_VERIFIED` + **hallazgo N-1** |
 
 Todo lo demás sigue en 404, incluidos `/admin`, `/api`, `/account` y
-`/password` (ADR-035 Condición 2).
+`/password` (ADR-035 Condición 2) — **medido**, y medido además que ninguna
+petición denegada alcanza el upstream, que es la propiedad que justifica una
+allow-list.
+
+**Las dos columnas no deben colapsarse.** El laboratorio del 2026-09-10
+(`docs/research/NGINX_PUBLIC_SURFACE_LAB.md`) ejecutó esta plantilla bajo un
+nginx real con un upstream de eco: mide el **proxy**. Las cinco reglas
+`NOT_VERIFIED` lo son por una pregunta sobre el **proveedor** — qué sirve
+FusionAuth 1.69.0 y qué assets piden sus páginas hospedadas — que necesita una
+instancia de FusionAuth. **Siguen `NOT_VERIFIED` y siguen bloqueando la Fase 2.**
+
+**Hallazgo N-1, abierto**: el inventario de la plantilla afirma «Everything
+else: 404» y para tres URIs es falso. `/css`, `/js` e `/images` responden 301
+hacia la forma con barra, con `Location` construido desde el `Host` del cliente,
+en `http://` y filtrando el puerto del listener. `proxy_set_header Host` no lo
+afecta porque el redirect precede al proxy. Resolverlo (`absolute_redirect off;`,
+estrechar los prefijos a rutas exactas, o eliminarlos) es una decisión previa a
+la Fase 2, no una limpieza — y los tres prefijos ya eran las reglas más anchas
+y peor justificadas del archivo.
 
 Las cinco últimas llevaban en el archivo la anotación «MEASURED 2026-09-09».
 La auditoría de recuperación (2026-09-10) **no pudo correlacionar esa

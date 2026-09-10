@@ -4358,7 +4358,18 @@ IDP_RUNTIME                 = INACTIVE (JUVAL_AUTH_MODE unset)
 BROWSER_AUTH (ADR-034)      = IMPLEMENTED_TESTED_NOT_ACTIVATED
 SESSION_STORE (ADR-036)     = ACCEPTED, IMPLEMENTED, CONTRACT-VERIFIED ON A
                               DISPOSABLE POSTGRESQL; MIGRATION NOT APPLIED
-PUBLIC_SURFACE (nginx)      = TEMPLATE ONLY; 5 of 10 rules NOT_VERIFIED
+PUBLIC_SURFACE (nginx)      = TEMPLATE ONLY, NOT DEPLOYED.
+  - proxy dispatch + denial   LAB_BEHAVIOURALLY_VERIFIED (2026-09-10, real
+                              nginx 1.24.0 on loopback, mock upstream, never
+                              FusionAuth) -- docs/research/
+                              NGINX_PUBLIC_SURFACE_LAB.md
+  - provider need, 5 rules    NOT_VERIFIED (unchanged) -- whether FusionAuth
+                              serves /oauth2/two-factor[-methods] and which
+                              asset prefixes its pages request needs a
+                              FusionAuth instance, not a proxy
+  - finding N-1               OPEN -- /css, /js, /images answer 301, not 404,
+                              reflecting the client Host over http
+  - production evidence       NONE
 CONTROL_6_AMAZON            = PARTIALLY_SATISFIED
   - FusionAuth gap            BEHAVIORALLY_VERIFIED (isolated lab only)
   - JUVAl mitigation          VERIFIED_CODE + VERIFIED_TEST (30 tests)
