@@ -98,7 +98,7 @@ def _location_blocks() -> list[tuple[str, str]]:
     return blocks
 
 
-def test_rule_inventory_is_exactly_seven_exact_three_prefix_and_a_catch_all():
+def test_rule_inventory_is_exactly_ten_exact_three_prefix_and_a_catch_all():
     # PROJECT_STATUS.md's 2026-09-10 correction: the file has ten publishing
     # rules, not the "five exact routes" an earlier text claimed. Pinning the
     # count here means the next person to widen the surface has to change a
@@ -108,10 +108,10 @@ def test_rule_inventory_is_exactly_seven_exact_three_prefix_and_a_catch_all():
     prefix = [loc for loc in locations if loc.startswith("^~ ")]
     catch_all = [loc for loc in locations if loc == "/"]
 
-    assert len(exact) == 7, exact
+    assert len(exact) == 10, exact
     assert len(prefix) == 3, prefix
     assert len(catch_all) == 1
-    assert len(locations) == 11
+    assert len(locations) == 14
 
 
 def test_catch_all_returns_404_and_never_proxies():
@@ -128,7 +128,7 @@ def test_never_published_paths_have_no_location(path: str, reason: str):
 def test_every_proxying_rule_restricts_its_methods():
     # An allow-listed path that accepts any verb is only half an allow-list.
     proxying = [(spec, body) for spec, body in _location_blocks() if "proxy_pass" in body]
-    assert len(proxying) == 10
+    assert len(proxying) == 13
     for spec, body in proxying:
         assert "limit_except" in body, spec
         assert "deny all;" in body, spec
@@ -139,7 +139,7 @@ def test_upstream_is_the_loopback_fusionauth_port_only():
     # widen the surface silently, so only 9011 may appear.
     assert re.findall(r"proxy_pass\s+(\S+);", TEMPLATE_TEXT) == [
         "http://127.0.0.1:9011"
-    ] * 10
+    ] * 13
 
 
 def test_listener_is_loopback_only():
@@ -161,7 +161,7 @@ def test_lab_rendering_preserves_every_routing_and_header_rule():
     # reaching FusionAuth even if one were running on this host.
     assert re.findall(r"proxy_pass\s+(\S+);", rendered) == [
         "http://127.0.0.1:17011"
-    ] * 10
+    ] * 13
     assert re.findall(r"^\s*listen\s+(.+);", rendered, re.MULTILINE) == [
         "127.0.0.1:18080"
     ]

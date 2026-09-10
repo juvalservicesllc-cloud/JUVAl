@@ -1,0 +1,395 @@
+{
+  "classification": "DIRECT_RUNTIME_ENROLLMENT_TO_INTERCEPTED_CALLBACK_VERIFIED",
+  "baseline": {
+    "starting_head": "e7d49ae6f37882cc9e1bc38dff3a15efc9fde841",
+    "tenant_id": "5fcaaf07-8832-491a-a6e7-35d348a591b6",
+    "application_id": "84f077a0-b2b0-4655-8168-082b2233d029",
+    "tenant_name": "JUVAl",
+    "tenant_user_count": 0,
+    "user_count_evidence": "Unfiltered global users view: 1\u20131 of 1 results; sole row belongs to Default, not JUVAl. Tenant exact-ID form name JUVAl.",
+    "mfa": "Required",
+    "authenticator": true,
+    "email_mfa": false,
+    "sms_mfa": false,
+    "application_mfa": "inherit",
+    "tenant_webauthn": false,
+    "application_webauthn": false,
+    "redirects": [],
+    "redirect_policy": "ExactMatch",
+    "disposable_user_created": true,
+    "temporary_redirect_added": true,
+    "stage": "CLEANUP_VERIFIED",
+    "email_delivery_selected": false,
+    "disposable_user_id": "fda5fe1d-f658-4fca-adcc-d5534be75987",
+    "application_registration_created": true,
+    "roles_granted": [],
+    "mfa_methods_before_login": 0,
+    "enrollment_path": "/oauth2/two-factor-enable",
+    "historical_onboarding_claim_contradicted": true,
+    "mfa_enrollment_completed": true,
+    "direct_callback_reached": true,
+    "mfa_method_count": 1,
+    "nginx_lab_pass": 98,
+    "nginx_runtime_pending": true,
+    "password_update_authorized": true,
+    "password_update_saved": false,
+    "disposable_user_present_after_cleanup": false,
+    "final_tenant_user_count": 0,
+    "redirects_after": [],
+    "redirect_policy_after": "ExactMatch",
+    "original_redirect_configuration_restored": true,
+    "password_update_blocked_by_minimum_age": true
+  },
+  "inventory": [
+    {
+      "stage": "CALLBACK",
+      "method": "GET",
+      "path": "/oauth/callback",
+      "type": "document"
+    },
+    {
+      "stage": "INITIAL_LOGIN",
+      "method": "GET",
+      "path": "/css/entrypoints/fusionauth-hosted.css",
+      "type": "stylesheet"
+    },
+    {
+      "stage": "INITIAL_LOGIN",
+      "method": "GET",
+      "path": "/css/font-awesome-4.7.0.min.css",
+      "type": "stylesheet"
+    },
+    {
+      "stage": "INITIAL_LOGIN",
+      "method": "GET",
+      "path": "/images/favicon-128.png",
+      "type": "other"
+    },
+    {
+      "stage": "INITIAL_LOGIN",
+      "method": "GET",
+      "path": "/images/favicon-32x32.png",
+      "type": "other"
+    },
+    {
+      "stage": "INITIAL_LOGIN",
+      "method": "GET",
+      "path": "/images/footer-logo.svg",
+      "type": "image"
+    },
+    {
+      "stage": "INITIAL_LOGIN",
+      "method": "GET",
+      "path": "/js/Util.js",
+      "type": "script"
+    },
+    {
+      "stage": "INITIAL_LOGIN",
+      "method": "GET",
+      "path": "/js/entrypoints/oauth2/authorize.js",
+      "type": "script"
+    },
+    {
+      "stage": "INITIAL_LOGIN",
+      "method": "GET",
+      "path": "/js/identityProvider/InProgress.js",
+      "type": "script"
+    },
+    {
+      "stage": "INITIAL_LOGIN",
+      "method": "GET",
+      "path": "/js/jstz-min-1.0.6.js",
+      "type": "script"
+    },
+    {
+      "stage": "INITIAL_LOGIN",
+      "method": "GET",
+      "path": "/js/oauth2/Authorize.js",
+      "type": "script"
+    },
+    {
+      "stage": "INITIAL_LOGIN",
+      "method": "GET",
+      "path": "/js/oauth2/LocaleSelect.js",
+      "type": "script"
+    },
+    {
+      "stage": "INITIAL_LOGIN",
+      "method": "GET",
+      "path": "/js/prime-min-1.7.0.js",
+      "type": "script"
+    },
+    {
+      "stage": "INITIAL_LOGIN",
+      "method": "GET",
+      "path": "/oauth2/authorize",
+      "type": "document"
+    },
+    {
+      "stage": "INITIAL_LOGIN",
+      "method": "POST",
+      "path": "/oauth2/authorize",
+      "type": "document"
+    },
+    {
+      "stage": "LOGOUT",
+      "method": "GET",
+      "path": "/css/entrypoints/fusionauth-hosted.css",
+      "type": "stylesheet"
+    },
+    {
+      "stage": "LOGOUT",
+      "method": "GET",
+      "path": "/css/font-awesome-4.7.0.min.css",
+      "type": "stylesheet"
+    },
+    {
+      "stage": "LOGOUT",
+      "method": "GET",
+      "path": "/images/favicon-128.png",
+      "type": "other"
+    },
+    {
+      "stage": "LOGOUT",
+      "method": "GET",
+      "path": "/images/favicon-32x32.png",
+      "type": "other"
+    },
+    {
+      "stage": "LOGOUT",
+      "method": "GET",
+      "path": "/images/footer-logo.svg",
+      "type": "image"
+    },
+    {
+      "stage": "LOGOUT",
+      "method": "GET",
+      "path": "/js/Util.js",
+      "type": "script"
+    },
+    {
+      "stage": "LOGOUT",
+      "method": "GET",
+      "path": "/js/oauth2/LocaleSelect.js",
+      "type": "script"
+    },
+    {
+      "stage": "LOGOUT",
+      "method": "GET",
+      "path": "/js/prime-min-1.7.0.js",
+      "type": "script"
+    },
+    {
+      "stage": "LOGOUT",
+      "method": "GET",
+      "path": "/oauth2/logout",
+      "type": "document"
+    },
+    {
+      "stage": "LOGOUT_DEFAULT_LANDING",
+      "method": "GET",
+      "path": "/",
+      "type": "document"
+    },
+    {
+      "stage": "LOGOUT_DEFAULT_LANDING",
+      "method": "GET",
+      "path": "/css/entrypoints/fusionauth-hosted.css",
+      "type": "stylesheet"
+    },
+    {
+      "stage": "LOGOUT_DEFAULT_LANDING",
+      "method": "GET",
+      "path": "/css/font-awesome-4.7.0.min.css",
+      "type": "stylesheet"
+    },
+    {
+      "stage": "LOGOUT_DEFAULT_LANDING",
+      "method": "GET",
+      "path": "/images/favicon-128.png",
+      "type": "other"
+    },
+    {
+      "stage": "LOGOUT_DEFAULT_LANDING",
+      "method": "GET",
+      "path": "/images/favicon-32x32.png",
+      "type": "other"
+    },
+    {
+      "stage": "LOGOUT_DEFAULT_LANDING",
+      "method": "GET",
+      "path": "/images/footer-logo.svg",
+      "type": "image"
+    },
+    {
+      "stage": "LOGOUT_DEFAULT_LANDING",
+      "method": "GET",
+      "path": "/images/logo-gray.svg",
+      "type": "image"
+    },
+    {
+      "stage": "LOGOUT_DEFAULT_LANDING",
+      "method": "GET",
+      "path": "/js/Util.js",
+      "type": "script"
+    },
+    {
+      "stage": "LOGOUT_DEFAULT_LANDING",
+      "method": "GET",
+      "path": "/js/oauth2/LocaleSelect.js",
+      "type": "script"
+    },
+    {
+      "stage": "LOGOUT_DEFAULT_LANDING",
+      "method": "GET",
+      "path": "/js/prime-min-1.7.0.js",
+      "type": "script"
+    },
+    {
+      "stage": "MFA_ENROLLMENT",
+      "method": "GET",
+      "path": "/css/entrypoints/fusionauth-hosted.css",
+      "type": "stylesheet"
+    },
+    {
+      "stage": "MFA_ENROLLMENT",
+      "method": "GET",
+      "path": "/css/font-awesome-4.7.0.min.css",
+      "type": "stylesheet"
+    },
+    {
+      "stage": "MFA_ENROLLMENT",
+      "method": "GET",
+      "path": "/images/favicon-128.png",
+      "type": "other"
+    },
+    {
+      "stage": "MFA_ENROLLMENT",
+      "method": "GET",
+      "path": "/images/favicon-32x32.png",
+      "type": "other"
+    },
+    {
+      "stage": "MFA_ENROLLMENT",
+      "method": "GET",
+      "path": "/images/footer-logo.svg",
+      "type": "image"
+    },
+    {
+      "stage": "MFA_ENROLLMENT",
+      "method": "GET",
+      "path": "/js/Util.js",
+      "type": "script"
+    },
+    {
+      "stage": "MFA_ENROLLMENT",
+      "method": "GET",
+      "path": "/js/oauth2/LocaleSelect.js",
+      "type": "script"
+    },
+    {
+      "stage": "MFA_ENROLLMENT",
+      "method": "GET",
+      "path": "/js/oauth2/OAuth2TwoFactorEnable.js",
+      "type": "script"
+    },
+    {
+      "stage": "MFA_ENROLLMENT",
+      "method": "GET",
+      "path": "/js/prime-min-1.7.0.js",
+      "type": "script"
+    },
+    {
+      "stage": "MFA_ENROLLMENT",
+      "method": "GET",
+      "path": "/js/qrcode-min-1.0.js",
+      "type": "script"
+    },
+    {
+      "stage": "MFA_ENROLLMENT",
+      "method": "GET",
+      "path": "/oauth2/two-factor-enable",
+      "type": "document"
+    },
+    {
+      "stage": "MFA_ENROLLMENT",
+      "method": "POST",
+      "path": "/oauth2/two-factor-enable",
+      "type": "document"
+    },
+    {
+      "stage": "MFA_ENROLLMENT_COMPLETION",
+      "method": "GET",
+      "path": "/css/entrypoints/fusionauth-hosted.css",
+      "type": "stylesheet"
+    },
+    {
+      "stage": "MFA_ENROLLMENT_COMPLETION",
+      "method": "GET",
+      "path": "/css/font-awesome-4.7.0.min.css",
+      "type": "stylesheet"
+    },
+    {
+      "stage": "MFA_ENROLLMENT_COMPLETION",
+      "method": "GET",
+      "path": "/images/favicon-128.png",
+      "type": "other"
+    },
+    {
+      "stage": "MFA_ENROLLMENT_COMPLETION",
+      "method": "GET",
+      "path": "/images/favicon-32x32.png",
+      "type": "other"
+    },
+    {
+      "stage": "MFA_ENROLLMENT_COMPLETION",
+      "method": "GET",
+      "path": "/images/footer-logo.svg",
+      "type": "image"
+    },
+    {
+      "stage": "MFA_ENROLLMENT_COMPLETION",
+      "method": "GET",
+      "path": "/js/Util.js",
+      "type": "script"
+    },
+    {
+      "stage": "MFA_ENROLLMENT_COMPLETION",
+      "method": "GET",
+      "path": "/js/oauth2/LocaleSelect.js",
+      "type": "script"
+    },
+    {
+      "stage": "MFA_ENROLLMENT_COMPLETION",
+      "method": "GET",
+      "path": "/js/prime-min-1.7.0.js",
+      "type": "script"
+    },
+    {
+      "stage": "MFA_ENROLLMENT_COMPLETION",
+      "method": "GET",
+      "path": "/oauth2/two-factor-enable-complete",
+      "type": "document"
+    },
+    {
+      "stage": "MFA_ENROLLMENT_COMPLETION",
+      "method": "POST",
+      "path": "/oauth2/two-factor-enable-complete",
+      "type": "document"
+    },
+    {
+      "stage": "POST_MFA_REDIRECT",
+      "method": "GET",
+      "path": "/oauth2/consent",
+      "type": "document"
+    }
+  ],
+  "existing_factor_challenge": "NOT_VERIFIED",
+  "proxy_enrollment": "NOT_VERIFIED",
+  "callback": "BROWSER_INTERCEPTED_NO_TOKEN_EXCHANGE",
+  "logout": "REQUEST_AND_DEFAULT_LANDING_ONLY_NOT_SESSION_REVOCATION_PROOF",
+  "fonts_requested": false,
+  "webauthn_assets_requested": false,
+  "provider_version": "NOT_REVERIFIED",
+  "secret_values_recorded": false
+}

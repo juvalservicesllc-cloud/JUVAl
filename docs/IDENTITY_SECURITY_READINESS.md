@@ -307,3 +307,15 @@ individual header experiments. No redirect or provider configuration changed.
 MFA_BEHAVIORAL_CHECKPOINT_REQUIRED=YES; Admin readback confirms recovery disabled, MFA Required/authenticator, and
 WebAuthn disabled in tenant/application; see fusionauth-wave5-admin-readback.json. RF03-P6 is BLOCKED_BY_ARCHITECTURE under ADR-035, not an
 authorization to set passwordChangeRequired. D1 remains PARTIAL.
+
+## Descubrimiento MFA desechable — 2026-09-10
+
+Un único usuario completó enrolamiento TOTP hosted con Required y llegó al
+callback interceptado, sin intercambio de tokens. Esto invalida la conclusión
+general de que el hosted enrollment no existe. Tres rutas exactas candidatas
+se añaden a la plantilla inactiva (ADR-041 Propuesta). El login posterior por
+nginx no superó credenciales; no se verificó el desafío de factor existente.
+Cambio de contraseña autorizado por humano rechazado por política, sin relajarla.
+Usuario eliminado; JUVAl volvió a 0, redirects [] / ExactMatch restaurados.
+D-1 PARTIAL; RF03 no autorizado; Control 6 parcialmente satisfecho. Evidencia:
+`docs/research/MFA_DISPOSABLE_DISCOVERY_20260910.md`.

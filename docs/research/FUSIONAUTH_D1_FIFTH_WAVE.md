@@ -187,3 +187,15 @@ transitions/resources, conditional fonts and complete callback/logout behavior.
 No new public route or header is justified solely by these settings. The next
 behavioral checkpoint needs explicit disposable-user authorization and private
 password/TOTP interaction; RF03 itself remains NOT_AUTHORIZED.
+
+## Descubrimiento MFA desechable — 2026-09-10
+
+Un único usuario completó enrolamiento TOTP hosted con Required y llegó al
+callback interceptado, sin intercambio de tokens. Esto invalida la conclusión
+general de que el hosted enrollment no existe. Tres rutas exactas candidatas
+se añaden a la plantilla inactiva (ADR-041 Propuesta). El login posterior por
+nginx no superó credenciales; no se verificó el desafío de factor existente.
+Cambio de contraseña autorizado por humano rechazado por política, sin relajarla.
+Usuario eliminado; JUVAl volvió a 0, redirects [] / ExactMatch restaurados.
+D-1 PARTIAL; RF03 no autorizado; Control 6 parcialmente satisfecho. Evidencia:
+`docs/research/MFA_DISPOSABLE_DISCOVERY_20260910.md`.

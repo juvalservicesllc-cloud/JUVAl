@@ -1268,3 +1268,15 @@ con autenticador habilitado; aplicación hereda política. WebAuthn deshabilitad
 en ambos. Redirects [] / ExactMatch verificados de nuevo, sin mutaciones. D-1
 sigue PARTIAL por flujo MFA/assets condicionales/callback/logout. Evidencia:
 `docs/research/fusionauth-wave5-admin-readback.json`. No ejecución RF03.
+
+## Descubrimiento MFA desechable — 2026-09-10
+
+Un único usuario completó enrolamiento TOTP hosted con Required y llegó al
+callback interceptado, sin intercambio de tokens. Esto invalida la conclusión
+general de que el hosted enrollment no existe. Tres rutas exactas candidatas
+se añaden a la plantilla inactiva (ADR-041 Propuesta). El login posterior por
+nginx no superó credenciales; no se verificó el desafío de factor existente.
+Cambio de contraseña autorizado por humano rechazado por política, sin relajarla.
+Usuario eliminado; JUVAl volvió a 0, redirects [] / ExactMatch restaurados.
+D-1 PARTIAL; RF03 no autorizado; Control 6 parcialmente satisfecho. Evidencia:
+`docs/research/MFA_DISPOSABLE_DISCOVERY_20260910.md`.

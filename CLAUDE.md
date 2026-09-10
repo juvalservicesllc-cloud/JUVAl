@@ -14,7 +14,8 @@ evidencia, bloqueos y procedimiento humano están centralizados en
 Fase activa: identidad/seguridad, PARTIALLY IMPLEMENTED, producción no activada.
 Tenant y aplicación exactos existen; nombres/roles no re-verificados. No recrear.
 N-1 corregido en plantilla/lab; login inicial real y proxy loopback verificados.
-D-1 sigue PARTIAL: MFA/WebAuthn/fuentes y recuperación pendientes; no producción.
+D-1 sigue PARTIAL: enrolamiento directo observado; desafío MFA y flujo completo
+por proxy pendientes. ADR-041 Propuesta; no activación pública.
 Frontend congelado (`frontend/`, `frontend-next/`, `demo/`). En la tercera ola
 solo se permite una remediación mínima si nueva evidencia confirma que es necesaria;
 no hay cambios de frontend justificados por las auditorías npm actuales.

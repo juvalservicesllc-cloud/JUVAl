@@ -1,7 +1,7 @@
 """Behavioural laboratory for the planned public identity surface.
 
-`deploy/fusionauth/nginx-fusionauth-public.conf` is an allow-list: eleven
-`location` blocks, ten of which publish something and one of which answers 404
+`deploy/fusionauth/nginx-fusionauth-public.conf` is an allow-list: fourteen
+`location` blocks, thirteen of which publish something and one of which answers 404
 to everything else. Until now every claim about that file rested on reading it.
 A configuration that parses is not a configuration that behaves, so this script
 runs the real template under a real nginx and measures what it actually does.
@@ -454,10 +454,16 @@ PROBES: tuple[Probe, ...] = (
     Probe("location /", "GET", "/oauth2/register", NOT_PUBLISHED, "self-registration is not a JUVAl flow"),
     Probe("location /", "GET", "/oauth2/passwordless", NOT_PUBLISHED, "unused flow"),
     Probe("location /", "GET", "/oauth2/device", NOT_PUBLISHED, "unused flow"),
-    Probe("location /", "GET", "/oauth2/consent", NOT_PUBLISHED, "unused flow"),
+    Probe("/oauth2/consent", "GET", "/oauth2/consent", PROXIED, "observed post-enrollment transition"),
+    Probe("/oauth2/consent", "POST", "/oauth2/consent", DENIED_METHOD, "interactive consent not observed"),
     Probe("location /", "GET", "/oauth2/start-idp-link", NOT_PUBLISHED, "unused flow"),
-    Probe("location /", "GET", "/oauth2/two-factor-enable", NOT_PUBLISHED, "JUVAl pre-attaches the factor; self-enrolment has no user"),
-    Probe("location /", "GET", "/oauth2/two-factor-enable-complete", NOT_PUBLISHED, "as above"),
+    Probe("/oauth2/two-factor-enable", "GET", "/oauth2/two-factor-enable", PROXIED, "real Required MFA enrollment observed"),
+    Probe("/oauth2/two-factor-enable-complete", "GET", "/oauth2/two-factor-enable-complete", PROXIED, "real enrollment completion observed"),
+    *(Probe(path, method, path, expected, "observed enrollment verbs only")
+      for path in ("/oauth2/two-factor-enable", "/oauth2/two-factor-enable-complete")
+      for method, expected in (("POST", PROXIED), ("PUT", DENIED_METHOD))),
+    *(Probe("location /", "GET", path + "/", NOT_PUBLISHED, "enrollment locations remain exact")
+      for path in ("/oauth2/two-factor-enable", "/oauth2/two-factor-enable-complete", "/oauth2/consent")),
     # --- normalisation: a denied path must stay denied however it is spelt ---
     Probe("location /", "GET", "/css/../admin", NOT_PUBLISHED, "traversal out of an allowed prefix must not reach /admin"),
     Probe("location /", "GET", "/css/%2e%2e/admin", NOT_PUBLISHED, "percent-encoded traversal must not reach /admin"),

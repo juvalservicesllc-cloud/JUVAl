@@ -1,7 +1,12 @@
 # Identity onboarding — provisioning a JUVAl user under MFA `Required`
 
-**Date: 2026-09-09.** Status: **DESIGN, not executed.** No production user
-exists and none is created by this document.
+**Date: 2026-09-09; evidence correction 2026-09-10.** Historical operator
+provisioning design below. The authorized disposable JUVAl experiment has now
+observed hosted TOTP enrollment under Required without pre-attaching a factor,
+and reached its callback. Therefore the blanket hosted-enrollment impossibility
+claim below is superseded for this runtime. Preserve the isolated API results as
+historical evidence, not a universal hosted-flow conclusion. Production onboarding
+remains unactivated; ADR-041 is Proposed. See MFA_DISPOSABLE_DISCOVERY_20260910.md.
 
 Governing decisions: ADR-034 (BFF), ADR-035 (Control 6), ADR-032 (credential
 lifecycle). Measured basis: `docs/research/FUSIONAUTH_169_IDENTITY_LAB.md` §9.2.

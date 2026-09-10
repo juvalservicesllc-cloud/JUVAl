@@ -144,3 +144,14 @@ never applies SQL migrations. Missing/unmigrated/unsafe schema returns failure;
 no repair. Success does not attest target identity, backup, pooler behavior or
 production approval. For a new unmigrated target, retain the expected failure
 and perform the before-migration metadata/backup checklist above with the operator.
+
+## Future MFA discovery after the completed disposable experiment
+
+The one-user experiment is closed and restored; do not recreate its user under
+the exhausted authorization. A new discovery session needs explicit authorization
+for its single disposable identity. Hosted enrollment was observed directly under
+Required; do not assume pre-seeding is technically mandatory. ADR-041 remains
+Proposed and public activation is blocked by the incomplete proxy-flow gate.
+The human must retain the disposable password privately for the entire session;
+minimum-age policy can prevent immediate replacement. Never relax it for the lab.
+No password, TOTP seed/code or recovery code belongs in chat, logs or artifacts.
