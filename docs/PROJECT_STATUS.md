@@ -1260,3 +1260,11 @@ de flujo MFA. Fuentes/icono de huella condicionales; configuración actual pendi
 de lectura Admin. Cuatro headers candidatos pasan renders genéricos por separado,
 no se activan en nginx. Matriz y evidencia en
 `docs/research/FUSIONAUTH_D1_FIFTH_WAVE.md`. Sin cambios productivos ni redirects.
+
+### Quinta ola — lectura Admin completada
+
+Recuperación email deshabilitada en tenant, heredada por aplicación. MFA Required
+con autenticador habilitado; aplicación hereda política. WebAuthn deshabilitado
+en ambos. Redirects [] / ExactMatch verificados de nuevo, sin mutaciones. D-1
+sigue PARTIAL por flujo MFA/assets condicionales/callback/logout. Evidencia:
+`docs/research/fusionauth-wave5-admin-readback.json`. No ejecución RF03.

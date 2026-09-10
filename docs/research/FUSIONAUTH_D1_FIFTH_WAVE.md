@@ -8,7 +8,9 @@ REAL_JUVAL_LOGIN_20260910.md; it is not a successful authentication claim.
 
 ## Password recovery decision
 
-PASSWORD_RECOVERY = BLOCKED_BY_BEHAVIORAL_EVIDENCE for effective recovery behavior.
+PASSWORD_RECOVERY = NOT_REQUIRED for the approved public surface; provider email
+recovery is CONFIGURED_DISABLED by authenticated readback. Actual recovery
+behavior and operator recovery remain NOT_BEHAVIORALLY_VERIFIED.
 PASSWORD_RECOVERY_PUBLICATION_DECISION = NOT_REQUIRED under the approved current
 operator-managed architecture; /password/* remains explicitly excluded by
 ADR-035 Condition 2. An HTML link is not authorization to widen this boundary.
@@ -17,11 +19,14 @@ GET returns 200 and its form/resources; /password/change without a recovery
 context returns 302 toward /password/forgot. Neither proves tenant-specific
 recovery enablement, email delivery or a completed password change.
 
-Current tenant/application recovery template selection, SMTP readiness, WebAuthn
-flags and MFA settings require authenticated Admin readback. A fresh controllable
-Admin window needs private operator authentication. No credential fields or
-existing browser profile were inspected. These configuration claims remain
-NOT_VERIFIED in this wave; historical placeholder SMTP is not current evidence.
+Authenticated Admin readback now confirms: tenant forgot-password template is
+“Feature disabled. No template selected.” Application selection is “Inherit from
+tenant.” Tenant MFA is Required; authenticator enabled, email/SMS factors disabled.
+Application MFA policy inherits from tenant. WebAuthn, bootstrap and reauthentication
+are disabled in both forms. Exact tenant ID was read back; application was opened
+by its exact ID. Redirects freshly read as [] with ExactMatch. No controls edited
+or saved. SMTP configuration was not inspected because recovery is disabled;
+no delivery test occurred. Sanitized evidence: fusionauth-wave5-admin-readback.json.
 
 The supported provider workflow requires delivery configuration for unauthenticated
 recovery. The authenticated API can instead create a reset identifier without
@@ -60,14 +65,16 @@ MFA_BEHAVIORAL_CHECKPOINT_REQUIRED = YES.
 The provider documents separate method-selection and code-entry templates;
 that supports their intended purpose, not proof that this application's flow
 has traversed them. [FusionAuth MFA documentation](https://fusionauth.io/docs/lifecycle/authenticate-users/multi-factor-authentication).
-Current WebAuthn enablement cannot be inferred from CSS: it is separately
-configured at tenant/application level. [FusionAuth tenant configuration](https://fusionauth.io/docs/get-started/core-concepts/tenants).
+WebAuthn is now verified disabled in both Admin forms; CSS alone had not
+established that configuration. It is separately configured at tenant/application level. [FusionAuth tenant configuration](https://fusionauth.io/docs/get-started/core-concepts/tenants).
 
 Fresh CSS dependency extraction found five fontawesome files (eot/svg/ttf/woff/
 woff2), all GET 200 with font/image MIME, and /assets/icons/fingerprint-overlay.svg
 200 image/svg+xml. These stylesheets were loaded on the real initial form in
 the prior wave, but the font/icon requests were not observed in that render.
-Classification: CONDITIONAL, not required by an observed JUVAl MFA/WebAuthn flow.
+Fonts remain CONDITIONAL pending actual MFA glyph use. The fingerprint asset is
+NOT_REQUIRED for the currently disabled WebAuthn feature; retain its conditional
+status only for a future authorized configuration change.
 The literal /css/entrypoints/${request.contextPath}/assets/icons/fingerprint-overlay.svg
 also remains in CSS and returns 404. Do not silently repair or broaden routing
 for an unexpanded provider template reference.
@@ -97,7 +104,7 @@ Confidence is in the stated decision, not blanket authentication correctness.
 | /js/ | Hosted behavior | R4,G5 | Y | Generic only | Generic only | ? | Retain GET prefix, version-compatible | High initial; limited later |
 | /images/ | Theme/icons | R4,G5 | Y | Generic only | Generic only | ? | Retain current GET prefix | High initial |
 | /fonts/ | Conditional glyphs | C5 | Not requested | ? | ? | ? | Keep denied pending real glyph requirement | Medium; conditional |
-| /assets/icons/fingerprint-overlay.svg | Passkey affordance | C5 | Not requested | ? | N observed | conditional | Keep denied; exact candidate only | Medium; feature unknown |
+| /assets/icons/fingerprint-overlay.svg | Passkey affordance | C5 | Not requested | ? | N observed | conditional | NOT_REQUIRED now; deny; exact candidate only if feature approved | High; WebAuthn disabled |
 | /assets/ | Arbitrary assets | No broad evidence | N observed | ? | ? | ? | Do not publish broad prefix | High absence of justification |
 | /password/forgot | Hosted reset initiation | A,R4,G5 | Link only | N | Y if self-service chosen | N | NOT_REQUIRED by approved operator model; deny | High architectural exclusion |
 | /password/change | Hosted reset/change | A,G5 | N | N | conditional | N | Deny; forced-change prohibited by ADR-035 | High architectural exclusion |
@@ -111,8 +118,7 @@ Confidence is in the stated decision, not blanket authentication correctness.
 D1_STATUS = PARTIAL. Recovery has an explicit approved exclusion; its visible
 link/operational handling is a separate unresolved UX/operations matter. Remaining
 critical gaps: actual MFA method/code transitions and resources under approved
-configuration, WebAuthn enablement readback and any resulting supported-flow
-requirements, conditional glyph use, and post-login logout/callback behavior.
+configuration, conditional glyph use, and post-login logout/callback behavior.
 Do not convert a reachability result into a successful MFA or production result.
 
 ## N-3 disposable header experiment
@@ -160,11 +166,10 @@ No GitHub CLI is available; DEPENDABOT_METADATA=BLOCKED_BY_GITHUB_AUTHORIZATION,
 DEPENDENCY_SECURITY_STATUS=PARTIAL / GITHUB_METADATA_REQUIRED. No alert identity
 is inferred and this does not block independent work.
 
-Admin private authentication remains required for exact tenant/application
-readback; the new window on display :99 is retained deliberately for that
-handoff. All header proxies, lab browsers and nginx scratch were removed.
+Admin authentication and scoped readback are complete; the browser is closed
+after read-only inspection. No further Admin authentication is requested now. All header proxies, lab browsers and nginx scratch were removed.
 No temporary redirect was added, so restoration is NOT_APPLICABLE_NO_MUTATION;
-the historical []/ExactMatch baseline was not reused as a current observation.
+a fresh []/ExactMatch readback now confirms the current redirect configuration.
 Actual MFA discovery requires separate disposable-user and private credential/
 TOTP authorization. RF03 execution remains NOT_AUTHORIZED. Live migration,
 production auth, public infrastructure, actual domain and Amazon submission
@@ -172,3 +177,13 @@ remain outside this run's authorization. Off-host destination/custody and
 security-owner decisions remain human. No new ADR policy was adopted; accepted
 ADR-035 was applied and ADR-037's evidence updated. Ponytail unavailable;
 manual simplicity/security review used. No frontend or nginx-template change.
+
+## Readback continuation outcome
+
+The configuration evidence closes the WebAuthn-enable and recovery-template
+questions. It does not prove MFA authentication, successful reset, name exclusion,
+lockout or production behavior. D1 remains PARTIAL specifically for actual MFA
+transitions/resources, conditional fonts and complete callback/logout behavior.
+No new public route or header is justified solely by these settings. The next
+behavioral checkpoint needs explicit disposable-user authorization and private
+password/TOTP interaction; RF03 itself remains NOT_AUTHORIZED.

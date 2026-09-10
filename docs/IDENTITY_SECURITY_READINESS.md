@@ -304,6 +304,6 @@ disposable nginx available; skipped database cases run in the separate lab.
 See `docs/research/FUSIONAUTH_D1_FIFTH_WAVE.md` for the per-route matrix,
 recovery exclusion rationale, generic runtime/conditional CSS evidence and
 individual header experiments. No redirect or provider configuration changed.
-MFA_BEHAVIORAL_CHECKPOINT_REQUIRED=YES; configuration readback awaits private
-Admin authentication. RF03-P6 is BLOCKED_BY_ARCHITECTURE under ADR-035, not an
+MFA_BEHAVIORAL_CHECKPOINT_REQUIRED=YES; Admin readback confirms recovery disabled, MFA Required/authenticator, and
+WebAuthn disabled in tenant/application; see fusionauth-wave5-admin-readback.json. RF03-P6 is BLOCKED_BY_ARCHITECTURE under ADR-035, not an
 authorization to set passwordChangeRequired. D1 remains PARTIAL.

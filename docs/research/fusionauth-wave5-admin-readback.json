@@ -1,0 +1,29 @@
+{
+  "classification": "VERIFIED_RUNTIME_READ_ONLY",
+  "source": "authenticated Admin edit forms; selected labels and checkbox states only",
+  "tenantId": "5fcaaf07-8832-491a-a6e7-35d348a591b6",
+  "applicationId": "84f077a0-b2b0-4655-8168-082b2233d029",
+  "tenant": {
+    "forgotPasswordEmailTemplate": "Feature disabled. No template selected.",
+    "multiFactorLoginPolicy": "Required",
+    "authenticatorEnabled": true,
+    "emailFactorEnabled": false,
+    "smsFactorEnabled": false,
+    "webAuthnEnabled": false,
+    "webAuthnBootstrapEnabled": false,
+    "webAuthnReauthenticationEnabled": false
+  },
+  "application": {
+    "forgotPasswordEmailTemplate": "Inherit from tenant",
+    "multiFactorLoginPolicy": "Inherit from tenant",
+    "webAuthnEnabled": false,
+    "webAuthnBootstrapEnabled": false,
+    "webAuthnReauthenticationEnabled": false,
+    "authorizedRedirectURLs": [],
+    "authorizedURLValidationPolicy": "ExactMatch"
+  },
+  "mutations": false,
+  "smtpReadiness": "NOT_CHECKED",
+  "credentialSubmission": "NOT_EXECUTED",
+  "mfaFlow": "NOT_VERIFIED"
+}
