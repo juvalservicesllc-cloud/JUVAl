@@ -337,6 +337,33 @@ def test_a_row_encrypted_under_another_key_is_unusable(stores):
     assert stranger.load(session.session_id, _now()) is None  # fail closed, not raise
 
 
+def test_additive_key_rotation_preserves_then_reencrypts_sessions(session_db_dsn):
+    """Exercise actual persisted rows across keyring changes, without a live DB."""
+    import psycopg
+    from juval.infrastructure.persistence.postgres_session_store import PostgresSessionStore
+
+    with psycopg.connect(session_db_dsn) as conn:
+        conn.execute(Path(MIGRATION).read_text(encoding="utf-8"))
+    old_key = _Key("old", os.urandom(32))
+    new_key = _Key("new", os.urandom(32))
+    original = PostgresSessionStore(session_db_dsn, TokenCipher(old_key))
+    rotated = PostgresSessionStore(session_db_dsn, TokenCipher(new_key, (old_key,)))
+    retired = PostgresSessionStore(session_db_dsn, TokenCipher(new_key))
+    rewritten, untouched = _session(), _session()
+    original.save(rewritten)
+    original.save(untouched)
+    assert rotated.load(rewritten.session_id, _now()).refresh_token == rewritten.refresh_token
+    assert retired.load(rewritten.session_id, _now()) is None
+    assert rotated.replace_tokens(rewritten.session_id, 0, "rotated-access", "rotated-refresh", None, _now())
+    recovered = retired.load(rewritten.session_id, _now())
+    assert recovered.access_token == "rotated-access"
+    assert recovered.refresh_token == "rotated-refresh"
+    assert recovered.refresh_generation == 1
+    assert original.load(rewritten.session_id, _now()) is None
+    assert rotated.load(untouched.session_id, _now()) is not None
+    assert retired.load(untouched.session_id, _now()) is None
+
+
 def test_migration_and_rollback_are_repeatable_and_isolated(session_db_dsn):
     import psycopg
 

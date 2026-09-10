@@ -286,3 +286,15 @@ RF03, off-host recovery and domain architecture runbooks re-reviewed; their
 remaining actions need explicit user/provider evidence. No new production
 controls claimed. Authoritative dependency detail:
 `compliance/DEPENDENCY_THIRD_WAVE_RECONCILIATION.md`.
+
+## Fourth wave — persisted key rotation (2026-09-10)
+
+`test_additive_key_rotation_preserves_then_reencrypts_sessions` exercises the
+PostgreSQL adapter with generated disposable keys: additive rotation reads old
+rows, a successful token replacement becomes readable with only the new key,
+and untouched rows still require the old key. Removing an old key prematurely
+fails closed. This is SCRATCH_DATABASE_BEHAVIOURALLY_VERIFIED, not deployed
+rotation. No production keyring or database was changed. The isolated contract
+passes 53 tests with 2 memory-only skips; actual private PostgreSQL restart also
+passes and the cluster is removed. Full backend gate: 839 PASS / 43 SKIP, with
+disposable nginx available; skipped database cases run in the separate lab.
