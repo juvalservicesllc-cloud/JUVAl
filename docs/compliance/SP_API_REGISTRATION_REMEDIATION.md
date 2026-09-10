@@ -3952,7 +3952,7 @@ working key:
 | `de00c6d3` bootstrap | no | **yes** (§38/§40) |
 | `d0f26756` IV1 | no | **yes** (§42.2) |
 | `03239bf9` IV3 | **yes** | **no** |
-| `83136b5d` Behavioral 2 | **yes** | **no** |
+| `83136b5d` Behavioral 2 | **yes** | ~~**no**~~ **SUPERSEDED by §52.4 -- NOT_MEASURED** |
 | `ccd38e21` bootstrap | **yes** | never individually tested |
 
 FusionAuth does not authenticate by name, so this **cannot be causal**. It is
@@ -3997,3 +3997,380 @@ Remaining: three bootstrap keys (VALID to 2026-09-10), IV1/IV2 (EXPIRED), IV3
 and Behavioral 2 (VALID to 2026-09-09), plus FusionAuth's own internal key.
 IV3 and Behavioral 2 are non-functioning credentials still valid for two days
 and are candidates for revocation.
+
+> **SUPERSEDED IN PART by §52.4 (2026-09-08).** Calling Behavioral 2
+> "non-functioning" was not measured: no session in this document records a
+> probe of its value. That claim is retracted; BV2 is `NOT_MEASURED`. The
+> statement about IV3 stands. The original wording is preserved above rather
+> than rewritten.
+
+## 52. API-key static forensics closed: the reload path is asynchronous, the root cause is not proven (2026-09-08)
+
+Static forensics of the FusionAuth 1.69.0 API-key authentication path is
+**complete and closed**. It answered the architectural question it set out to
+answer and it did **not** produce a root cause. Both halves of that sentence
+matter, and this section records them with equal weight.
+
+### 52.1 The authentication path, end to end
+
+Every edge below is **VERIFIED_IMPLEMENTATION**, read from the installed
+1.69.0 artifacts (bytecode via the bundled `javap`, MyBatis mapper resources
+via `unzip -p`). No secret, no database row content and no runtime memory was
+read at any point.
+
+```
+authentication_keys.key_value  --k_key_value-->  AuthenticationKey.key
+authentication_keys.key_format --k_key_format--> AuthenticationKey.keyFormat
+        (AuthenticationKeyFormatEnumTypeHandler extends EnumOrdinalTypeHandler)
+
+LOAD    AuthenticationKeyCacheLoader.internalLoad()
+          retrieveAll(null) -> drop expired -> toMap(AuthenticationKey.key)
+          -> cache.replace(map)
+
+REQUEST Authorization header (fallback "Authentication"), raw, no trim/strip
+          -> AuthenticationKeySecurityScheme.getAuthenticationKey(raw)
+          -> AuthenticationKeyCache.get(raw)
+               1. SimpleCache.get(raw); accept when isHashed() == false
+               2. otherwise Base64(SHA-256(UTF-8(raw))) -> SimpleCache.get(hash)
+                  accept only when isHashed() == true
+               3. reject expired -> null -> UnauthenticatedException
+          -> tenant compared AFTER the key is returned
+          -> allowedMethods(key, actionInvocation.actionURI)
+               permissions == null -> ALL_METHODS
+               otherwise endpoints.get(actionURI); absent -> empty set
+               -> UnauthorizedException
+
+CREATE  keyFormat == SHA256 -> persist HashTools.hash(key); else persist literal
+
+RELOAD  create/update/delete* -> cacheNotifier.reload("AuthenticationKey")
+```
+
+Key-format semantics, closed:
+
+| DB `key_format` | enum | `isHashed()` | storage | authentication branch |
+|---|---|---|---|---|
+| `0` | `AuthenticationKeyFormat.None` | `false` | literal | literal lookup |
+| `1` | `AuthenticationKeyFormat.SHA256` | `true` | SHA-256 + Base64 | hashed fallback |
+| `NULL` | `null` | `false` | literal (pre-1.56 rows) | literal lookup |
+
+### 52.2 The reload path is asynchronous — the question this investigation set out to answer
+
+`io.fusionauth.api.service.guice.FusionAuthCacheModule.bindNotifier()` binds
+`CacheNotifier` to **`DistributedCacheNotifier`** as an eager singleton, and
+`DefaultAuthenticationKeyService` receives that instance by constructor.
+**VERIFIED_IMPLEMENTATION.**
+
+`DistributedCacheNotifier.reload(String...)` does **not** call
+`CacheLoader.load()` synchronously. It records a `RequestCounter`, increments
+a pending count, computes a `notBefore`/debounce instant, notifies a
+background thread and returns. The class extends `Thread` and starts itself in
+its constructor; `run()` waits, evaluates pending work against `notBefore`,
+retrieves the FusionAuth nodes and calls `sendNotification(...)`, which POSTs
+`/api/cache/reload` and, on failure, sleeps and retries before logging an
+error. **VERIFIED_IMPLEMENTATION.**
+
+Two consequences follow directly, and only these two:
+
+1. **A mutation may return before the cache reload has completed.**
+   VERIFIED_IMPLEMENTATION.
+2. **A reload/notification failure is detached from the mutation that
+   triggered it** once that mutation has returned. VERIFIED_IMPLEMENTATION.
+
+This answers the architectural question. It does **not** answer why any
+particular historical request returned `401`.
+
+### 52.3 Classification of every outstanding claim
+
+| Claim | Class |
+|---|---|
+| `API_AUTH = FAIL` | VERIFIED_EMPIRICAL |
+| `ROOT_CAUSE` | **NOT_PROVEN** |
+| `JUVAL Capture Diagnostic Final` (`16d40502`) returned `401` on all six granted endpoints while its captured value was confirmed byte-for-byte identical to the persisted value revealed by FusionAuth | VERIFIED_EMPIRICAL — a genuine anomaly |
+| H8-D — mutation-triggered reload had not completed when the request was served | **STRUCTURALLY_POSSIBLE_NOT_PROVEN** |
+| `DistributedCacheNotifier` deferred/asynchronous semantics | VERIFIED_IMPLEMENTATION |
+| IV3 (`03239bf9`) — separate historical anomaly | **NOT_PROVEN** |
+| BV2 (`83136b5d`) | **NOT_MEASURED** — see §52.4 |
+| `STATIC_FORENSICS_EXHAUSTED` | **YES** |
+| Production runtime depends on no FusionAuth administrative API key | VERIFIED_IMPLEMENTATION (`interfaces/api/auth.py::build_verifier` consumes only the public JWKS) |
+| This anomaly is a FusionAuth defect | **NOT CLAIMED.** No reproducible implementation-level contradiction was demonstrated |
+| `CONTROL_6` | **B — PARTIALLY_SATISFIED**, unchanged |
+
+**H8-D is structurally compatible with the Capture Final observation** — create
+key, DB write succeeds, reload is queued, create returns, an immediate request
+is served from a map that does not yet contain the row. Structural
+compatibility is not evidence that this is what happened, and it is not
+recorded as such.
+
+### 52.4 Corrections to §51 — two claims withdrawn
+
+**BV2 (`83136b5d`) was never measured.** §51.3 tabulates it as
+`authenticated: no` and §51.6 calls it "non-functioning". No section of this
+document records a probe session that exercised BV2's own value. That
+classification was inherited, not measured. **The `0/6` claim for BV2 is
+retracted; BV2 is `NOT_MEASURED` and is removed from the empirical set.**
+§51.3 and §51.6 are annotated in place rather than rewritten.
+
+**The cache is not a proven root cause.** IV3 was created `2026-09-07
+15:11:31.410 UTC` and updated `16:16:17.550 UTC`, both before the
+`18:46:43 UTC` restart, and §46.2 records it probed again *after* that restart
+with `401` on all five granted endpoints. Startup population loads every
+non-expired row, and that startup load demonstrably succeeded because
+`Diagnostic 2` authenticated after it. **A creation-time reload failure
+therefore cannot explain IV3.** Custody mismatch remains the surviving
+explanation for IV3 and is `NOT_PROVEN` — and, because IV3 is `key_format=1`
+and not retrievable, it is not provable in principle.
+
+The three failing credentials do not share one mechanism. Recording them as if
+they did would repeat the error this investigation has been correcting since
+§44.
+
+### 52.5 Why static forensics is closed
+
+The question — *can a mutation return before the `AuthenticationKey` cache
+incorporates the change?* — is answered **YES**, at
+`VERIFIED_IMPLEMENTATION`. Every remaining unknown is a **runtime state**
+question (what the in-memory map contained at a given instant), not a static
+one, and answering it would require process-memory inspection, which is
+refused on security grounds: the map holds the literal value of every
+non-hashed key. No further static branch is opened. `SimpleCache`,
+`/api/cache/reload` internals, heap, memory and network traces are explicitly
+**not** inspected unless a future concrete failure requires it.
+
+### 52.6 Temporary diagnostic credentials — pending manual deletion
+
+Created solely for this investigation, both `key_format=0` (literal value
+stored in the clear), both recorded expiry `2026-09-09 08:00 UTC`. **Expiry is
+not deletion**: the row and its value persist afterwards.
+
+| UUID | Name |
+|---|---|
+| `16d40502-4efe-491e-9899-7cfbeacd7213` | `JUVAL Capture Diagnostic Final` |
+| `f7064cb1-0bd5-4140-b0ea-e3a38a5d5329` | `JUVAL Capture Diagnostic Final 1` |
+
+Manual deletion by the operator in the admin UI, verifying each row's id
+before deleting. No other credential is touched. The agent does not create,
+reveal or delete API keys (ADR-032).
+
+Related finding, unresolved: `audit_logs.message` persists a fragment derived
+from the API key value, which makes that column **secret-adjacent**. It must
+not be selected in diagnostics. Deleting the two rows above does not remove
+those audit rows; it makes the fragments useless. Recording this rule in
+`docs/compliance/SECRETS.md` is pending.
+
+### 52.7 Consequence for RF-03 — verification moves to user-facing flows
+
+The anomaly affects **verification tooling**, not the product. The production
+runtime is OIDC -> FusionAuth-signed JWT -> public JWKS -> backend validation
+-> RBAC, and uses no administrative API key. Behavioral verification of
+password policy, lockout, MFA and Control 6 is therefore redesigned around
+supported public/user authentication flows, removing the administrative
+API-key dependency from RF-03 evidence.
+
+That redesign is a plan, not evidence. Nothing below changes:
+
+```
+API_AUTH                  = FAIL
+ROOT_CAUSE                = NOT_PROVEN
+BEHAVIORAL_VERIFICATION   = BLOCKED
+CONTROL_6                 = B - PARTIALLY_SATISFIED
+RF-03 / RF-04             = NOT_VERIFIED
+JUVAL_AUTH_MODE           = unset
+AMAZON REAPPLICATION GATE = BLOCKED
+```
+
+## 53. Identity architecture closed and implemented; no control promoted to production-verified (2026-09-09)
+
+Architecture and implementation pass. **No production identity state was
+mutated**, `JUVAL_AUTH_MODE` remains unset, and **no finding changes state**.
+Recorded here because the *basis* of two findings changed even though their
+status did not.
+
+### 53.1 The four-stage evidence model, applied
+
+Prior sessions collapsed "we built it" and "it is verified" into one column.
+They are separated here and stay separated:
+
+| Stage | Meaning | What it can support |
+|---|---|---|
+| `DESIGN` | An accepted ADR exists | Nothing on its own |
+| `IMPLEMENTED` | Code exists in the repository | Nothing on its own |
+| `TESTED` | Automated tests exercise it, no network, no production | Design intent is real and regression-protected |
+| `PRODUCTION_BEHAVIORAL_EVIDENCE` | Measured on the deployed system a real user touches | **The only stage Amazon evidence may cite** |
+
+Everything delivered this session is at `TESTED`. Nothing reached
+`PRODUCTION_BEHAVIORAL_EVIDENCE`, because `JUVAL_AUTH_MODE` is unset and no
+production user exists.
+
+### 53.2 Control 6 — basis promoted, status not
+
+| | Before | After |
+|---|---|---|
+| Basis | Documentary — FusionAuth's field list contains no such rule | **Behavioural** — measured on an isolated 1.69.0 instance, with a working positive control |
+| Enforcement | None anywhere | `domain/password_policy.py`, reachable only through `application/password_provisioning.py`, 20 tests |
+| Classification | `B — PARTIALLY_SATISFIED` (documentary) | **`IMPLEMENTED_NOT_PRODUCTION_VERIFIED`** |
+
+Measured (`docs/research/FUSIONAUTH_169_IDENTITY_LAB.md` §9.6): a password
+containing `firstName` or `lastName` is **accepted** by FusionAuth 1.69.0 even
+with `disallowUserLoginId=true`, while the full email and the username are
+rejected (`containsEmail`, `containsUsername`). The positive control fires, so
+the negative result is a measurement and not an artifact. **This is not a
+FusionAuth defect** — it implements the rule it documents; Amazon requires a
+stricter one.
+
+`IMPLEMENTED_NOT_PRODUCTION_VERIFIED` is **not** a pass. It cannot be cited to
+Amazon as a satisfied control. It records that the gap now has an owner, an
+implementation and tests, and that one measurement is still missing: whether
+the FusionAuth admin console — a named residual bypass under ADR-035 — applies
+tenant password rules at all (`NOT_TESTED`, lab §9.3).
+
+### 53.3 RF-03 / RF-04 — unchanged, and why
+
+| Finding | Status | Why it did not move |
+|---|---|---|
+| RF-03 | `PARTIAL`, `NOT_VERIFIED` | The backend half gained real hardening (explicit JWKS cache, clock-skew leeway, RFC 6750 challenge) and the browser half now exists (ADR-034 BFF). Both are `TESTED`, neither is running. The IdP half still has no tenant users, no enrolled MFA, no exercised password policy in production |
+| RF-04 | `PARTIAL`, `NOT_VERIFIED` | RBAC is enforced server-side on 10+ endpoints and is now reachable by a session cookie as well as a bearer token, with negative tests for both. Still dormant: `JUVAL_AUTH_MODE` unset means every endpoint answers as `_ANONYMOUS` |
+
+**An unauthenticated deployment cannot satisfy RF-03 or RF-04**, and this
+session did not change that. It removed the reasons the switch could not be
+thrown, and left the switch off.
+
+### 53.4 A control-plane risk this session did not create but must record
+
+Lab-measured (§9.5): `POST /api/user/forgot-password` with
+`sendForgotPasswordEmail: false` returns **200 and a `changePasswordId`**, which
+`POST /api/user/change-password/{id}` then accepts **with no API key**. No SMTP
+is involved and the current password is never needed.
+
+It is not a password-rule bypass — the tenant rules are fully enforced on that
+path — it is a **bypass of the "prove you control the mailbox" step**, available
+to any holder of an API key carrying that endpoint. ADR-035 Condition 1 is the
+control: no standing key may carry it. Recorded here because it is a real
+property of the deployed product, not of the lab.
+
+### 53.5 Status after this pass
+
+```
+RF-01  PARTIAL   (unchanged)
+RF-02  PARTIAL   (unchanged)
+RF-03  PARTIAL   (unchanged) -- backend + BFF TESTED, not running
+RF-04  PARTIAL   (unchanged) -- RBAC TESTED, dormant
+
+IDP_IMPLEMENTATION          = PARTIALLY_IMPLEMENTED (unchanged)
+IDP_RUNTIME                 = INACTIVE (JUVAL_AUTH_MODE unset)
+BROWSER_AUTH (ADR-034)      = IMPLEMENTED_TESTED_NOT_ACTIVATED
+SESSION_STORE (ADR-036)     = PROPOSED -- blocks activation
+CONTROL_6                   = IMPLEMENTED_NOT_PRODUCTION_VERIFIED
+RF-03 / RF-04               = NOT_VERIFIED
+API_AUTH anomaly            = CLOSED, ROOT_CAUSE NOT_PROVEN (unchanged)
+IDENTITY SECURITY GATE      = BLOCKED
+REAPPLICATION GATE          = BLOCKED
+AMAZON_COMPLIANCE_READINESS = NOT_READY
+```
+
+**No finding changed state.** What changed is that the identity blocker is now
+three named, bounded items — one user decision (ADR-036), one measurement
+(nginx paths + admin console), one frontend integration — instead of an
+architecture that did not exist.
+
+> **Corrected 2026-09-10.** This section recorded `SESSION_STORE (ADR-036) =
+> PROPOSED`. ADR-036 was **accepted the same day, 26 minutes after this section
+> was written**; the line was stale, not wrong when written. The status block in
+> §53.5 is superseded by §54.5 below. The original text is left in place.
+
+## 54. Recovery and consolidation of the identity work; no control promoted (2026-09-10)
+
+The 2026-09-09 session ended on token exhaustion with its work uncommitted. This
+session audited that working tree forensically and then consolidated it. **No
+production state was mutated and no finding changed state.** It is recorded
+because it corrected one real defect, retracted four unreproducible claims, and
+produced one piece of evidence that had been claimed but not reproducible.
+
+### 54.1 The defect: the durable session store never reached its consumers
+
+`bff.py::principal_from_session` and `csrf_guard` read a module global that
+`build_stores()` might never have populated. A worker that had not served
+`/login` answered a session cookie from the pre-initialisation in-memory
+placeholder even when the configured backend was PostgreSQL.
+
+The consequence is worth stating precisely, because it is easy to overstate in
+either direction: it was **fail-closed** — the request got a 401, nothing was
+authorised on a session that did not exist — and it also meant the
+multi-instance durable session layer ADR-036 exists to provide **was not in
+use**. A security property held; an availability and architecture property did
+not.
+
+Corrected: one initialisation point (`ensure_configured()`), reached by login,
+callback, session resolution, refresh, CSRF and logout through
+`session_store()` / `transaction_store()`. `VERIFIED_CODE` + `VERIFIED_TEST`
+(6 startup/wiring tests, 4 store-selection regression tests).
+
+### 54.2 Fail-closed promoted from lazy to startup
+
+ADR-036 said an invalid configuration raises "at startup"; it raised on the
+first request that touched the BFF. A bad DSN would have surfaced as an
+intermittent 500 on whichever instance served that request — the exact failure
+shape the ADR argues against. Validation now runs in the FastAPI lifespan.
+`VERIFIED_CODE` + `VERIFIED_TEST`.
+
+### 54.3 Evidence produced, not inherited
+
+| Item | Result | Class |
+|---|---|---|
+| `PostgresSessionStore` contract | **36 tests pass** against a disposable PostgreSQL **16.15** — user-space cluster, no `sudo`, no TCP listener (`listen_addresses` empty, unix socket only), created and destroyed in-session | `VERIFIED_TEST` |
+| Migration `20260909000004` | Applied twice (idempotent), rolled back twice, zero residue | `VERIFIED_TEST` |
+| RLS posture | Enabled, zero policies, `FORCE` deliberately off → **the backend DSN must connect as the table owner**, or every login fails closed | `VERIFIED_CONFIG` |
+| Backend suite | **619 passed, 28 skipped** | `VERIFIED_TEST` |
+| Production isolation | FusionAuth `MainPID=369334`, `NRestarts=0`, `ActiveEnterTimestamp 2026-09-07 18:46:43 UTC` — identical before and after; only `:9011`/`:9012` listening | `VERIFIED_CONFIG` |
+
+ADR-036 had claimed "36 contract tests against a real ephemeral PostgreSQL 16".
+That claim was **unverifiable after the session was lost**, so it was
+re-measured rather than inherited. It reproduced exactly.
+
+### 54.4 Claims retracted
+
+Each was true-sounding, none was reproducible. They are annotated in place
+rather than rewritten, per the standing rule of this document.
+
+| Claim | Status |
+|---|---|
+| "544 tests passing, 7 skipped" | **Retracted.** Measured: 619/28. Written before ~106 tests from the same session existed |
+| "nginx: from 2 to 5 exact routes" | **Retracted.** The file carries ten rules: seven exact, three prefixes |
+| "MEASURED 2026-09-09" on `/oauth2/two-factor`, `/oauth2/two-factor-methods`, `/css/`, `/js/`, `/images/` | **Retracted → `NOT_VERIFIED`.** No recorded evidence: the lab write-up reports the lab already destroyed and lists none of these routes. The only trace is indirect (a working-user JVM exited minutes before the file was written), which is a hint, not a measurement. The rules stay in the template, marked, and **block Phase 2** until re-measured |
+| `SESSION_STORE (ADR-036) = PROPOSED` (§53.5) | **Retracted.** ADR-036 is `Aceptada` |
+
+`audit_logs.message` is now governed as secret-adjacent in
+`docs/compliance/SECRETS.md` §4.2 — the open action from §52.6. The two
+diagnostic API keys of §52.6 were **deleted manually by the operator and
+verified absent by a read-only query returning 0 rows** (`VERIFIED_ABSENT`).
+API-key forensics stays **CLOSED**; no further black-box experiment, no access
+to `key_value`, no query of `audit_logs.message`.
+
+### 54.5 Status after this pass
+
+```
+RF-01  PARTIAL   (unchanged)
+RF-02  PARTIAL   (unchanged)
+RF-03  PARTIAL   (unchanged) -- backend + BFF TESTED, not running
+RF-04  PARTIAL   (unchanged) -- RBAC TESTED, dormant
+
+IDP_IMPLEMENTATION          = PARTIALLY_IMPLEMENTED (unchanged)
+IDP_RUNTIME                 = INACTIVE (JUVAL_AUTH_MODE unset)
+BROWSER_AUTH (ADR-034)      = IMPLEMENTED_TESTED_NOT_ACTIVATED
+SESSION_STORE (ADR-036)     = ACCEPTED, IMPLEMENTED, CONTRACT-VERIFIED ON A
+                              DISPOSABLE POSTGRESQL; MIGRATION NOT APPLIED
+PUBLIC_SURFACE (nginx)      = TEMPLATE ONLY; 5 of 10 rules NOT_VERIFIED
+CONTROL_6_AMAZON            = PARTIALLY_SATISFIED
+  - FusionAuth gap            BEHAVIORALLY_VERIFIED (isolated lab only)
+  - JUVAl mitigation          VERIFIED_CODE + VERIFIED_TEST (30 tests)
+  - production evidence       NONE
+RF03_BEHAVIORAL             = NOT_EXECUTED
+API_AUTH anomaly            = CLOSED, ROOT_CAUSE NOT_PROVEN (unchanged)
+IDENTITY SECURITY GATE      = BLOCKED
+REAPPLICATION GATE          = BLOCKED
+AMAZON_COMPLIANCE_READINESS = NOT_READY
+```
+
+**Nothing here may be cited to Amazon.** Every item above is code, tests or a
+laboratory measurement. The only stage that counts as Amazon evidence —
+`PRODUCTION_BEHAVIORAL_EVIDENCE` (§53.1) — remains empty, because
+`JUVAL_AUTH_MODE` is unset and no production user exists.

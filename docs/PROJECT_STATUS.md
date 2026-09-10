@@ -909,3 +909,136 @@ proveer.
 (checklist de cierre normativa), `docs/DEVELOPMENT_LOOP.md` (proceso,
 ADR-009 `Propuesta`), `docs/architecture/TECHNOLOGY_DECISIONS.md`
 (matriz de tecnologías).
+
+
+---
+
+## Sesión 2026-09-09 — cierre de la arquitectura de identidad (ADR-034/035/036)
+
+Fase de investigación, laboratorio aislado e implementación. **Producción no
+fue mutada**: `fusionauth-app` mantuvo `MainPID=369334`, `NRestarts=0` y su
+`ActiveEnterTimestamp` original de principio a fin; `JUVAL_AUTH_MODE` sigue sin
+definir; `frontend/`, `frontend-next/` y `demo/` sin tocar.
+
+### Correcciones a afirmaciones previas de este documento y de CLAUDE.md
+
+Se corrigen, **sin reescribir el histórico** — las afirmaciones antiguas eran
+ciertas cuando se escribieron o eran errores honestos, y se anotan como
+superadas en lugar de borrarse:
+
+| Afirmación previa | Estado real medido |
+|---|---|
+| El runtime `navegador → OIDC → PKCE → JWT → JWKS → FastAPI → RBAC` existía | **Falso.** Sólo existían los tres últimos eslabones. `frontend/` no contenía cliente OIDC alguno y la superficie pública devolvía 404 en `/oauth2/authorize`. Corregido por ADR-034 en el backend; el frontend sigue congelado |
+| Los dos listeners (`:9011`/`:9012`) eran una anomalía sin explicar de `juval-server` | **Explicado.** Es comportamiento de fábrica de FusionAuth 1.69.0, reproducido en una instancia limpia de laboratorio |
+| El portal self-service de FusionAuth es una función de pago (Starter) | **Retirado.** `GET /account/?client_id=…` responde **200 en Community sin licencia**. Fue una lectura de la página de precios contradicha por medición |
+| Onboarding posible como «crear usuario → primer login → enrolar MFA» | **Rechazado.** Con `loginPolicy=Required` el usuario sin método recibe `242` con `methods: []` y no puede ni completar el reto ni enrolar (`421`). Ver `docs/compliance/IDENTITY_ONBOARDING.md` |
+| Control 6 dependía de base documental | **Base conductual.** Medido en laboratorio: nombres aceptados, control positivo (`containsEmail`/`containsUsername`) disparando |
+| ADR-022 como referencia viva en `auth.py`/`pyproject.toml` | Stale — ADR-022 está `RECHAZADA`. Sustituido por ADR-028/ADR-031 |
+| «RBAC en los 5 endpoints» | Son **10+** |
+
+### Qué se implementó
+
+| Área | Archivo | Estado |
+|---|---|---|
+| BFF OIDC | `src/juval/interfaces/api/bff.py` | IMPLEMENTED + 28 tests, **no activado** |
+| Puertos de sesión | `src/juval/application/session_store.py` | IMPLEMENTED |
+| Adaptador en memoria | `src/juval/infrastructure/sessions/in_memory_session_store.py` | IMPLEMENTED (un solo proceso; ADR-036 decide el duradero) |
+| Control 6 | `src/juval/domain/password_policy.py` | IMPLEMENTED + 20 tests |
+| Puerta de mutación de contraseña | `src/juval/application/password_provisioning.py` | IMPLEMENTED (puerto sin adaptador, a propósito) |
+| Endurecimiento | `src/juval/interfaces/api/auth.py` | leeway de reloj, caché JWKS explícita, `WWW-Authenticate`, resolver de sesión + 11 tests |
+| Superficie pública | `deploy/fusionauth/nginx-fusionauth-public.conf` | Plantilla ampliada; **no recargada en producción** (el recuento exacto se corrige abajo, en la sesión 2026-09-10) |
+
+Tests: **544 pasando, 7 skipped** — *cifra no reproducible; corregida en la
+sesión siguiente*.
+
+### Qué sigue bloqueado
+
+`JUVAL_AUTH_MODE` no se activa hasta que: ADR-036 esté decidido, la superficie
+pública esté medida y desplegada, y el frontend integre el contrato del BFF.
+`RF-03`/`RF-04` siguen `NOT_VERIFIED`; la reaplicación a Amazon sigue
+`BLOCKED`.
+
+*(Nota añadida 2026-09-10: ADR-036 se aceptó a las 16:18 de ese mismo día, 26
+minutos después de escribirse esta sección, que por eso lo daba por pendiente.)*
+
+
+---
+
+## Sesión 2026-09-10 — recuperación y consolidación del trabajo de identidad
+
+La sesión del 2026-09-09 terminó por agotamiento de tokens con ~5.500 líneas sin
+commitear. Esta sesión hizo primero una **auditoría forense** de ese árbol de
+trabajo y después una **consolidación**. No se activó nada: `JUVAL_AUTH_MODE`
+sigue sin definir, la migración sin aplicar, nginx sin recargar, FusionAuth sin
+mutar (`MainPID=369334`, `NRestarts=0`, `ActiveEnterTimestamp` de 2026-09-07
+idénticos al principio y al final), y `frontend/`, `frontend-next/` y `demo/`
+sin tocar.
+
+### Defecto corregido: el almacén de sesiones no llegaba a sus consumidores
+
+`principal_from_session()` y `csrf_guard()` leían un global de módulo que
+`build_stores()` podía no haber poblado nunca. Un worker que no hubiera servido
+`/login` respondía a una cookie desde el adaptador en memoria de
+pre-inicialización aunque la selección configurada fuera PostgreSQL: **fail
+closed (401), pero la sesión duradera multi-instancia — la razón de ser de
+ADR-036 — no estaba en uso.**
+
+Corregido con un **único punto de inicialización** (`bff.ensure_configured()`)
+al que llegan login, callback, resolución de sesión, refresh, CSRF y logout a
+través de `session_store()` / `transaction_store()`. Sin globals inconsistentes,
+sin segunda implementación, sin degradación silenciosa.
+
+### Fail-closed de verdad al arrancar
+
+ADR-036 prometía que una configuración inválida fallaba «al arrancar»; la
+implementación lo hacía de forma perezosa, en la primera petición que tocara el
+BFF. Ahora se valida en el `lifespan` de FastAPI: DSN ausente, clave de cifrado
+ausente, backend desconocido, `memory` bajo `oidc` sin el opt-in explícito, o un
+flujo de navegador **a medio configurar**, y el proceso no arranca. Un
+despliegue sólo-bearer (ninguna variable del BFF definida) sigue siendo válido:
+las rutas del BFF responden 404 y no se exige base de datos, porque ninguna
+sesión puede crearse.
+
+### Qué se verificó de verdad
+
+| Verificación | Resultado | Clase |
+|---|---|---|
+| Contrato del `PostgresSessionStore` | **36 tests en verde** contra PostgreSQL **16.15** desechable (espacio de usuario, sin `sudo`, sin puerto TCP, socket unix, destruido al terminar) | `VERIFIED_TEST` |
+| Migración `20260909000004` | Aplicada dos veces (idempotente) y revertida dos veces, sin residuo, en ese mismo cluster | `VERIFIED_TEST` |
+| RLS | Activado, cero políticas, `FORCE` deliberadamente apagado → **el DSN debe conectar con el rol propietario** | `VERIFIED_CONFIG` |
+| Suite backend completa | **619 pasando, 28 skipped** (647 recolectados) | `VERIFIED_TEST` |
+
+### Afirmaciones retiradas por no ser reproducibles
+
+- **«544 tests pasando, 7 skipped»**: medido, 619/28. La cifra anterior se
+  escribió antes de añadir ~106 tests de la misma sesión.
+- **«nginx: de 2 a 5 rutas exactas»**: el archivo real tiene **diez** reglas
+  (siete `location =` y tres prefijos).
+- **«MEASURED 2026-09-09» sobre `/oauth2/two-factor`, `/oauth2/two-factor-methods`
+  y los prefijos `/css/`, `/js/`, `/images/`**: no se pudo correlacionar con
+  ninguna evidencia registrada — el documento de laboratorio da el lab por
+  destruido antes de esa hora y no lista esas rutas. Las cinco reglas quedan
+  marcadas **`NOT_VERIFIED`** en la propia plantilla y **bloquean la Fase 2**
+  hasta que se midan en un laboratorio nuevo. La afirmación se retira, no se
+  reescribe.
+- **ADR-036 «Propuesta»** en tres documentos: está **`Aceptada`** desde
+  2026-09-09.
+
+### Hueco cerrado en Control 6
+
+`application/password_provisioning.py` — el chokepoint del que depende toda la
+exigibilidad del control — **no tenía un solo test**. Añadidos 10: que una
+contraseña violatoria nunca llega al puerto de identidad, que un sujeto sin
+nombre se rechaza en vez de pasar en vacío, que «sin adaptador» no se confunde
+con «política satisfecha», y que ni el log de rechazo ni el de éxito contienen
+la contraseña.
+
+`CONTROL_6_AMAZON` sigue **`PARTIALLY_SATISFIED`**. Nada de esto es evidencia
+conductual de producción, y no puede citarse a Amazon.
+
+### Qué sigue bloqueado (sin cambios)
+
+`RF-03`/`RF-04` `NOT_VERIFIED`; RF-03 behavioral `NOT_EXECUTED`; reaplicación a
+Amazon `BLOCKED`. La activación necesita, en este orden: medir la superficie de
+nginx, aplicar la migración a Supabase, integrar el frontend, crear el tenant
+con usuarios reales, y sólo entonces `JUVAL_AUTH_MODE=oidc`.

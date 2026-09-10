@@ -10,16 +10,20 @@ discrepancia y corregir este archivo, no al revés.
 Última verificación contra el repositorio: **2026-08-24**. Git **está
 inicializado, con historial y remoto** (`origin`, GitHub) — el bloqueo
 histórico de `git config user.name`/`user.email` ya no aplica. Backend:
-**352 tests pasando, 7 skipped** (`SKIPPED_EXPECTED`: Supabase contra
-base real), más **113 de frontend** (`npm test`) y **27 E2E
+**619 tests pasando, 28 skipped** (medido 2026-09-10; la cifra de «544/7» que
+traía esta línea no era reproducible — eran 352 el 2026-08-24). De los 28
+skips, 7 son `SKIPPED_EXPECTED` (Supabase contra base real), 19 requieren un
+PostgreSQL para el almacén de sesiones (**verificados aparte el 2026-09-10:
+36 tests de contrato en verde contra un PostgreSQL 16.15 desechable**) y 2 son
+estructurales, más **113 de frontend** (`npm test`) y **27 E2E
 Playwright contra el stack real** (FastAPI + SQLite + PWA) — los tres
 verificados 2026-08-24 sobre la baseline consolidada (Windows, Linux y
 GitHub Actions en el mismo commit; ver `docs/DEVELOPMENT_ENVIRONMENT.md`
 §2 para la tabla por nodo y `docs/architecture/PRODUCT_BEHAVIORAL_PARITY.md`
 para las capacidades Waves B-D). **CI verde** desde 2026-08-24: el job de
 backend ya no rompía por `psycopg` en la colección, y hay un segundo job
-que corre lint, tests y build del frontend. **31 ADRs** en
-`docs/adr/` (ADR-001 a ADR-031) —
+que corre lint, tests y build del frontend. **36 ADRs** en
+`docs/adr/` (ADR-001 a ADR-036) —
 ADR-009 (Propuesta), ADR-021 (Propuesta — investigación de proveedores;
 su ranking por evidencia queda **superado en cuanto a selección** por
 ADR-028, sin que su contenido se altere) y **ADR-022
@@ -375,8 +379,11 @@ Estado por componente:
 | React + Vite (frontend) | **APPROVED** (elección de framework), `interfaces/` frontend **NOT STARTED** — bloqueado por Node.js/npm ausentes, no por decisión pendiente | `docs/PROJECT_STATUS.md` §Sesión 2026-08-17 (bloque 3) |
 | Vercel (deployment) | **APPROVED** como plataforma objetivo, restricciones técnicas reales sin investigar (sin Vercel CLI) | `docs/PROJECT_STATUS.md` §Sesión 2026-08-17 (bloque 3) |
 | Supabase/PostgreSQL | **APPROVED** como persistencia de producción; adapter preparado, **NO verificado contra una base real** — no tratar como equivalente en confianza a SQLite/ADR-013 | ADR-017 (`Estado: Aceptada`, 2026-08-17), `docs/architecture/SUPABASE.md` §1 |
-| **Identidad humana / IdP** | **FusionAuth = SELECTED / APPROVED DIRECTION** (ADR-028) y **HOSTING = SELF-HOSTED EN `juval-server`** (decisión explícita del usuario, 2026-08-26, **ADR-031 `Aceptada`, Opción A**; obligó a **enmendar ADR-027** en dos cláusulas — la exclusión "identity server" queda derogada, el resto de ADR-027 sigue vigente). **Fase 1 DESPLEGADA (2026-08-27, ejecución manual del usuario)**: `IMPLEMENTATION = PARTIALLY_IMPLEMENTED` (instancia 1.69.0 `active`+`enabled`, PostgreSQL `active`, `/api/status` Ok, OIDC discovery/JWKS/RS256 verificados read-only contra el emisor **local**), `RUNTIME = INACTIVE` (`JUVAL_AUTH_MODE` sin definir) y `AMAZON RF-03/RF-04 = NOT_VERIFIED` — sin tenant `JUVAl`, sin aplicación, sin roles, sin política aplicada; controles 1–11 `NOT_VERIFIED`. Bloqueado en **una** API key de FusionAuth (`tools/configure_fusionauth.py` la consume; el agente no puede emitirla — sin credencial admin, sin `sudo`). Deviación registrada: se importó el schema con `psql`, no con `deploy/fusionauth/install.sh` — re-ejecutar el script (idempotente) reconcilia. Observado: **dos** listeners (`:9011` y `:9012`), ambos cubiertos por el mismo default-deny; documentado en ADR-027/ADR-031. **Fase 2 (emisor público vía túnel de salida) bloqueada en una decisión del usuario**. Cero reglas `ufw` nuevas en todo el despliegue. Gap abierto heredado de ADR-021: control 6 (exclusión del nombre) `B — PARTIALLY_SATISFIED`; `MINIMUM_FUSIONAUTH_VERSION = 1.63.0`. **Okta RECHAZADO** (2026-08-19, ADR-022) — no reabrir. Cognito, Entra External ID/workforce, Auth0, Supabase Auth, federación Google/Microsoft, passwordless-only, JumpCloud y ZITADEL **RECHAZADOS/ELIMINADOS** (ADR-021); FreeIPA + Keycloak quedó `12/12` documental y mejor clasificado, **no elegido** — ADR-028 explica por qué. Alojamiento: self-hosted en `juval-server` (ADR-031 `Aceptada`, Opción A — ADR-027 enmendado) | **ADR-031** (hosting), **ADR-028** (proveedor), ADR-022 (`RECHAZADA/SUPERSEDED`), ADR-021 (evidencia medida), `docs/compliance/SP_API_REGISTRATION_REMEDIATION.md` §33 (estado vigente), §30/§32 |
-| **AuthN/AuthZ backend** | **IMPLEMENTED + TESTED** — `interfaces/api/auth.py`: validación OIDC/JWT (emisor, firma JWKS, audiencia, expiración) y RBAC por capacidades (`viewer`/`operator`/`admin`) aplicado server-side en los 5 endpoints; 33 tests negativos. **Inactivo hasta que `JUVAL_AUTH_MODE=oidc`** y exista tenant | ADR-022, `docs/compliance/ACCESS_CONTROL.md` |
+| **Identidad humana / IdP** | **FusionAuth = SELECTED / APPROVED DIRECTION** (ADR-028) y **HOSTING = SELF-HOSTED EN `juval-server`** (decisión explícita del usuario, 2026-08-26, **ADR-031 `Aceptada`, Opción A**; obligó a **enmendar ADR-027** en dos cláusulas — la exclusión "identity server" queda derogada, el resto de ADR-027 sigue vigente). **Fase 1 DESPLEGADA (2026-08-27, ejecución manual del usuario)**: `IMPLEMENTATION = PARTIALLY_IMPLEMENTED` (instancia 1.69.0 `active`+`enabled`, PostgreSQL `active`, `/api/status` Ok, OIDC discovery/JWKS/RS256 verificados read-only contra el emisor **local**), `RUNTIME = INACTIVE` (`JUVAL_AUTH_MODE` sin definir) y `AMAZON RF-03/RF-04 = NOT_VERIFIED` — sin tenant `JUVAl`, sin aplicación, sin roles, sin política aplicada; controles 1–11 `NOT_VERIFIED`. Bloqueado en **una** API key de FusionAuth (`tools/configure_fusionauth.py` la consume; el agente no puede emitirla — sin credencial admin, sin `sudo`). Deviación registrada: se importó el schema con `psql`, no con `deploy/fusionauth/install.sh` — re-ejecutar el script (idempotente) reconcilia. Observado: **dos** listeners (`:9011` y `:9012`), ambos cubiertos por el mismo default-deny. **Explicado 2026-09-09**: es comportamiento de fábrica de 1.69.0 — una instancia limpia de laboratorio intenta el mismo segundo listener sin que nadie lo configure, así que **no es una desconfiguración de `juval-server`** (`docs/research/FUSIONAUTH_169_IDENTITY_LAB.md` §9.1). **Fase 2 (emisor público vía túnel de salida) bloqueada en una decisión del usuario**. Cero reglas `ufw` nuevas en todo el despliegue. Gap abierto heredado de ADR-021: control 6 (exclusión del nombre) — **medido 2026-09-09**: FusionAuth 1.69.0 acepta contraseñas que contienen `firstName`/`lastName` incluso con `disallowUserLoginId=true`, así que JUVAl lo implementa (ADR-035); ante Amazon el control sigue en `PARTIALLY_SATISFIED` (etiqueta unificada 2026-09-10 — ver la fila «Control 6» más abajo); `MINIMUM_FUSIONAUTH_VERSION = 1.63.0`. **Okta RECHAZADO** (2026-08-19, ADR-022) — no reabrir. Cognito, Entra External ID/workforce, Auth0, Supabase Auth, federación Google/Microsoft, passwordless-only, JumpCloud y ZITADEL **RECHAZADOS/ELIMINADOS** (ADR-021); FreeIPA + Keycloak quedó `12/12` documental y mejor clasificado, **no elegido** — ADR-028 explica por qué. Alojamiento: self-hosted en `juval-server` (ADR-031 `Aceptada`, Opción A — ADR-027 enmendado) | **ADR-031** (hosting), **ADR-028** (proveedor), ADR-022 (`RECHAZADA/SUPERSEDED`), ADR-021 (evidencia medida), `docs/compliance/SP_API_REGISTRATION_REMEDIATION.md` §33 (estado vigente), §30/§32 |
+| **AuthN/AuthZ backend** | **IMPLEMENTED + TESTED** — `interfaces/api/auth.py`: validación OIDC/JWT (emisor, firma JWKS, audiencia, expiración, RS256, leeway explícito de reloj, caché JWKS explícita) y RBAC por capacidades (`viewer`/`operator`/`admin`) aplicado server-side en **los 10+ endpoints** que lo requieren. **Inactivo hasta que `JUVAL_AUTH_MODE=oidc`** y exista tenant | ADR-028/ADR-031 (proveedor y alojamiento; ADR-022 quedó RECHAZADA), `docs/compliance/ACCESS_CONTROL.md` |
+| **BFF de navegador (ADR-034)** | **IMPLEMENTED + TESTED, NO ACTIVADO** — `interfaces/api/bff.py`: Authorization Code + PKCE S256, `state`/`nonce` server-side, sesión en cookie `HttpOnly`, CSRF de doble envío, logout con propagación al IdP; 34 tests. La custodia de tokens en la SPA queda **rechazada** explícitamente. Un único punto de inicialización de almacenes y validación en el `lifespan`: una configuración de producción inválida **impide arrancar** (consolidación 2026-09-10). Activación bloqueada por: la superficie pública de nginx (cinco de sus diez reglas están `NOT_VERIFIED`), la integración del frontend, la migración sin aplicar y la ausencia de tenant | **ADR-034**, **ADR-036** (`Aceptada`) |
+| **Almacén de sesiones (ADR-036)** | **IMPLEMENTED + TESTED, MIGRACIÓN NO APLICADA** — puertos en `application/session_store.py`, adaptadores en memoria y PostgreSQL, cifrado AES-256-GCM (`infrastructure/crypto/token_cipher.py`), migración `20260909000004`. **36 tests de contrato verdes contra un PostgreSQL 16.15 real y desechable (2026-09-10)**; RLS con cero políticas | **ADR-036** (`Aceptada`, 2026-09-09) |
+| **Control 6 (exclusión del nombre)** | **`CONTROL_6_AMAZON = PARTIALLY_SATISFIED`** — clasificación unificada 2026-09-10, tres afirmaciones que no deben colapsarse: (a) el hueco de FusionAuth 1.69.0 es `BEHAVIORALLY_VERIFIED` — laboratorio aislado, control positivo disparando; (b) la mitigación de JUVAl es `VERIFIED_CODE + VERIFIED_TEST` — `domain/password_policy.py` (20 tests) y el chokepoint `application/password_provisioning.py` (10 tests, añadidos 2026-09-10: sin ellos la exigibilidad del control no estaba probada); (c) ante Amazon sigue `NOT_VERIFIED` — hoy el chokepoint **no protege ninguna contraseña real**, no tiene adaptador y no hay ruta de producción. Residual con nombre: la consola administrativa (`NOT_TESTED`) | **ADR-035**, `docs/research/FUSIONAUTH_169_IDENTITY_LAB.md` §9.6 |
 | Clerk | **DESCARTADO** — no seleccionado; ver ADR-021 (falla ≥4 de 11 requisitos HARD) y ADR-028 (proveedor elegido) | ADR-021, ADR-028 |
 | Recomendación técnica de backend (Python 3.11+, `pytest`, `openpyxl`) | Ya en uso (`pyproject.toml`) | `ARCHITECTURE.md` §15 (recomendación, no ADR) |
 
@@ -424,7 +431,7 @@ upload. `.gitignore` actual ya excluye `.venv/`, `__pycache__/`, `*.pyc`,
 
 ## 17. Testing
 
-Estado real (2026-08-24): **352 tests pasando, 7 skipped**; frontend
+Estado real (2026-09-10): **619 tests pasando, 28 skipped**; frontend
 **113** (`npm test`) y **27 E2E** contra el stack real. El bloque
 siguiente describe el desglose histórico de Fase 4A y ya no coincide con
 el conteo actual; se conserva como contexto de aquella fase, no como
@@ -448,6 +455,12 @@ fail-closed de severidad (ADR-015), antes de Fase 4A (2026-08-17). No
 usar ninguno como referencia del estado actual — quedan documentados
 aquí solo como datos históricos de cierre de fase.
 
+Los 19 skips del almacén de sesiones desaparecen si se exporta
+`JUVAL_SESSION_DB_URL` apuntando a un PostgreSQL desechable: **nunca** la base
+de FusionAuth ni Supabase live (`docs/adr/ADR-036`, sección Estado, describe el
+procedimiento verificado: cluster en espacio de usuario, sin `sudo`, sin puerto
+TCP, destruido al terminar).
+
 Ejecutar antes de cerrar cualquier cambio en `domain/`/`processing/`:
 
 ```bash
@@ -461,8 +474,8 @@ afirmar que el error se reportó correctamente (`tests/README.md`).
 
 ## 18. Documentación y ADR
 
-`docs/adr/` contiene **26 ADRs** (ADR-001 a ADR-026; verificado por
-conteo de archivos 2026-08-20), la mayoría
+`docs/adr/` contiene **36 ADRs** (ADR-001 a ADR-036; verificado por
+conteo de archivos 2026-09-09), la mayoría
 fechados 2026-08-16, ADR-014 a ADR-018 fechadas 2026-08-17. ADR-001 a
 ADR-008 y ADR-010 a ADR-018 están en `Estado: Aceptada`: separación
 UI/Core, Excel como intercambio, provenance, estados de verificación,
@@ -486,6 +499,11 @@ exacto pendiente). ADR-019 a ADR-026 se agregaron después: ADR-023
 (gobernanza del Design System), ADR-024 (IA de producto y contrato de
 Catalog), ADR-025 (ingesta multi-archivo, diez archivos por batch) y
 ADR-026 (CSV como formato de entrada) están **Aceptadas**.
+ADR-033 quedó en `Estado: Propuesta` (estrategia de verificación sin
+credenciales administrativas — nada de ella se ha ejecutado); **ADR-034**
+(BFF), **ADR-035** (Control 6, «Aceptada con riesgo residual») y **ADR-036**
+(almacén de sesiones duradero) están **Aceptadas** por decisión explícita del
+usuario del 2026-09-09.
 **ADR-009 (Development Loop + Completion Gates) y ADR-021 permanecen en
 `Estado: Propuesta`** — no tratarlas como proceso obligatorio hasta que
 el usuario las confirme explícitamente (ver `docs/DEVELOPMENT_LOOP.md`,

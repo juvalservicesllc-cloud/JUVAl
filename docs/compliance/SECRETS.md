@@ -3,16 +3,22 @@
 | Field | Value |
 |---|---|
 | Status | **DESIGN + PARTIAL IMPLEMENTATION.** Storage/rotation processes are documented; several depend on infrastructure that is not deployed yet. |
-| Last verified | `2026-08-18` |
+| Last verified | `2026-09-10` (session-layer secrets added; provider citation corrected) |
 | Owner | `ROLE PLACEHOLDER — Security Owner` (see `INCIDENT_RESPONSE_PLAN.md` §2) |
 | Related controls | `AC-04B`, `AC-04C`, `AC-08`, RF-03 (programmatic half) |
 
 Amazon's RF-03 covers two structurally different things that must never be
 conflated: **human passwords** and **programmatic credentials**. Human
-identity is owned by the managed IdP (ADR-022, `ADR-021` ownership matrix
-items 1–13). *This* document owns everything else: API keys, tokens, database
-credentials and deployment credentials, which rotate through infrastructure
-processes and are never subject to password composition rules.
+identity is owned by the IdP — FusionAuth, self-hosted on `juval-server`
+(**ADR-028** provider, **ADR-031** hosting; the earlier ADR-022/Okta citation
+here was stale, that ADR is `RECHAZADA`), with the `ADR-021` ownership matrix
+items 1–13 unchanged. One named exception: Amazon Control 6 (a password must
+not contain part of the user's name) is validated by JUVAl before the password
+reaches the IdP (**ADR-035**) — a validation, not custody; no password is ever
+stored here. *This* document owns everything else: API keys, tokens, database
+credentials, deployment credentials and the **session-layer secrets the ADR-034
+BFF introduced**, which rotate through infrastructure processes and are never
+subject to password composition rules.
 
 ---
 
@@ -28,6 +34,7 @@ compromise of another.
 | 3 | **Database credentials** | `JUVAL_SUPABASE_DB_URL`, `SUPABASE_SERVICE_ROLE_KEY` | Backend-only secret store / provider dashboard | ≤12 months and on compromise | Provider-side; project exists |
 | 4 | **Deployment credentials** | Railway token, Vercel token, GitHub PAT / deploy keys | Provider account, protected by provider MFA | ≤12 months and on operator offboarding | Provider-side |
 | 5 | **Service identities** | Future worker/queue identity; the scheduled-job identity if one is ever introduced | Backend-only secret store, scoped per environment | ≤12 months | NO — not implemented |
+| 6 | **Session-layer secrets** (ADR-034/ADR-036) | `JUVAL_SESSION_ENCRYPTION_KEYS`, `JUVAL_OIDC_CLIENT_SECRET`, `JUVAL_SESSION_DB_URL` | Backend environment only — **never** in the database the keyring protects, never in a `VITE_*` variable | Keyring: additive rotation, ≤12 months; client secret: ≤12 months and on compromise | **NO** — code exists and is tested, no value has ever been issued (`JUVAL_AUTH_MODE` unset) |
 
 `SUPABASE_ANON_KEY` and `SUPABASE_URL` are **not** secrets: they are public by
 design and protected by Row Level Security. They are listed in `.env.example`
@@ -70,6 +77,16 @@ fallback to a less secure mode:
 | `JUVAL_OIDC_ISSUER` / `JUVAL_OIDC_AUDIENCE` | `auth.py::build_verifier` | Missing in `oidc` mode raises `RuntimeError` — never degrades to unauthenticated |
 | `JUVAL_EXECUTION_STORE` | `interfaces/api/main.py::_execution_run_store` | Unrecognized value, or missing connection variable for the selected mode, raises `RuntimeError` — never silently switches store |
 | `JUVAL_SUPABASE_DB_URL` | Same | Required when `supabase` is selected |
+| `JUVAL_SESSION_STORE` | `interfaces/api/bff.py::build_stores`, called from the FastAPI **lifespan** (`main.py::_lifespan`) | Unrecognized value raises `RuntimeError` **at startup**; `memory` under `oidc` raises unless `JUVAL_SESSION_STORE_MEMORY_CONFIRM` carries the exact opt-in sentence. There is no fallback to memory, ever |
+| `JUVAL_SESSION_DB_URL` (or `JUVAL_SUPABASE_DB_URL`) | Same | Missing while `postgres` is selected raises at startup |
+| `JUVAL_SESSION_ENCRYPTION_KEYS` | `infrastructure/crypto/token_cipher.py::from_environment`, via `build_stores` | Missing, malformed, non-base64 or not exactly 32 bytes raises at startup. Storing tokens in the clear is not an available degraded mode |
+| `JUVAL_OIDC_CLIENT_ID` / `JUVAL_BFF_REDIRECT_URI` | `bff.py::build_config`, same lifespan | A **partially** configured browser flow raises at startup. Setting none of the BFF variables is the valid bearer-only shape: the BFF routes answer 404 and no session store is required |
+
+Startup validation is the point: ADR-036 promises fail-closed session storage,
+and validating it lazily would have surfaced a bad DSN or a missing key as an
+intermittent 500 on whichever instance happened to serve the first request
+touching the BFF. Cover: `tests/integration/test_api_bff.py` (startup section)
+and `tests/unit/test_bff_refresh_and_store_selection.py`.
 
 This "explicit selector wins, missing dependency is fatal" pattern is
 deliberate: a stray variable inherited from a developer `.env` must never be
@@ -84,6 +101,10 @@ It is covered by `tests/unit/test_execution_store_selection.py` and
 | `JUVAL_AUTH_MODE` | `oidc` — **an unauthenticated deployment cannot satisfy RF-03/RF-04** |
 | `JUVAL_EXECUTION_STORE` | `supabase` (explicit; never rely on legacy inference) |
 | `JUVAL_CORS_ORIGINS` | The exact deployed frontend origin. Never `*` |
+| `JUVAL_SESSION_STORE` | `postgres` — in-memory sessions are single-process and forbidden in production (ADR-036) |
+| `JUVAL_SESSION_DB_URL` | The identity-session DSN. May reuse `JUVAL_SUPABASE_DB_URL`, but the backend must connect as the table owner: `identity_sessions` runs RLS with **zero policies**, so no anon/authenticated PostgREST role can read it |
+| `JUVAL_SESSION_ENCRYPTION_KEYS` | At least one 32-byte key. Losing it logs every user out; it does not lose product data |
+| `JUVAL_SESSION_STORE_MEMORY_CONFIRM` | **Unset.** Setting it in production is a misconfiguration by definition |
 
 ---
 
@@ -105,6 +126,48 @@ The API must never emit a credential into a log line or an HTTP response:
 
 Regression cover: `tests/integration/test_api_auth.py::test_token_value_never_appears_in_logs`.
 
+### 4.1 Session-layer redaction (ADR-034/ADR-036)
+
+- The browser is handed an **opaque session id and nothing else**. No access
+  token, refresh token, ID token, `code_verifier`, `state` or `nonce` is
+  serialisable to a response — `/api/v1/auth/session` is a deliberate
+  projection (subject, roles, permissions, expiry), not a serialisation.
+- The durable store holds **digests**, not values, for the session id, the
+  CSRF token, `state` and `nonce`; tokens and the PKCE verifier are
+  AES-256-GCM ciphertext whose key never enters that database.
+- A decryption failure — wrong key, rotated-out key, tampered or moved
+  ciphertext — is reported as **one** error type and treated as an invalid
+  session. Distinguishing the causes would be an oracle-shaped signal, and the
+  correct response is the same in every case: re-authenticate.
+- BFF logging records the event and, at most, a subject: `oauth state
+  mismatch`, `id_token nonce mismatch`, `csrf check failed for subject=…`,
+  `token exchange rejected: HTTP <code>`. The IdP's error bodies may quote the
+  authorization code or the refresh token, so they are **never** read or
+  logged.
+- Control 6 rejections log the *rule name* and the user id; the violation
+  object carries the matched **name** token (the user's own data) and never any
+  part of the password (`domain/password_policy.py`,
+  `application/password_provisioning.py`).
+
+### 4.2 Secret-adjacent data: `audit_logs.message`
+
+FusionAuth persists, in `audit_logs.message`, text derived from the value of an
+API key at the moment it is created or edited. That column is therefore
+**secret-adjacent** and is governed like a secret:
+
+- **Never** `SELECT` it — not in a diagnostic, not in a support query, not into
+  an evidence artifact, not into a session transcript.
+- **Never** paste any fragment of it anywhere, including incident records.
+- Deleting an API key row does **not** delete these audit rows; it only makes
+  the derived fragments useless. Deletion of the key is the remediation, not
+  deletion of the audit trail, which must stay intact for RF-05.
+- The same rule applies to `authentication_keys.key_value`, which is stored in
+  the clear for keys created with `key_format=0`.
+
+No historical fragment is reproduced in this repository, and none may be added.
+API-key forensics is **CLOSED** (`SP_API_REGISTRATION_REMEDIATION.md` §52); this
+rule is what remains of it.
+
 ---
 
 ## 5. Rotation and revocation
@@ -119,6 +182,24 @@ Regression cover: `tests/integration/test_api_auth.py::test_token_value_never_ap
 Rotation evidence records the credential name, rotation timestamp, who
 performed it, and confirmation that the previous value no longer works —
 never the value itself.
+
+### Rotating the session encryption keyring (class 6)
+
+Additive, with no flag day and no migration job, because every ciphertext
+carries the id of the key that produced it (`v1.<key_id>.…`):
+
+1. Generate a new 32-byte key with a CSPRNG and give it a new `key_id`.
+2. Prepend it to `JUVAL_SESSION_ENCRYPTION_KEYS`, **keeping the old entry**.
+   The first entry encrypts; every entry decrypts.
+3. Redeploy. New sessions and any refreshed session are written under the new
+   key; `needs_reencryption()` marks the older envelopes so they are re-sealed
+   on a write that was going to happen anyway.
+4. When no row reports the old `crypto_key_id` (it is a plain identifier, safe
+   to query and safe to log), drop the old entry from the variable.
+
+Removing a key before its rows are gone is not data loss: those sessions simply
+fail to decrypt and their holders log in again. Removing **every** key logs
+everyone out at once.
 
 ### Rotation log
 
@@ -151,6 +232,8 @@ never the value itself.
 | Redaction in logs | **IMPLEMENTED + TESTED** |
 | SP-API credential lifecycle | **NOT APPLICABLE YET** — no credential exists; becomes live on reapplication approval |
 | Backend-only production secret store | **VERIFIED 2026-08-18** — Railway deployed; `JUVAL_SUPABASE_DB_URL` set via `railway variable set --stdin` (never appeared as a CLI argument or in command output); confirmed present on the service by key name only (`railway variable list --json` piped through a script that prints keys, never values); confirmed absent from the Vercel project (`vercel env ls` shows only `VITE_API_BASE_URL`) and absent from the built frontend bundle (0 matches for `postgres://`/`supabase`/`service_role`) |
+| Session-layer secrets (class 6) | **IMPLEMENTED + TESTED, NO VALUE ISSUED** — `token_cipher.py` (23 tests), fail-closed selection (19 tests), startup validation (6 tests). `JUVAL_AUTH_MODE` is unset, so no keyring, client secret or session DSN exists in any environment |
+| `audit_logs.message` treated as secret-adjacent | **DOCUMENTED** (§4.2) — this was the open action left by `SP_API_REGISTRATION_REMEDIATION.md` §52.6 |
 | Rotation records | **NONE** — nothing rotated yet; the production DSN has been live since 2026-08-18 and is due for rotation on the standard ≤12-month cadence (§5) |
 | Provider MFA on Railway/Vercel/Supabase/GitHub accounts | **NEEDS_VERIFICATION — EXTERNAL USER ACTION** (§8). Attempted via `gh api user --jq .two_factor_authentication` — GitHub no longer reliably exposes this field via the API; inconclusive, not fabricated. Railway/Vercel CLIs expose no account-level MFA introspection. |
 

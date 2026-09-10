@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | Status | **PARTIAL.** Technical enforcement is IMPLEMENTED and TESTED; the organizational half (named users, quarterly review, offboarding record) is PENDING. |
-| Last verified | `2026-08-18` |
+| Last verified | `2026-09-10` (endpoint inventory, cookie path and provider citation corrected) |
 | Owner | `ROLE PLACEHOLDER — Security Owner` |
 | Amazon finding | **RF-04** — restrict access to Amazon Information by job duties / business function |
 | Related controls | `AC-07` (DPP §§1.2–1.4), `AC-14A` (AUP §§4.6–4.9) |
@@ -25,9 +25,15 @@ Derived from what the API actually exposes — not a speculative hierarchy.
 
 | Permission | Grants | Endpoints |
 |---|---|---|
-| `runs:read` | View runs, run detail and per-record results | `GET /api/v1/runs`, `GET /api/v1/runs/{id}`, `GET /api/v1/runs/{id}/records` |
-| `runs:create` | Upload a supplier workbook and start an analysis | `POST /api/v1/runs` |
-| `runs:export` | Download the generated workbook | `GET /api/v1/runs/{id}/download` |
+| `runs:read` | View runs, run detail, per-record results, batches and analytics | `GET /api/v1/runs`, `/runs/{id}`, `/runs/{id}/records`, `/runs/{id}/records/{ref}`, `/runs/{id}/analytics`, `/runs/{id}/batch`, `/batches/{id}` |
+| `runs:create` | Upload a supplier workbook (or a batch) and start an analysis | `POST /api/v1/runs`, `POST /api/v1/batches` |
+| `runs:export` | Download the generated workbook or a record export | `GET /api/v1/runs/{id}/download`, `GET /api/v1/runs/{id}/records/export` |
+
+**Corrected 2026-09-10**: this table listed five endpoints; the API enforces a
+permission on **eleven**. The omission understated the control rather than
+overstating it, but an access-control document that does not match the routes
+is not evidence of anything. Counted from the `Depends(require(...))`
+declarations in `interfaces/api/main.py`.
 
 ### Roles
 
@@ -52,18 +58,43 @@ never falls back to permissive.
 | Least privilege | `viewer` refused create and export | `test_viewer_cannot_create_a_run`, `test_viewer_cannot_download_an_export` |
 | Fail-closed config | Missing OIDC config raises at startup, never serves unauthenticated | `test_oidc_mode_without_issuer_fails_fast` |
 | No credential in logs | Rejected tokens never logged | `test_token_value_never_appears_in_logs` |
+| Session cookie is a first-class credential | The BFF's `HttpOnly` cookie resolves to the same `Principal` and the same RBAC, with the same negative tests | `test_api_bff.py::test_session_cookie_authenticates_a_protected_read`, `::test_role_without_permission_is_403_not_401`, `::test_unknown_role_grants_nothing` |
+| CSRF on state-changing cookie calls | Double-submit cookie/header, `hmac.compare_digest`; bearer callers exempt (not browsers, cannot be CSRF'd) | `test_state_changing_request_without_csrf_header_is_rejected`, `::_with_wrong_csrf_header_is_rejected`, `::test_logout_requires_csrf` |
+| Session store cannot degrade | An invalid production session-store configuration stops startup; no silent fallback to in-memory | `test_api_bff.py` startup section, `test_bff_refresh_and_store_selection.py` |
 
-Verify: `.venv/Scripts/python -m pytest tests/integration/test_api_auth.py -q`
-(33 tests) and `python tools/compliance_check.py` (asserts every route
-enforces a permission).
+### 1.1 Two credential shapes, one authorization decision (ADR-034)
+
+Added 2026-09-09, corrected 2026-09-10. Since the BFF, a caller may present
+**either** a bearer token **or** an opaque `HttpOnly` session cookie. Both
+resolve through `auth.py::current_principal` to the same `Principal` and the
+same permission check — there is deliberately no second authorization path.
+
+Order is cookie first, bearer second: the browser never holds a bearer token,
+so for it the cookie is the only credential, and a stale `Authorization` header
+on a browser request cannot shadow a valid session. Roles come from the ID
+token at login and are then held server-side; JUVAl does not call the IdP per
+request, which is why a session survives an unreachable IdP but not a *rejected*
+refresh (that revokes it).
+
+**Neither shape is active in production**: `JUVAL_AUTH_MODE` is unset.
+
+Verify: `.venv/bin/python -m pytest tests/integration/test_api_auth.py
+tests/integration/test_api_bff.py -q` (37 + 34 tests as of 2026-09-10) and
+`python tools/compliance_check.py` (asserts every route enforces a
+permission).
 
 > **Not yet active in production.** The backend is deployed
 > (`https://juval-backend-production.up.railway.app`, since 2026-08-18), so
 > deployment is no longer the blocker. Enforcement runs only when
 > `JUVAL_AUTH_MODE=oidc`, and that variable is deliberately unset in
-> production — it requires an approved IdP tenant first (ADR-022, pending
-> commercial approval); setting it without one would reject every request.
-> Today the control is `IMPLEMENTED + TESTED`, not `OPERATING`.
+> production. The provider decision is **ADR-028** (FusionAuth) with **ADR-031**
+> (self-hosted on `juval-server`) — the ADR-022/Okta citation that stood here
+> was stale, that ADR is `RECHAZADA`. Turning the variable on requires, and
+> does not yet have: a tenant with real users, the migration of ADR-036 applied,
+> the public nginx surface measured and deployed, and the frontend integrated
+> with the BFF contract. Setting it without those would reject every request.
+> Today the control is `IMPLEMENTED + TESTED`, **not `OPERATING`**, and it
+> cannot be cited to Amazon as satisfied.
 
 ---
 
@@ -160,7 +191,7 @@ control documented but not operating, because there are no users to govern.
 
 | # | Action |
 |---|---|
-| R-1 | Approve the IdP (ADR-022) and create the tenant |
+| R-1 | Create the tenant on the approved IdP (ADR-028 FusionAuth, ADR-031 self-hosted; ADR-022 is `RECHAZADA`) |
 | R-2 | Create individual accounts; enroll MFA; assign the lowest sufficient role |
 | R-3 | Populate the §2 register with real users and justifications |
 | R-4 | Run the first quarterly access review and file the record |
