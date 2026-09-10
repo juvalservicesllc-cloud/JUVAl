@@ -294,8 +294,10 @@ def build_stores() -> tuple[SessionStore, OAuthTransactionStore]:
     from juval.infrastructure.persistence.postgres_session_store import (
         PostgresOAuthTransactionStore,
         PostgresSessionStore,
+        verify_session_database,
     )
 
+    verify_session_database(dsn)
     return PostgresSessionStore(dsn, cipher), PostgresOAuthTransactionStore(dsn, cipher)
 
 

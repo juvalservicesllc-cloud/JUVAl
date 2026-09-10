@@ -362,3 +362,52 @@ def test_migration_and_rollback_are_repeatable_and_isolated(session_db_dsn):
         assert conn.execute("select value from sentinel").fetchone() == (42,)
         conn.execute(up)
         assert conn.execute("select count(*) from identity_sessions").fetchone() == (0,)
+
+
+@pytest.mark.parametrize("defect", ["none", "missing", "rls_off", "forced", "policy", "column"])
+def test_startup_database_readiness_rejects_unsafe_schema(session_db_dsn, defect):
+    import psycopg
+    from juval.infrastructure.persistence.postgres_session_store import verify_session_database
+
+    with psycopg.connect(session_db_dsn) as conn:
+        if defect != "missing":
+            conn.execute(Path(MIGRATION).read_text(encoding="utf-8"))
+        if defect == "rls_off":
+            conn.execute("alter table identity_sessions disable row level security")
+        elif defect == "forced":
+            conn.execute("alter table identity_oauth_transactions force row level security")
+        elif defect == "policy":
+            conn.execute("create policy unexpected on identity_sessions using (true)")
+        elif defect == "column":
+            conn.execute("alter table identity_sessions drop column csrf_digest")
+    if defect == "none":
+        verify_session_database(session_db_dsn)
+    else:
+        with pytest.raises(RuntimeError, match="readiness failed"):
+            verify_session_database(session_db_dsn)
+
+
+def test_startup_database_readiness_requires_the_table_owner(session_db_dsn):
+    import psycopg
+    from psycopg import sql
+    from psycopg.conninfo import make_conninfo, conninfo_to_dict
+    from juval.infrastructure.persistence.postgres_session_store import verify_session_database
+
+    role = "juval_test_reader_" + secrets.token_hex(12)
+    with psycopg.connect(session_db_dsn) as conn:
+        conn.execute(Path(MIGRATION).read_text(encoding="utf-8"))
+        schema = conn.execute("select current_schema()").fetchone()[0]
+        conn.execute(sql.SQL("create role {}").format(sql.Identifier(role)))
+    try:
+        with psycopg.connect(session_db_dsn) as conn:
+            conn.execute(sql.SQL("grant usage on schema {} to {}").format(
+                sql.Identifier(schema), sql.Identifier(role)))
+            conn.execute(sql.SQL("grant select on all tables in schema {} to {}").format(
+                sql.Identifier(schema), sql.Identifier(role)))
+        options = conninfo_to_dict(session_db_dsn)["options"] + f" -c role={role}"
+        with pytest.raises(RuntimeError, match="readiness failed"):
+            verify_session_database(make_conninfo(session_db_dsn, options=options))
+    finally:
+        with psycopg.connect(session_db_dsn) as conn:
+            conn.execute(sql.SQL("drop owned by {}").format(sql.Identifier(role)))
+            conn.execute(sql.SQL("drop role {}").format(sql.Identifier(role)))

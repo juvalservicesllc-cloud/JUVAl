@@ -246,3 +246,13 @@ everyone out at once.
 | S-3 | Confirm no historical commit contains a secret (the scanner covers the working tree, not full history) | **OPEN** — not attempted this session; GitHub secret scanning (S-2) covers the pushed history going forward but was not used here to retroactively audit the full commit history |
 | S-4 | On first deployment, set `JUVAL_EXECUTION_STORE=supabase` explicitly | **DONE 2026-08-18** — deployed with `JUVAL_EXECUTION_STORE=supabase`. **`JUVAL_AUTH_MODE=oidc` was deliberately NOT set** — the original wording of this item bundled it with the store selector, but enabling OIDC auth without an approved IdP tenant would break every endpoint and contradicts the standing identity block (ADR-021/ADR-022, `IDP_SELECTION = BLOCKED_PENDING_AMAZON_RESPONSE`); corrected here so this item is never read as authorizing that. |
 | S-5 | Enable GitHub Dependabot security updates (was `disabled`) | **DONE 2026-08-18** — user-authorized, agent-executed via `gh api`; independently re-verified `enabled` after the write, not just trusted from the write response — `NETWORK_SECURITY.md` §3.2 |
+
+### Session database startup evidence — 2026-09-10 accelerator
+
+`build_stores()` now opens a read-only database readiness check before exposing
+session adapters. Driver errors are replaced with a fixed, unchained message;
+DSNs and database diagnostics are not logged. The previous description of a
+bad DSN failing at startup overstated the implementation: previously only the
+presence of its string was checked. ADR-036 records the correction and its
+limits. Run `tools/session_store_lab.py` for disposable schema/RLS/owner checks;
+never supply production secrets to the session contract suite.

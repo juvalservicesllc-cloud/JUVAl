@@ -314,3 +314,28 @@ def test_an_explicitly_named_store_is_checked_even_when_bearer_only(monkeypatch)
 
     with pytest.raises(RuntimeError, match="JUVAL_SESSION_DB_URL"):
         bff.build_stores()
+
+
+
+def test_postgres_readiness_failure_aborts_selection_without_exposing_dsn(monkeypatch):
+    from juval.infrastructure.persistence import postgres_session_store as postgres
+
+    monkeypatch.setenv("JUVAL_AUTH_MODE", "oidc")
+    monkeypatch.setenv("JUVAL_SESSION_STORE", "postgres")
+    monkeypatch.setenv("JUVAL_SESSION_DB_URL", "postgresql://unused/db")
+    monkeypatch.setattr(bff.TokenCipher, "from_environment", lambda: object())
+    auth_module.reset_for_tests()
+
+    class BrokenDriver:
+        @staticmethod
+        def connect(*args, **kwargs):
+            assert kwargs["connect_timeout"] == 5
+            raise RuntimeError("sensitive-driver-diagnostic")
+
+    monkeypatch.setattr(postgres, "_require_driver", lambda: BrokenDriver)
+    with pytest.raises(RuntimeError, match="readiness failed") as error:
+        bff.build_stores()
+    import traceback
+    rendered = "".join(traceback.format_exception(error.value))
+    assert "sensitive-driver-diagnostic" not in rendered
+    assert "postgresql://" not in rendered

@@ -80,6 +80,47 @@ def _require_driver():
     return psycopg
 
 
+def verify_session_database(dsn: str) -> None:
+    """Read-only startup check of the selected database and ADR-036 boundary.
+
+    Does not read rows, create tables, or run migrations. Missing tables,
+    incompatible columns, non-owner roles, disabled/forced RLS or any policy
+    abort startup. Driver diagnostics may contain credentials: suppress them.
+    Connection and SQL waits are bounded independently.
+    """
+    try:
+        with _require_driver().connect(dsn, connect_timeout=5) as conn:
+            conn.execute("set transaction read only")
+            conn.execute("set local statement_timeout = '5s'")
+            rows = conn.execute(
+                "select relrowsecurity, relforcerowsecurity, "
+                "relowner = (select oid from pg_roles where rolname = current_user), "
+                "not exists (select 1 from pg_policy where polrelid = c.oid) "
+                "from pg_class c where c.oid in "
+                "(to_regclass('identity_sessions'), to_regclass('identity_oauth_transactions')) "
+                "and relkind = 'r'"
+            ).fetchall()
+            if len(rows) != 2 or any(row != (True, False, True, True) for row in rows):
+                raise RuntimeError("session schema does not satisfy ADR-036")
+            # Resolve every column used by the adapters without reading tokens.
+            conn.execute(
+                "select session_digest, subject, roles, csrf_digest, "
+                "access_token_ciphertext, refresh_token_ciphertext, crypto_key_id, "
+                "access_token_expires_at, created_at, last_seen_at, expires_at, "
+                "revoked_at, refresh_generation from identity_sessions limit 0"
+            )
+            conn.execute(
+                "select transaction_digest, state_digest, nonce_digest, "
+                "code_verifier_ciphertext, crypto_key_id, redirect_uri, return_to, "
+                "created_at, expires_at from identity_oauth_transactions limit 0"
+            )
+    except Exception:
+        raise RuntimeError(
+            "durable session database readiness failed; verify connectivity, migration, "
+            "table ownership and zero-policy RLS (ADR-036)"
+        ) from None
+
+
 class _PostgresBacked:
     def __init__(self, dsn: str, cipher: TokenCipher) -> None:
         self._dsn = dsn

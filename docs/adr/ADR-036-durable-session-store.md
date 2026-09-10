@@ -250,3 +250,18 @@ and strips inherited JUVAl/PG configuration from its test subprocess. No live
 migration is authorized by running tests. Migration repetition, rollback
 repetition, RLS/owner flags, unrelated-table preservation and reapplication
 are exercised in the disposable database.
+
+## Startup readiness correction — 2026-09-10 accelerator
+
+The earlier lifespan correction validated selectors and required strings but
+constructed the PostgreSQL adapters lazily: a nonempty bad DSN, missing driver
+or unapplied migration still passed startup. `build_stores()` now calls
+`verify_session_database()` before installing the adapters. This read-only
+check connects with a five-second connection timeout, bounds SQL statements to
+five seconds, resolves both tables and every required column without reading
+rows, and requires ownership, RLS enabled, FORCE RLS disabled and zero policies.
+Failure aborts startup with one fixed message and suppresses driver exception
+chaining to avoid credential-bearing diagnostics. It does not migrate, repair
+or activate anything. This implements the existing accepted boundary; it is
+not a new persistence policy. It verifies column presence, not a full schema
+fingerprint or continued availability after startup.

@@ -1151,3 +1151,18 @@ sin debilitar tests. Self-review: esquema/cleanup aislados, sin dependencia
 nueva, sin cambios de dominio ni frontend. Ponytail no está disponible como
 herramienta/skill en esta sesión; revisión manual de simplicidad realizada,
 no se declara ejecución del plugin.
+
+### Accelerator — session startup readiness
+
+Second correction: PostgreSQL selection now verifies connectivity, table and
+column existence, role ownership and zero-policy RLS in a bounded read-only
+startup check. Before this change a nonempty bad DSN passed startup because
+adapters connected lazily. No migration or runtime activation. ADR-036 remains
+the approved policy; this makes its stated startup behavior effective.
+
+Validación startup: backend **735 passed / 104 skipped** (los nuevos tests de
+PostgreSQL requieren el DSN de tests; verificación real separada: **44 passed /
+2 skipped**). BFF focal **54 passed**. No datos de sesiones leídos por el
+preflight; sin migración implícita; sin fallback. Self-review y diff check sin
+hallazgos pendientes del cambio. Límites: no prueba completa de tipos/índices,
+no garantiza disponibilidad después del arranque.
