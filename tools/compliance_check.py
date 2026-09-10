@@ -161,7 +161,7 @@ EXCLUDED_DIRS = {
 
 SCANNED_SUFFIXES = {
     ".py", ".md", ".toml", ".txt", ".json", ".yaml", ".yml", ".ts", ".tsx",
-    ".js", ".jsx", ".html", ".css", ".sql", ".sh", ".cfg", ".ini", ".example",
+    ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts", ".html", ".css", ".sql", ".sh", ".cfg", ".ini", ".example",
 }
 
 

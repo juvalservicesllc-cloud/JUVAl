@@ -196,3 +196,13 @@ def test_dependency_finding_reports_each_advisory_once():
         ]}]}
     )
     assert compliance_check._vulnerable_packages(report) == "setuptools==79.0.1 (PYSEC-2026-3447; fixed in 83.0.0)"
+
+
+@pytest.mark.parametrize("suffix", [".mjs", ".cjs", ".mts", ".cts"])
+def test_secret_scan_covers_javascript_and_typescript_module_files(tmp_path, suffix):
+    secret = _fake_aws_key()
+    (tmp_path / ("module" + suffix)).write_text("export const key = '" + secret + "';")
+    findings = compliance_check.scan_for_secrets(root=tmp_path)
+    failures = [finding for finding in findings if finding.status == FAIL]
+    assert failures
+    assert all(secret not in finding.message for finding in findings)

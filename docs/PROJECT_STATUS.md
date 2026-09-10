@@ -1135,3 +1135,13 @@ disposable sessions **44 passed / 2 skipped** separately. Discovery **103 passed
 auth/BFF selection **93 passed**. Compliance **9 PASS / 1 WARN / 0 FAIL**;
 secret scan clean (427 files at that pass). Frontend content diff from starting
 HEAD is empty. ADR-038 topology is PENDING, no cookie policy or DNS changed.
+
+### Accelerator — portal draft and scanner coverage
+
+Preserved remote portal history on branch `accelerator/portal-readiness`.
+Draft maps current lab/blocker evidence from immutable Linux commit `63568c4`
+and removes invented Windows/origin provenance from the JUnit exporter.
+Validation: 10 model + 4 component/i18n + 3 Python exporter tests, lint/build,
+portal npm audit clean. No hosted deployment or product-frontend changes.
+The source scanner now covers JS/TS module suffixes used by the portal;
+23 compliance-check tests pass; portal pattern scan clean (38 files).

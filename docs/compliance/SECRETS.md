@@ -256,3 +256,10 @@ bad DSN failing at startup overstated the implementation: previously only the
 presence of its string was checked. ADR-036 records the correction and its
 limits. Run `tools/session_store_lab.py` for disposable schema/RLS/owner checks;
 never supply production secrets to the session contract suite.
+
+### Module source scanning — accelerator
+
+The secret scanner now includes `.mjs`, `.cjs`, `.mts` and `.cts`, needed for
+the newly discovered portal scripts. Planted-secret tests prove those suffixes
+are scanned and findings never print matched values. Portal source scan passes;
+this is high-signal pattern scanning, not a proof of absence of every secret.
