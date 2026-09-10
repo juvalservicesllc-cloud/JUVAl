@@ -649,3 +649,33 @@ def test_session_projection_uses_state_after_refresh(configured, rsa_key, monkey
         else:
             assert response.json()["authenticated"] is True
             assert bff.session_store().load(session_id, bff._now()) is not None
+
+
+def test_rotation_persistence_failure_eventually_requires_and_allows_relogin(configured, rsa_key, monkeypatch):
+    """Provider rotation and DB write are not atomic; exercise the documented recovery."""
+    with TestClient(app) as client:
+        assert _login(client, rsa_key, monkeypatch)['authenticated'] is True
+        old_session = client.cookies[bff.SESSION_COOKIE]
+        near_expiry = bff._now() + timedelta(seconds=3590)
+        monkeypatch.setattr(bff, '_now', lambda: near_expiry)
+        used = set()
+        def rotating_provider(config, token):
+            if token in used:
+                raise bff._RefreshRejected('synthetic consumed token')
+            used.add(token)
+            return {'access_token': 'synthetic-new', 'refresh_token': 'synthetic-rotated', 'expires_in': 3600}
+        monkeypatch.setattr(bff, '_refresh_tokens', rotating_provider)
+        store = bff.session_store()
+        real_replace = store.replace_tokens
+        def failed_write(*args, **kwargs):
+            raise RuntimeError('synthetic persistence outage')
+        monkeypatch.setattr(store, 'replace_tokens', failed_write)
+        assert client.get('/api/v1/auth/session').json()['authenticated'] is True
+        assert store.load(old_session, near_expiry).refresh_generation == 0
+        monkeypatch.setattr(store, 'replace_tokens', real_replace)
+        assert client.get('/api/v1/auth/session').json() == {'authenticated': False}
+        assert store.load(old_session, near_expiry) is None
+        assert bff.SESSION_COOKIE not in client.cookies
+        assert _login(client, rsa_key, monkeypatch)['authenticated'] is True
+        assert client.cookies[bff.SESSION_COOKIE] != old_session
+        assert store.load(old_session, near_expiry) is None

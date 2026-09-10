@@ -63,3 +63,11 @@ consuming an OAuth transaction. A new adapter after restart observes the live
 session, rejects the revoked session and refuses transaction replay. PASS on
 2026-09-10; private cluster and synthetic artifacts removed. This does not
 substitute for a deployment restart/pooler test.
+
+
+Third-wave recovery test: after a successful synthetic provider rotation and
+failed token write, the old stored generation remains. On provider refusal of
+that consumed token, the HTTP session projection becomes unauthenticated,
+cookies clear and the old session is revoked. A fresh signed mock OIDC login
+issues a different session and restores authenticated access. This proves the
+application recovery contract, not real FusionAuth behavior or production atomicity.
