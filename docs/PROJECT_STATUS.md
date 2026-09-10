@@ -1122,3 +1122,32 @@ cambios. **Nada de esto es evidencia de producción ni puede citarse a Amazon.**
 `SEC-DEPS-01 = PENDING_REVIEW` — Dependabot reporta 5 vulnerabilidades (4 high,
 1 moderate) en `frontend/`. No se inspeccionó la rama, no se mergeó, no se tocó
 `frontend/`. Sin inferencia de impacto.
+
+## Sesión 2026-09-10 — accelerator: reconstrucción y seguridad de tests
+
+Workspace autoritativo `/home/juval/JUVAl/APP`, HEAD inicial `16189b7`, limpio;
+referencia local `origin/master` = `32c3aef`, divergencia local 0/3. `git fetch
+origin` falló con `Permission denied (publickey)`: estado remoto actual
+NOT_VERIFIED, push bloqueado por autenticación SSH; sin reescritura.
+
+Baseline medida: 734 passed, 96 skipped; compliance 9 PASS / 1 WARN / 0 FAIL,
+secret scan sin hallazgos en 422 archivos. El warning exige completar el owner
+del plan de incidentes. No es evidencia de cumplimiento Amazon.
+
+Corrección de seguridad: los tests de sesiones ya no toman DSNs de runtime ni
+borran tablas de sesiones compartidas. Usan una variable exclusiva de tests y
+un esquema aleatorio por caso; `tools/session_store_lab.py` reproduce el
+contrato y la migración/rollback en PostgreSQL desechable. Ver `tests/README.md`.
+
+La sesión no expone control de navegador: baseline Admin UI de redirects no
+leído, mutación temporal no ejecutada; real login sigue NOT_VERIFIED. Frontend
+congelado, FusionAuth y PostgreSQL de runtime sin cambios.
+
+Validación del cambio: laboratorio PostgreSQL **37 passed / 2 skipped**
+(skips estructurales de memoria); selección amplia BFF/sesiones **70 passed /
+22 skipped** sin DSN de tests; `git diff --check` limpio. El primer intento del
+nuevo lab detectó encoding SQL_ASCII por `--no-locale`; corregido fijando UTF-8,
+sin debilitar tests. Self-review: esquema/cleanup aislados, sin dependencia
+nueva, sin cambios de dominio ni frontend. Ponytail no está disponible como
+herramienta/skill en esta sesión; revisión manual de simplicidad realizada,
+no se declara ejecución del plugin.

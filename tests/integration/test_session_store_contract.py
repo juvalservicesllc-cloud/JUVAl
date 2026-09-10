@@ -6,10 +6,10 @@ in-memory only for tests and local development, so a test that passes there
 must mean something about production. Parametrising the fixture is how the two
 adapters are prevented from drifting.
 
-The PostgreSQL half is skipped unless `JUVAL_SESSION_DB_URL` (or
-`JUVAL_SUPABASE_DB_URL`) points at a database -- the same convention
-`test_supabase_execution_run_store.py` already uses. It never touches a
-production project: the schema is created and dropped per run.
+The PostgreSQL half requires the explicit test-only `JUVAL_TEST_SESSION_DB_URL`.
+Runtime DSNs are never used. Each test owns a randomly named schema, with no
+public-schema fallback, and removes only that schema in a finally block.
+Use a disposable database; this suite does not authorize production migrations.
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from __future__ import annotations
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 
@@ -31,7 +32,7 @@ from juval.infrastructure.sessions.in_memory_session_store import (
     InMemorySessionStore,
 )
 
-DB_URL = os.environ.get("JUVAL_SESSION_DB_URL") or os.environ.get("JUVAL_SUPABASE_DB_URL")
+DB_URL = os.environ.get("JUVAL_TEST_SESSION_DB_URL")
 
 MIGRATION = "supabase/migrations/20260909000004_identity_sessions.sql"
 
@@ -44,33 +45,44 @@ def _cipher():
     return TokenCipher(_Key("test-key", os.urandom(32)))
 
 
+@pytest.fixture()
+def session_db_dsn():
+    if not DB_URL:
+        pytest.skip("JUVAL_TEST_SESSION_DB_URL not set -- disposable session database required")
+    psycopg = pytest.importorskip("psycopg")
+    from psycopg import sql
+    from psycopg.conninfo import make_conninfo
+
+    schema = "juval_session_test_" + secrets.token_hex(12)
+    with psycopg.connect(DB_URL) as conn:
+        conn.execute(sql.SQL("create schema {}").format(sql.Identifier(schema)))
+    try:
+        # No public fallback: a missing test table must fail, never hit runtime.
+        yield make_conninfo(DB_URL, options=f"-c search_path={schema}")
+    finally:
+        with psycopg.connect(DB_URL) as conn:
+            conn.execute(sql.SQL("drop schema {} cascade").format(sql.Identifier(schema)))
+
+
 @pytest.fixture(params=["memory", "postgres"])
 def stores(request):
     if request.param == "memory":
         yield InMemorySessionStore(), InMemoryOAuthTransactionStore()
         return
 
-    if not DB_URL:
-        pytest.skip("JUVAL_SESSION_DB_URL not set -- no database to test the durable adapter")
-    psycopg = pytest.importorskip("psycopg")
+    dsn = request.getfixturevalue("session_db_dsn")
+    import psycopg
     from juval.infrastructure.persistence.postgres_session_store import (
         PostgresOAuthTransactionStore,
         PostgresSessionStore,
     )
 
-    with open(MIGRATION, encoding="utf-8") as handle:
-        ddl = handle.read()
-    with psycopg.connect(DB_URL) as conn:
-        conn.execute("drop table if exists identity_sessions cascade")
-        conn.execute("drop table if exists identity_oauth_transactions cascade")
+    ddl = Path(MIGRATION).read_text(encoding="utf-8")
+    with psycopg.connect(dsn) as conn:
         conn.execute(ddl)
 
     cipher = _cipher()
-    yield PostgresSessionStore(DB_URL, cipher), PostgresOAuthTransactionStore(DB_URL, cipher)
-
-    with psycopg.connect(DB_URL) as conn:
-        conn.execute("drop table if exists identity_sessions cascade")
-        conn.execute("drop table if exists identity_oauth_transactions cascade")
+    yield PostgresSessionStore(dsn, cipher), PostgresOAuthTransactionStore(dsn, cipher)
 
 
 def _session(session_id=None, ttl=timedelta(hours=8), **overrides):
@@ -267,7 +279,7 @@ def test_a_second_process_sees_the_same_session(stores):
 
     from juval.infrastructure.persistence.postgres_session_store import PostgresSessionStore
 
-    other = PostgresSessionStore(DB_URL, sessions._cipher)
+    other = PostgresSessionStore(sessions._dsn, sessions._cipher)
     assert other.load(session.session_id, _now()) is not None
 
 
@@ -286,7 +298,7 @@ def test_login_on_one_instance_and_callback_on_another(stores):
         PostgresOAuthTransactionStore,
     )
 
-    other = PostgresOAuthTransactionStore(DB_URL, transactions._cipher)
+    other = PostgresOAuthTransactionStore(transactions._dsn, transactions._cipher)
     assert other.consume(transaction.transaction_id, _now()) is not None
 
 
@@ -300,7 +312,7 @@ def test_tokens_are_not_stored_in_plaintext(stores):
     psycopg = pytest.importorskip("psycopg")
     session = _session()
     sessions.save(session)
-    with psycopg.connect(DB_URL) as conn:
+    with psycopg.connect(sessions._dsn) as conn:
         row = conn.execute(
             "select access_token_ciphertext, refresh_token_ciphertext, crypto_key_id "
             "from identity_sessions where session_digest = %s",
@@ -321,5 +333,32 @@ def test_a_row_encrypted_under_another_key_is_unusable(stores):
 
     session = _session()
     sessions.save(session)
-    stranger = PostgresSessionStore(DB_URL, _cipher())  # different key material
+    stranger = PostgresSessionStore(sessions._dsn, _cipher())  # different key material
     assert stranger.load(session.session_id, _now()) is None  # fail closed, not raise
+
+
+def test_migration_and_rollback_are_repeatable_and_isolated(session_db_dsn):
+    import psycopg
+
+    up = Path(MIGRATION).read_text(encoding="utf-8")
+    down = Path(MIGRATION.replace(".sql", ".down.sql")).read_text(encoding="utf-8")
+    with psycopg.connect(session_db_dsn) as conn:
+        conn.execute("create table sentinel (value integer)")
+        conn.execute("insert into sentinel values (42)")
+        for _ in range(2):
+            conn.execute(up)
+        rows = conn.execute(
+            "select relname, relrowsecurity, relforcerowsecurity, "
+            "pg_get_userbyid(relowner) = current_user from pg_class "
+            "where relnamespace = current_schema()::regnamespace "
+            "and relname in ('identity_sessions', 'identity_oauth_transactions')"
+        ).fetchall()
+        assert len(rows) == 2
+        assert all(rls and not force and owner for _, rls, force, owner in rows)
+        for _ in range(2):
+            conn.execute(down)
+        assert conn.execute("select to_regclass('identity_sessions')").fetchone() == (None,)
+        assert conn.execute("select to_regclass('identity_oauth_transactions')").fetchone() == (None,)
+        assert conn.execute("select value from sentinel").fetchone() == (42,)
+        conn.execute(up)
+        assert conn.execute("select count(*) from identity_sessions").fetchone() == (0,)

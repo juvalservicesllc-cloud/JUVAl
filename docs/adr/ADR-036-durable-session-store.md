@@ -238,3 +238,15 @@ la migración aplicada dos veces (idempotente) y revertida dos veces sin dejar
 residuo. La base de FusionAuth y Supabase no se tocaron.
 
 **Migración no aplicada a producción.**
+
+## Verification safety correction — 2026-09-10 accelerator
+
+The former contract fixture selected runtime DSNs and dropped session tables;
+its claim that it could never affect production was false. Contract tests now
+require `JUVAL_TEST_SESSION_DB_URL`, isolate all DDL in a unique schema with no
+`public` search-path fallback, and clean up in `finally`. The reproducible
+`tools/session_store_lab.py` creates a private Unix-socket PostgreSQL cluster
+and strips inherited JUVAl/PG configuration from its test subprocess. No live
+migration is authorized by running tests. Migration repetition, rollback
+repetition, RLS/owner flags, unrelated-table preservation and reapplication
+are exercised in the disposable database.
