@@ -67,7 +67,7 @@ mark that case BLOCKED instead of testing an unrelated path as production.
 |---|---|
 | RF03-B0 | Confirm exact IDs, provider version, baseline policy and effective route; record no secret fields |
 | RF03-P0 | Valid password positive control succeeds and reaches required MFA |
-| RF03-P6 | On the explicitly approved disposable user only, require password change at next login; prove the old password cannot bypass the change, compliant replacement succeeds, and required MFA remains enforced. If the effective path is unavailable, record BLOCKED |
+| RF03-P6 | BLOCKED_BY_ARCHITECTURE under ADR-035: do not set passwordChangeRequired in the current JUVAl tenant. A future isolated disposable test requires explicit authorization covering that exception and its effective change route; only then test mandatory change, old-password bypass refusal and MFA preservation |
 | RF03-P1..P5 | One negative each: too short, missing uppercase, lowercase, digit, symbol; verify intended rejection reason; keep all other requirements valid |
 | RF03-C6 | First-name, last-name, case-variant and normalized-name negatives on every approved create/change/reset path, with a compliant non-name control on each; no real personal names in report |
 | RF03-H1 | Reject password reuse against observed history; include positive new-password control |
