@@ -124,3 +124,18 @@ approve cutover and securely remove temporary plaintext. Never test by restoring
 over the stable live database. Record backup ID/time/hash and sanitized outcomes,
 not dump contents, keys or database credentials.
 `OFF_HOST_DESTINATION=HUMAN_SELECTION_PENDING`; no transfer/restore executed.
+
+## Executable read-only preflight — third wave
+
+Run `.venv/bin/python tools/session_migration_preflight.py` offline first. It
+prints hashes of the exact up/down SQL, pending target/backup/admission/pooler
+checks and explicit absence of migration authorization. It performs no DB call,
+including when runtime variables happen to exist.
+
+Only for an intentionally selected, already-migrated DB, use `--check-database`
+with JUVAL_SESSION_DB_URL provided privately. There is no product-DB fallback.
+This reuses bounded metadata-only readiness checks, reads no session rows and
+never applies SQL migrations. Missing/unmigrated/unsafe schema returns failure;
+no repair. Success does not attest target identity, backup, pooler behavior or
+production approval. For a new unmigrated target, retain the expected failure
+and perform the before-migration metadata/backup checklist above with the operator.
