@@ -1,4 +1,7 @@
-# Juval — Session Checkpoint
+# Juval — Historical Session Checkpoint
+
+Current 2026-09-10 resume ledger: [IDENTITY_SECURITY_READINESS.md](IDENTITY_SECURITY_READINESS.md).
+The 2026-08-16 snapshot below is historical, not current repository or runtime state.
 
 ## Fecha
 2026-08-16

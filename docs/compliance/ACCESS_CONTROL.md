@@ -116,8 +116,9 @@ function.
 |---|---|---|---|---|
 | `ROLE PLACEHOLDER — Operator 1` | | | | |
 
-**Empty by design.** No IdP tenant exists, so no account exists. Populating
-this is an EXTERNAL USER ACTION that follows provider selection.
+**Register not populated.** The exact tenant/application exist. Current user
+inventory and names/roles are NOT_REVERIFIED; an empty register is not proof
+that no account exists. Operator readback and population remain required.
 
 ---
 
@@ -143,7 +144,7 @@ Record with `templates/ACCESS_REVIEW_TEMPLATE.md`.
 
 | Date | Reviewer | Users reviewed | Changes | Next due |
 |---|---|---|---|---|
-| — | *No review yet — no accounts exist.* | 0 | — | First review is due one quarter after the first account is created |
+| — | *No review recorded; account inventory not reverified.* | 0 | — | First review is due one quarter after the first account is created |
 
 ---
 
@@ -160,9 +161,9 @@ On termination, role change, or suspected compromise:
 | 5 | Record the completion timestamp as evidence | ≤24 h |
 
 Step 2 is the one most often missed: a disabled account whose refresh token
-still works is not revoked access. The backend uses short-lived access tokens
-so revocation converges quickly, but session termination at the IdP remains
-the authoritative action.
+still works is not revoked access. Invalidate JUVAl server-side sessions as well as IdP sessions: BFF roles are
+captured at login and IdP suspension alone does not immediately revoke them.
+The production offboarding path must demonstrate both; it is not yet exercised.
 
 Evidence is the timestamp pair — notification received and access removed —
 proving the gap was under 24 hours.
@@ -177,21 +178,21 @@ proving the gap was under 24 hours.
 | Backend enforcement | **IMPLEMENTED + TESTED** | 33 tests |
 | Negative authorization tested | **IMPLEMENTED + TESTED** | `test_viewer_cannot_*` |
 | Frontend not treated as a control | **IMPLEMENTED + TESTED** | direct-call bypass test |
-| Unique IDs / no shared accounts | **DOCUMENTED** | §2 — no accounts exist |
+| Unique IDs / no shared accounts | **DOCUMENTED, runtime inventory NOT_REVERIFIED** | §2 |
 | Quarterly review | **DOCUMENTED, NEVER RUN** | §3 |
 | ≤24-hour removal | **DOCUMENTED, NEVER EXERCISED** | §4 |
 | Supabase RLS | **ENABLED, FAIL-CLOSED, VERIFIED LIVE 2026-08-18** (zero policies, by design) | `NETWORK_SECURITY.md` §3.1 |
 | Backend deployed | **DONE 2026-08-18** — `https://juval-backend-production.up.railway.app` | `PROJECT_PLAN.md` |
-| Production operation (auth enforcement) | **BLOCKED** — backend is deployed, but `JUVAL_AUTH_MODE` is deliberately unset (auth stays disabled until an IdP is approved) | Needs IdP tenant, not deployment — deployment is done |
+| Production operation (auth enforcement) | **BLOCKED** — backend is deployed, but `JUVAL_AUTH_MODE` is deliberately unset (IdP already approved; public flow/migration/human verification pending) | Needs public identity flow and activation evidence; tenant exists |
 
 `RF-04 = PARTIAL` — technical control implemented and tested; organizational
-control documented but not operating, because there are no users to govern.
+control documented but not operating, with current user inventory not independently reverified.
 
 ## 6. EXTERNAL USER ACTION REQUIRED
 
 | # | Action |
 |---|---|
-| R-1 | Create the tenant on the approved IdP (ADR-028 FusionAuth, ADR-031 self-hosted; ADR-022 is `RECHAZADA`) |
+| R-1 | Read back existing tenant/application names and roles by exact IDs; do not recreate them (ADR-028/031) |
 | R-2 | Create individual accounts; enroll MFA; assign the lowest sufficient role |
 | R-3 | Populate the §2 register with real users and justifications |
 | R-4 | Run the first quarterly access review and file the record |

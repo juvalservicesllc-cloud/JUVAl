@@ -106,8 +106,8 @@ app.add_middleware(
     allow_origins=service.cors_origins(),  # never "*"; empty by default (JUVAL_CORS_ORIGINS unset)
     # Cookie-based sessions (ADR-034) require credentialed CORS: the browser
     # will not attach the HttpOnly session cookie to a cross-origin request
-    # otherwise, and JUVAl's PWA and API are on different origins (Vercel /
-    # Railway). This is only safe because `allow_origins` is an explicit
+    # otherwise. CORS does not override SameSite=Lax: public PWA/API site
+    # topology still requires validation (ADR-038). This is only safe because `allow_origins` is an explicit
     # allow-list that is empty by default and can never be "*" -- the CORS spec
     # itself forbids "*" together with credentials, and `cors_origins()` would
     # have to be changed for that combination to arise.

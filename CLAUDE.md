@@ -7,80 +7,16 @@ viven en `docs/` (arquitectura) y `docs/adr/` (decisiones). Si algo aquí
 parece contradecir `docs/`, **`docs/` y el código ganan** — reportar la
 discrepancia y corregir este archivo, no al revés.
 
-Última verificación contra el repositorio: **2026-08-24**. Git **está
-inicializado, con historial y remoto** (`origin`, GitHub) — el bloqueo
-histórico de `git config user.name`/`user.email` ya no aplica. Backend:
-**619 tests pasando, 28 skipped** (medido 2026-09-10; la cifra de «544/7» que
-traía esta línea no era reproducible — eran 352 el 2026-08-24). De los 28
-skips, 7 son `SKIPPED_EXPECTED` (Supabase contra base real), 19 requieren un
-PostgreSQL para el almacén de sesiones (**verificados aparte el 2026-09-10:
-36 tests de contrato en verde contra un PostgreSQL 16.15 desechable**) y 2 son
-estructurales, más **113 de frontend** (`npm test`) y **27 E2E
-Playwright contra el stack real** (FastAPI + SQLite + PWA) — los tres
-verificados 2026-08-24 sobre la baseline consolidada (Windows, Linux y
-GitHub Actions en el mismo commit; ver `docs/DEVELOPMENT_ENVIRONMENT.md`
-§2 para la tabla por nodo y `docs/architecture/PRODUCT_BEHAVIORAL_PARITY.md`
-para las capacidades Waves B-D). **CI verde** desde 2026-08-24: el job de
-backend ya no rompía por `psycopg` en la colección, y hay un segundo job
-que corre lint, tests y build del frontend. **36 ADRs** en
-`docs/adr/` (ADR-001 a ADR-036) —
-ADR-009 (Propuesta), ADR-021 (Propuesta — investigación de proveedores;
-su ranking por evidencia queda **superado en cuanto a selección** por
-ADR-028, sin que su contenido se altere) y **ADR-022
-(RECHAZADA/SUPERSEDED 2026-08-19 — Okta descartado por decisión explícita
-del usuario; no reabrir)**; el resto Aceptadas, incluidas **ADR-027**
-(rol permanente de `juval-server`) y **ADR-028** (FusionAuth como
-dirección aprobada de proveedor de identidad — selección, **no**
-implementación), y **ADR-023
-(Aceptada — gobernanza del Product Experience/Design System del
-frontend, 2026-08-19, inicio del rediseño UI/UX Premium)**. **ADR-031
-(Aceptada 2026-08-26)** fija el alojamiento del IdP: FusionAuth
-self-hosted en `juval-server`, y **enmienda ADR-027** (que pasa a
-`Aceptada — ENMENDADA`) exclusivamente en su exclusión "identity server"
-y en su cláusula de frontera de red; el resto de ADR-027 sigue vigente y
-no queda superseded. **FusionAuth Fase 1 DESPLEGADA (2026-08-27)**:
-instancia 1.69.0 corriendo en `juval-server` (`fusionauth-app` active,
-OIDC discovery/JWKS verificados read-only). `IMPLEMENTATION` pasa a
-`PARTIALLY_IMPLEMENTED`; `RUNTIME = INACTIVE` sin cambio.
-**Corregido 2026-09-10**: la línea anterior decía «sin tenant `JUVAl`
-todavía». Es **falso** — el tenant
-`5fcaaf07-8832-491a-a6e7-35d348a591b6` y la aplicación
-`84f077a0-b2b0-4655-8168-082b2233d029` **existen en el runtime**
-(`VERIFIED_RUNTIME_READ_ONLY`, sondas públicas con grupo de control;
-`docs/research/FUSIONAUTH_PUBLIC_SURFACE_DISCOVERY.md` §14). **No
-recrearlos.** Lo que sigue sin verificarse: los **nombres** de ambos
-objetos y los roles `viewer`/`operator`/`admin` — no son observables sin
-credencial, así que siguen siendo contexto previo, no medición
-(`ROLE_RUNTIME_REVERIFICATION = DEFERRED`). Detalle en
-`SP_API_REGISTRATION_REMEDIATION.md` §33; herramientas idempotentes en
-`tools/configure_fusionauth.py` y `tools/verify_rbac.py`. **Cumplimiento
-Amazon:
-`SP_API_DEVELOPER_REGISTRATION = REJECTED_REMEDIATION_REQUIRED`; los
-cinco hallazgos RF-01…RF-05 están en `PARTIAL`, ninguno `COMPLIANT`;
-`REAPPLICATION GATE = BLOCKED`** — ver `docs/compliance/`
-(`SP_API_REGISTRATION_REMEDIATION.md` §33 es el estado vigente).
-El histórico previo decía «209 tests» y «sin commit todavía»: ambas
-afirmaciones eran ciertas al cierre de 2026-08-17 y hoy son falsas.
-Contexto histórico de aquella sesión (bloques 1-8) en
-`docs/RECONCILIATION_REPORT.md` y `docs/PROJECT_STATUS.md`; Fase 2/3 **COMPLETE**; `interfaces/cli/main.py`
-implementado; ADR-014 — PWA; ADR-015 — fallback fail-closed de
-severidad, HAZMAT→HIGH/BULKY→MEDIUM sin aprobación de negocio, sin
-cambiar; ADR-016 — FastAPI, `interfaces/api/` **IMPLEMENTED** (Fase
-4A); ADR-017 — Supabase/PostgreSQL aprobado como persistencia de
-producción, adapter preparado pero **no verificado contra una base
-real**; ADR-018 — **Railway aprobado para el backend** (Vercel Functions
-descartado por incompatibilidad real con el contrato POST/GET,
-`API_CONTRACT.md` §8.4), `railway.toml` preparado, **sin desplegar**
-(`railway login` pendiente, interactivo). **Fase 4B (frontend
-React+Vite+PWA) IMPLEMENTED** (`frontend/`, 9 tests + 1 E2E real).
-Herramientas instaladas: Node.js v24.19.0, npm v11.17.0, Vercel CLI
-59.1.3, Railway CLI 5.41.2 (todas verificadas); Supabase CLI utilizable
-vía `npx supabase@latest`. Vercel/Supabase/Railway sin
-desplegar/verificar — los tres requieren login interactivo (OAuth de
-navegador) que el agente no puede completar. Fase 4 global sigue sin
-`COMPLETE` — ver `docs/PHASE_GATES.md` §Fase 4. Los números históricos
-de 111, 165 y 177 tests corresponden a los cierres de Fase 1, Fase 2 y
-Fase 3 respectivamente — ver `docs/architecture/TESTING_STRATEGY.md`.
+Estado operativo actualizado 2026-09-10: el workspace autoritativo es
+`/home/juval/JUVAl/APP`, con Git e historial en `master`. El estado actual,
+evidencia, bloqueos y procedimiento humano están centralizados en
+[`docs/IDENTITY_SECURITY_READINESS.md`](docs/IDENTITY_SECURITY_READINESS.md).
+Fase activa: identidad/seguridad, PARTIALLY IMPLEMENTED, producción no activada.
+Tenant y aplicación exactos existen; nombres/roles no re-verificados. No recrear.
+N-1 corregido en plantilla/lab; real login y D-1 siguen NOT_VERIFIED.
+Frontend existente y congelado (`frontend/`, `frontend-next/`, `demo/`).
+No usar recuentos históricos de tests, estados de instalación o marcadores
+literales como evidencia actual. Ver mediciones fechadas en PROJECT_STATUS.
 
 ---
 
@@ -138,7 +74,9 @@ una instrucción del usuario.
 
 ## 5. Ponytail
 
-Ponytail está instalado (plugin `ponytail@ponytail`) y activo. **Modo
+El proyecto declara Ponytail (`ponytail@ponytail`); verificar su disponibilidad
+en cada entorno. No afirmar revisión ejecutada si no hay herramienta/skill;
+registrar la limitación y hacer revisión manual de simplicidad. **Modo
 predeterminado del proyecto: Ponytail FULL** (no hay
 `ponytail/config.json` ni `PONYTAIL_DEFAULT_MODE` que lo cambien, así que
 el default del propio plugin ya es `full` — consistente, no requiere
@@ -188,27 +126,13 @@ ni un proveedor de IA concreto. Infrastructure implementa puertos
 definidos hacia adentro (inversión de dependencias). Normativo:
 `docs/architecture/ARCHITECTURE.md` §3, ADR-001.
 
-**Estado real de cada capa (reconciliado 2026-08-16, ver
-`docs/RECONCILIATION_REPORT.md`):**
-
-| Capa | Estado |
-|---|---|
-| `domain/` | Implementado y probado: `provenance.py`, `product.py`, `costs.py`, `risk.py`, `decision.py`, `identifiers.py`, `units.py`, `issues.py`, `sourcing_record.py` (§7, ADR-011), `execution_run.py` (§15) |
-| `processing/` | Implementado y probado: `profitability.py`, `decision_engine.py`, `decision_score.py`, `data_quality.py`, `pipeline.py` (`process_record`/`process_batch`, ver `docs/architecture/PROCESSING_PIPELINE.md`) |
-| `application/` | Implementado: `run_pipeline.py` — único módulo que conecta `infrastructure/` y `processing/` (§3.2 de `ARCHITECTURE.md`) |
-| `infrastructure/excel` | Implementado y probado: `column_mapping.py`, `importer.py` (XLSX **y CSV** — ADR-026, un solo contrato tabular), `exporter.py` (§8, ver `docs/architecture/EXCEL_PROCESSING.md`) |
-| `infrastructure/enrichment` | Vacío (solo `README.md`) — no implementado |
-| `infrastructure/logging` | Implementado (parcial): `sqlite_execution_run_store.py` (persistencia local de `ExecutionRun`, ADR-013). Logging técnico operacional (stdout/archivo) sigue sin implementar |
-| `infrastructure/persistence` | Implementado, **no verificado contra una base real** (2026-08-17): `supabase_execution_run_store.py` (ADR-017) — sin `supabase`/`psql` disponibles en este entorno, ver `docs/architecture/SUPABASE.md` §1 |
-| `interfaces/cli` | Implementado (2026-08-17): `main.py`, entrypoint real que invoca `run_pipeline()` + `export_excel()` |
-| `interfaces/api` | Implementado (2026-08-17, Fase 4A): `main.py`/`models.py`/`service.py` (ADR-016, FastAPI), 19 tests. Ver `docs/architecture/API_CONTRACT.md` |
-| `interfaces/desktop` | Vacío (solo `README.md`) — `.exe` no se construirá como interfaz principal (ADR-014); sin trabajo planeado |
-
-No implementar contenido de las capas todavía vacías
-(`infrastructure/enrichment`, `interfaces/desktop`) sin que exista un
-caso de uso concreto que lo requiera (§22 "Fases"). `interfaces/cli`,
-`interfaces/api`, `infrastructure/logging` (parcial) e
-`infrastructure/persistence` ya no están vacías — ver tabla arriba.
+**Estado actual:** el código vive bajo `src/juval/`. Domain y processing
+implementan modelos, cálculos y decisiones determinísticos. Application conecta
+puertos y adaptadores; infraestructura implementa Excel/CSV, SQLite,
+Supabase/PostgreSQL y sesiones cifradas; interfaces CLI y FastAPI/BFF existen.
+React/Vite PWA existe. Enrichment e IA no se implementan sin fuente/caso aprobado;
+desktop no es la interfaz principal. Los detalles de archivos y verificación se
+consultan en `docs/` y código, no en un inventario duplicado aquí.
 
 ## 7. Modelo de dominio — SourcingRecord
 
@@ -255,8 +179,8 @@ posición (verificado: `importer.py::normalize_header` +
 regla de negocio opera directamente sobre celdas/posiciones de Excel —
 `processing/pipeline.py` no importa `openpyxl` ni conoce nombres de
 columna. Esto es un vertical slice funcional, no el producto completo:
-sin enriquecimiento externo, sin IA, sin persistencia entre corridas, sin
-interfaz de usuario (ver `docs/PROJECT_STATUS.md`).
+sin enriquecimiento externo ni IA; la persistencia y la interfaz ya existen
+(ver `docs/PROJECT_STATUS.md`).
 
 ## 9. Provenance y estados de verificación
 
@@ -364,43 +288,19 @@ fuentes autorizadas ya aprobadas; recién después servicios externos de
 pago, y solo evaluando necesidad, coste, volumen, alternativa y ROI. No
 introducir una API de pago sin esa evaluación explícita.
 
-## 14. Frontend / Deployment / Persistencia / Auth — mayormente PENDING
+## 14. Stack aprobado y activación
 
-⚠️ No asumir Next.js/Tailwind/Vercel/GitHub, framework de backend,
-Supabase, ni Clerk como stack ya decidido. **Actualizado 2026-08-17**:
-ADR-014 (`Aceptada`) resolvió la elección PWA vs. `.exe` que ADR-005
-dejaba pendiente — **PWA elegida** como interfaz principal. ADR-016
-aprobó FastAPI como backend (`interfaces/api/` **IMPLEMENTED**, Fase
-4A). ADR-017 aprobó Supabase/PostgreSQL como persistencia de
-producción (adapter preparado, **no verificado** contra una base real).
-React+Vite fue elegido por el usuario para el frontend pero sigue **sin
-implementar** (sin Node.js/npm en este entorno) y sin ADR propio.
-Vercel fue aprobado como plataforma de deployment objetivo, sin
-verificar sus restricciones técnicas reales todavía. Clerk sigue sin
-aprobar.
+PWA (ADR-014), FastAPI (ADR-016), React/Vite, Supabase/PostgreSQL
+(ADR-017/019), Railway backend (ADR-018), Vercel frontend y FusionAuth
+(ADR-028/031) son decisiones aprobadas. BFF (ADR-034), Control 6 con residual
+(ADR-035), sesiones duraderas (ADR-036) y endurecimiento nginx (ADR-037)
+están implementados/probados con el alcance de cada ADR. No equiparar esto
+con producción activa. Clerk/Okta no son trabajo pendiente a implementar.
 
-Estado por componente:
-
-| Componente | Estado | Referencia |
-|---|---|---|
-| PWA como interfaz principal | **APPROVED**, implementado (interfaz elegida) | ADR-014 (`Estado: Aceptada`, 2026-08-17) |
-| FastAPI (backend `interfaces/api/`) | **APPROVED**, `interfaces/api/` **IMPLEMENTED** (Fase 4A, 19 tests) | ADR-016 (`Estado: Aceptada`, 2026-08-17) |
-| React + Vite (frontend) | **APPROVED** (elección de framework), `interfaces/` frontend **NOT STARTED** — bloqueado por Node.js/npm ausentes, no por decisión pendiente | `docs/PROJECT_STATUS.md` §Sesión 2026-08-17 (bloque 3) |
-| Vercel (deployment) | **APPROVED** como plataforma objetivo, restricciones técnicas reales sin investigar (sin Vercel CLI) | `docs/PROJECT_STATUS.md` §Sesión 2026-08-17 (bloque 3) |
-| Supabase/PostgreSQL | **APPROVED** como persistencia de producción; adapter preparado, **NO verificado contra una base real** — no tratar como equivalente en confianza a SQLite/ADR-013 | ADR-017 (`Estado: Aceptada`, 2026-08-17), `docs/architecture/SUPABASE.md` §1 |
-| **Identidad humana / IdP** | **FusionAuth = SELECTED / APPROVED DIRECTION** (ADR-028) y **HOSTING = SELF-HOSTED EN `juval-server`** (decisión explícita del usuario, 2026-08-26, **ADR-031 `Aceptada`, Opción A**; obligó a **enmendar ADR-027** en dos cláusulas — la exclusión "identity server" queda derogada, el resto de ADR-027 sigue vigente). **Fase 1 DESPLEGADA (2026-08-27, ejecución manual del usuario)**: `IMPLEMENTATION = PARTIALLY_IMPLEMENTED` (instancia 1.69.0 `active`+`enabled`, PostgreSQL `active`, `/api/status` Ok, OIDC discovery/JWKS/RS256 verificados read-only contra el emisor **local**), `RUNTIME = INACTIVE` (`JUVAL_AUTH_MODE` sin definir) y `AMAZON RF-03/RF-04 = NOT_VERIFIED`. **Corregido 2026-09-10** — este punto decía «sin tenant `JUVAl`, sin aplicación, sin roles»; las dos primeras afirmaciones son **falsas**: el tenant `5fcaaf07-8832-491a-a6e7-35d348a591b6` y la aplicación `84f077a0-b2b0-4655-8168-082b2233d029` **existen** (`VERIFIED_RUNTIME_READ_ONLY`, 2026-09-10 — discovery con alcance de tenant responde 200 frente a 500 para UUIDs aleatorios, y la clase de error OAuth distingue `invalid_client_id` de `invalid_redirect_uri`; ver `docs/research/FUSIONAUTH_PUBLIC_SURFACE_DISCOVERY.md` §14). **No recrear ninguno de los dos.** Matices que **no** deben colapsarse: (a) los **nombres** de tenant y aplicación **no** se reverificaron — no son observables públicamente; (b) los roles `viewer`/`operator`/`admin` **no** se reverificaron (`ROLE_RUNTIME_REVERIFICATION = DEFERRED`, no bloquea el trabajo de superficie pública); (c) los redirect URIs probados **no fueron aceptados**; la lista exacta autorizada no se ha leído, así que la página de login hospedada real **no puede renderizarse** por discovery público (`BLOCKED_BY_REDIRECT_CONFIGURATION`); (d) la política de contraseñas no se reverificó en esta pasada y los controles 1–11 siguen `NOT_VERIFIED`. El discovery del login está bloqueado por configuración de redirect; la vía autorizada es la UI Admin existente, sin API keys ni acceso a credenciales de DB. Deviación registrada: se importó el schema con `psql`, no con `deploy/fusionauth/install.sh` — re-ejecutar el script (idempotente) reconcilia. Observado: **dos** listeners (`:9011` y `:9012`), ambos cubiertos por el mismo default-deny. **Explicado 2026-09-09**: es comportamiento de fábrica de 1.69.0 — una instancia limpia de laboratorio intenta el mismo segundo listener sin que nadie lo configure, así que **no es una desconfiguración de `juval-server`** (`docs/research/FUSIONAUTH_169_IDENTITY_LAB.md` §9.1). **Fase 2 (emisor público vía túnel de salida) bloqueada en una decisión del usuario**. Cero reglas `ufw` nuevas en todo el despliegue. Gap abierto heredado de ADR-021: control 6 (exclusión del nombre) — **medido 2026-09-09**: FusionAuth 1.69.0 acepta contraseñas que contienen `firstName`/`lastName` incluso con `disallowUserLoginId=true`, así que JUVAl lo implementa (ADR-035); ante Amazon el control sigue en `PARTIALLY_SATISFIED` (etiqueta unificada 2026-09-10 — ver la fila «Control 6» más abajo); `MINIMUM_FUSIONAUTH_VERSION = 1.63.0`. **Okta RECHAZADO** (2026-08-19, ADR-022) — no reabrir. Cognito, Entra External ID/workforce, Auth0, Supabase Auth, federación Google/Microsoft, passwordless-only, JumpCloud y ZITADEL **RECHAZADOS/ELIMINADOS** (ADR-021); FreeIPA + Keycloak quedó `12/12` documental y mejor clasificado, **no elegido** — ADR-028 explica por qué. Alojamiento: self-hosted en `juval-server` (ADR-031 `Aceptada`, Opción A — ADR-027 enmendado) | **ADR-031** (hosting), **ADR-028** (proveedor), ADR-022 (`RECHAZADA/SUPERSEDED`), ADR-021 (evidencia medida), `docs/compliance/SP_API_REGISTRATION_REMEDIATION.md` §33 (estado vigente), §30/§32 |
-| **AuthN/AuthZ backend** | **IMPLEMENTED + TESTED** — `interfaces/api/auth.py`: validación OIDC/JWT (emisor, firma JWKS, audiencia, expiración, RS256, leeway explícito de reloj, caché JWKS explícita) y RBAC por capacidades (`viewer`/`operator`/`admin`) aplicado server-side en **los 10+ endpoints** que lo requieren. **Inactivo hasta que `JUVAL_AUTH_MODE=oidc`** y se complete la configuración del emisor | ADR-028/ADR-031 (proveedor y alojamiento; ADR-022 quedó RECHAZADA), `docs/compliance/ACCESS_CONTROL.md` |
-| **BFF de navegador (ADR-034)** | **IMPLEMENTED + TESTED, NO ACTIVADO** — `interfaces/api/bff.py`: Authorization Code + PKCE S256, `state`/`nonce` server-side, sesión en cookie `HttpOnly`, CSRF de doble envío, logout con propagación al IdP; 34 tests. La custodia de tokens en la SPA queda **rechazada** explícitamente. Un único punto de inicialización de almacenes y validación en el `lifespan`: una configuración de producción inválida **impide arrancar** (consolidación 2026-09-10). Activación bloqueada por: la superficie pública de nginx (cinco de sus diez reglas siguen `NOT_VERIFIED` — **el laboratorio del 2026-09-10 midió el *proxy*, no el *proveedor***: el despacho, la denegación y el reenvío de cabeceras quedan `LAB_BEHAVIOURALLY_VERIFIED`, pero qué sirve FusionAuth 1.69.0 sigue sin medir y sigue bloqueando la Fase 2; además el hallazgo **N-1** queda abierto — `/css`, `/js` e `/images` responden 301 reflejando el `Host` del cliente, no 404), la integración del frontend, la migración sin aplicar y la configuración de redirects/emisor pendiente (tenant y aplicación existentes; discovery §14) | **ADR-034**, **ADR-036** (`Aceptada`), `docs/research/NGINX_PUBLIC_SURFACE_LAB.md` |
-| **Almacén de sesiones (ADR-036)** | **IMPLEMENTED + TESTED, MIGRACIÓN NO APLICADA** — puertos en `application/session_store.py`, adaptadores en memoria y PostgreSQL, cifrado AES-256-GCM (`infrastructure/crypto/token_cipher.py`), migración `20260909000004`. **36 tests de contrato verdes contra un PostgreSQL 16.15 real y desechable (2026-09-10)**; RLS con cero políticas | **ADR-036** (`Aceptada`, 2026-09-09) |
-| **Control 6 (exclusión del nombre)** | **`CONTROL_6_AMAZON = PARTIALLY_SATISFIED`** — clasificación unificada 2026-09-10, tres afirmaciones que no deben colapsarse: (a) el hueco de FusionAuth 1.69.0 es `BEHAVIORALLY_VERIFIED` — laboratorio aislado, control positivo disparando; (b) la mitigación de JUVAl es `VERIFIED_CODE + VERIFIED_TEST` — `domain/password_policy.py` (20 tests) y el chokepoint `application/password_provisioning.py` (10 tests, añadidos 2026-09-10: sin ellos la exigibilidad del control no estaba probada); (c) ante Amazon sigue `NOT_VERIFIED` — hoy el chokepoint **no protege ninguna contraseña real**, no tiene adaptador y no hay ruta de producción. Residual con nombre: la consola administrativa (`NOT_TESTED`) | **ADR-035**, `docs/research/FUSIONAUTH_169_IDENTITY_LAB.md` §9.6 |
-| Clerk | **DESCARTADO** — no seleccionado; ver ADR-021 (falla ≥4 de 11 requisitos HARD) y ADR-028 (proveedor elegido) | ADR-021, ADR-028 |
-| Recomendación técnica de backend (Python 3.11+, `pytest`, `openpyxl`) | Ya en uso (`pyproject.toml`) | `ARCHITECTURE.md` §15 (recomendación, no ADR) |
-
-Cada tecnología de esta lista necesita una razón concreta antes de
-instalarse — no instalar solo porque aparece aquí como candidata. Si el
-usuario decide fijar alguna de estas piezas, la decisión debe registrarse
-como ADR (o al menos como APPROVED explícito en una conversación) antes
-de que el agente la trate como base para nuevo código.
+Dominio público, túnel/TLS, topología de sitios del navegador (ADR-038,
+Propuesta), migración live de sesiones, pruebas humanas RF03 y envío Amazon
+siguen bloqueados. No desplegar ni migrar producción implícitamente. Frontend
+permanece congelado hasta autorización o cierre del gate aplicable.
 
 ## 15. Reproducibilidad — ExecutionRun
 
@@ -414,12 +314,10 @@ de que el agente la trate como base para nuevo código.
 `tests/integration/test_reproducibility.py` (2, reproducibilidad
 demostrada para el caso sin fuentes externas).
 
-**Persistencia entre corridas: NOT IMPLEMENTED.** `ExecutionRun` es
-in-memory/local por corrida — no hay historial consultable entre
-ejecuciones (`infrastructure/logging/` sigue vacío). No confundir "el
-objeto existe y es correcto" con "hay un historial persistido de
-corridas pasadas": son afirmaciones distintas (ver
-`docs/architecture/EXECUTION_MODEL.md`).
+**Persistencia entre corridas: IMPLEMENTED.** SQLite (ADR-013) y
+Supabase/PostgreSQL para runs/records (ADR-017/019); no confundir esta
+persistencia con la migración de sesiones (ADR-036), todavía no aplicada a
+producción. Las verificaciones reales históricas viven en `docs/`.
 
 **Gap conocido**: la estructura actual **no** captura `thresholds`
 usados ni `sources_used`, a diferencia del diseño original de
@@ -440,86 +338,25 @@ upload. `.gitignore` actual ya excluye `.venv/`, `__pycache__/`, `*.pyc`,
 
 ## 17. Testing
 
-Estado real (2026-09-10): **619 tests pasando, 28 skipped**; frontend
-**113** (`npm test`) y **27 E2E** contra el stack real. El bloque
-siguiente describe el desglose histórico de Fase 4A y ya no coincide con
-el conteo actual; se conserva como contexto de aquella fase, no como
-estado vigente.
+Ejecutar `.venv/bin/python -m pytest -q` antes de cerrar cambios en Domain o
+Processing y en milestones. Informar resultados medidos y razones de skips;
+no convertir skips en evidencia. Usar focused tests por cambio y gate amplio
+antes de commit/push según alcance. Nunca ocultar fallos o eliminar un test
+para reducir código; simplificar redundancia conservando cobertura real.
 
-Histórico de Fase 4A: **209 tests pasando, 0 fallos, 0 skips**
-(`.venv/Scripts/python -m pytest -q`) — 138 en `tests/unit/` (14
-archivos, sin I/O; incluye 2 tests puramente estructurales de
-`SupabaseExecutionRunStore`, ADR-017, sin verificación contra una base
-real) + 71 en `tests/integration/` (7 archivos: import/export Excel,
-pipeline end-to-end, reproducibilidad, persistencia SQLite de
-`ExecutionRun`, CLI, API — `interfaces/api/`, 19 tests, Fase 4A).
-`tests/fixtures/` contiene `sample_sourcing_TEST_DATA.xlsx`, ya
-poblado. Desglose completo por archivo en
-`docs/architecture/TESTING_STRATEGY.md`.
-
-**Nota histórica**: 111 era el número de tests unitarios al cierre de
-Fase 1; 165 al cierre de Fase 2 (ADR-012); 177 al cierre de Fase 3
-(ADR-013); 188 tras agregar el CLI, el export gap, y el fallback
-fail-closed de severidad (ADR-015), antes de Fase 4A (2026-08-17). No
-usar ninguno como referencia del estado actual — quedan documentados
-aquí solo como datos históricos de cierre de fase.
-
-Los 19 skips del almacén de sesiones desaparecen si se exporta
-`JUVAL_SESSION_DB_URL` apuntando a un PostgreSQL desechable: **nunca** la base
-de FusionAuth ni Supabase live (`docs/adr/ADR-036`, sección Estado, describe el
-procedimiento verificado: cluster en espacio de usuario, sin `sudo`, sin puerto
-TCP, destruido al terminar).
-
-Ejecutar antes de cerrar cualquier cambio en `domain/`/`processing/`:
-
-```bash
-.venv/Scripts/python -m pytest -q
-```
-
-Nunca eliminar un test únicamente para reducir código. Un test puede
-simplificarse si es redundante, pero debe existir cobertura real de
-comportamiento. Ningún test debe ocultar un error para pasar — debe
-afirmar que el error se reportó correctamente (`tests/README.md`).
+Sesiones: `tools/session_store_lab.py` usa PostgreSQL desechable;
+`JUVAL_TEST_SESSION_DB_URL` es exclusivo para sus tests, nunca DSNs de runtime.
+No aplicar migraciones live mediante tests. Nginx: lab desechable con
+`JUVAL_NGINX_BIN`; sin él, tests behaviorales se saltan y no están verificados.
 
 ## 18. Documentación y ADR
 
-`docs/adr/` contiene **36 ADRs** (ADR-001 a ADR-036; verificado por
-conteo de archivos 2026-09-09), la mayoría
-fechados 2026-08-16, ADR-014 a ADR-018 fechadas 2026-08-17. ADR-001 a
-ADR-008 y ADR-010 a ADR-018 están en `Estado: Aceptada`: separación
-UI/Core, Excel como intercambio, provenance, estados de verificación,
-independencia de diseño PWA/.exe, cálculos determinísticos, thresholds
-configurables, límites del AI Analyst, severidad de riesgo por defecto
-(provisional, no aprobada por negocio), `SourcingRecord` como
-composición, estrategia de `record_ref`, persistencia local de
-`ExecutionRun` vía SQLite, **elección de PWA como interfaz principal**
-(ADR-014 — no aprueba framework/hosting concreto), **fallback
-fail-closed para severidad de riesgo no mapeada** (ADR-015 — decisión
-técnica; NO aprueba HAZMAT→HIGH/BULKY→MEDIUM como política comercial,
-esos siguen `PENDING`), **FastAPI como backend, `interfaces/api/`
-IMPLEMENTED** (ADR-016), **Supabase/PostgreSQL como persistencia de
-producción** (ADR-017 — decisión arquitectónica aprobada; el adapter
-está preparado pero **no verificado contra una base real**, ver
-`docs/architecture/SUPABASE.md` §1 — no tratar como equivalente en
-confianza a `SqliteExecutionRunStore`), **Railway como hosting del
-backend** (ADR-018 — `railway.toml` preparado, **sin desplegar**, ver
-`docs/PROJECT_STATUS.md` §Sesión 2026-08-17 (bloque 8) para el comando
-exacto pendiente). ADR-019 a ADR-026 se agregaron después: ADR-023
-(gobernanza del Design System), ADR-024 (IA de producto y contrato de
-Catalog), ADR-025 (ingesta multi-archivo, diez archivos por batch) y
-ADR-026 (CSV como formato de entrada) están **Aceptadas**.
-ADR-033 quedó en `Estado: Propuesta` (estrategia de verificación sin
-credenciales administrativas — nada de ella se ha ejecutado); **ADR-034**
-(BFF), **ADR-035** (Control 6, «Aceptada con riesgo residual») y **ADR-036**
-(almacén de sesiones duradero) están **Aceptadas** por decisión explícita del
-usuario del 2026-09-09.
-**ADR-009 (Development Loop + Completion Gates) y ADR-021 permanecen en
-`Estado: Propuesta`** — no tratarlas como proceso obligatorio hasta que
-el usuario las confirme explícitamente (ver `docs/DEVELOPMENT_LOOP.md`,
-`docs/PHASE_GATES.md`). El estado de ADR-022 lo mantiene el workstream de
-identidad, no este contrato. **Respetar los ADRs
-Aceptados** — si una nueva implementación contradice uno, no ignorarlo:
-reportar el conflicto.
+Consultar el estado explícito del ADR antes de usarlo como autoridad. ADR-009,
+ADR-021, ADR-033 y ADR-038 siguen Propuesta; ADR-022 RECHAZADA/SUPERSEDED;
+ADR-027 enmendada por ADR-031. Respetar alcance/enmiendas de los Aceptados;
+no convertir una propuesta en aprobación porque resulte conveniente.
+Estado/evidencia central en `docs/IDENTITY_SECURITY_READINESS.md`; snapshots
+fechados son históricos, no una autorización de producción.
 
 Antes de una decisión arquitectónica importante: comprobar si ya existe
 documentación en `docs/architecture/` o un ADR en `docs/adr/`; actualizar
@@ -531,24 +368,19 @@ mismo cambio (regla explícita de `DATA_DICTIONARY.md`).
 
 ## 19. Git
 
-El repositorio **existe, tiene historial y remoto** (`origin`, GitHub),
-rama `master`. Reglas: no commits destructivos, no borrar historial,
-revisar estado antes de cambios grandes, nunca incluir
-`.env`/secrets/credenciales/archivos temporales/datasets privados
-grandes.
-
-**Cambios concurrentes**: el working tree suele contener modificaciones
-de otro trabajo en curso. Usar **siempre pathspec explícito** al hacer
-`git add`; **prohibido** `git add .`, `git add -A`, `git reset --hard`,
-`git checkout -- .`, `git clean` y cualquier force push. Antes de
-`push`: `git fetch origin` y verificar que no hay divergencia
-inesperada; si `origin/master` avanzó, parar y reportar — nunca
-merge/rebase/force automático.
+Git inicializado con historial y remoto GitHub. Verificar estado antes de
+cambiar. Commits atómicos; sin reescritura, rebase, force-push ni secretos.
+Durante el accelerator el usuario autoriza commits y push fast-forward desde
+Linux tras tests/compliance/secret scan y fetch que pruebe remote-only=0.
+La autenticación SSH del operador es una acción local; nunca pedir su clave o
+passphrase. Un fallo de fetch impide afirmar sincronización con el remoto.
 
 ## 20. Dependencias
 
-Dependencias actuales (`pyproject.toml`): `openpyxl>=3.1` (runtime),
-`pytest>=7` (dev). Antes de agregar una dependencia nueva, preguntar en
+Dependencias vigentes: `pyproject.toml` y lockfiles de cada frontend;
+no duplicar versiones aquí. FastAPI/uvicorn/multipart, PyJWT/cryptography y el
+extra PostgreSQL ya existen además de openpyxl y herramientas de tests.
+Antes de agregar una dependencia nueva, preguntar en
 este orden: ¿código existente? ¿stdlib? ¿una dependencia ya instalada?
 ¿una solución más simple? Si se agrega, documentar por qué. Evitar
 dependencias pequeñas para problemas triviales.

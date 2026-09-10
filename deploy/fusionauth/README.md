@@ -4,18 +4,18 @@
 2026-08-26". **Control evidence plan:**
 `docs/compliance/IDENTITY_DEPLOYMENT_FUSIONAUTH.md`.
 
-**State: nothing is installed.** Every fact below about the package, its
-service account, its Java bootstrap and its configuration keys was read from
-the real `fusionauth-app_1.69.0-1_all.deb` with `dpkg-deb` on 2026-08-26,
-without installing it. Facts about a *running* instance do not exist yet and
-are not claimed anywhere in this file.
+**Current state 2026-09-10:** FusionAuth and PostgreSQL are installed/running;
+public identity nginx/TLS is not activated. Exact tenant/application IDs exist.
+See `docs/IDENTITY_SECURITY_READINESS.md` for current evidence and operator
+queue. The package-inspection/install sections below retain historical design
+context; do not rerun the installer against stable runtime as a readiness test.
 
 ---
 
 ## 1. Network architecture
 
-Two phases. **Phase 1 changes nothing outside the host** and produces most of
-the Amazon evidence. Phase 2 is the only part that needs a decision from the
+Two phases. **Phase 1 changes nothing outside the host** and produces local
+readiness evidence; Amazon production behavior is a separate gate. Phase 2 is the only part that needs a decision from the
 user, and it is isolated here so it blocks nothing else.
 
 ### Phase 1 — install, configure, evidence (no external network change)
@@ -69,17 +69,16 @@ network boundary.
 
 | Zone | Members | What keeps it there |
 |---|---|---|
-| **PUBLIC** | `GET /.well-known/openid-configuration`, `GET /.well-known/jwks.json` | `nginx-fusionauth-public.conf` allow-list; every other path returns 404 |
+| **PUBLIC (planned, inactive)** | BFF OAuth and assets explicitly inventoried in nginx template | Default deny; real hosted-flow compatibility still required |
 | **LAN-ONLY** | `:22` SSH, `:5173` vite, `:8000` uvicorn | Existing UFW rules, unchanged (H-1/H-3) |
 | **LOCALHOST / INTERNAL** | PostgreSQL `:5432`, nginx `:8080`, FusionAuth `:9011`, FusionAuth `/admin` and `/api` | Loopback binds where the software allows one; UFW default-deny where it does not |
 
-**Why only two public paths.** `interfaces/api/auth.py` fetches
-`<issuer>/.well-known/jwks.json` and validates issuer, audience, signature and
-expiry locally. It makes no other call to the IdP. The discovery document is
-published alongside it because `tools/verify_oidc.py` checks it and because
-OIDC clients expect it. If and when the PWA gains a browser login flow — which
-does not exist today — `/oauth2/*` and the hosted-login assets must be added
-deliberately, with that reason recorded. Do not add them pre-emptively.
+**Current planned surface:** ADR-034 expanded the old discovery/JWKS-only
+verifier surface for browser authentication. The inactive template has seven
+exact OAuth/discovery rules and three asset prefixes, with default deny. Some
+provider requirements remain NOT_VERIFIED. ADR-037 fixes nginx-generated
+redirects/version disclosure, not hosted-login compatibility. Do not widen
+assets or activate merely because syntax and echo-lab tests pass.
 
 ---
 
@@ -374,8 +373,8 @@ change later.
 
 Whichever is chosen, the shape is identical: the tunnel client runs on
 `juval-server` as a systemd service, dials out, and forwards to
-`127.0.0.1:8080`, where `nginx-fusionauth-public.conf` allows exactly two
-paths. Nothing else about the deployment changes.
+`127.0.0.1:8080`, where the reviewed `nginx-fusionauth-public.conf` applies its explicit
+BFF allow-list. Real hosted-flow compatibility remains a prerequisite. Nothing else about the deployment changes.
 
 **Before enabling it, verify the allow-list actually holds** — from outside:
 
@@ -385,8 +384,9 @@ curl -o /dev/null -w '%{http_code}\n' https://<issuer>/admin    # expect 404
 curl -o /dev/null -w '%{http_code}\n' https://<issuer>/api/status # expect 404
 ```
 
-Two 404s and one key set. Anything else means the surface is wider than
-designed — do not proceed to `JUVAL_AUTH_MODE=oidc`.
+These three probes alone are insufficient for BFF activation. Run the full
+positive/negative and hosted-browser matrix in `docs/IDENTITY_SECURITY_READINESS.md`;
+production verification, migration and human RF03 remain required.
 
 ---
 

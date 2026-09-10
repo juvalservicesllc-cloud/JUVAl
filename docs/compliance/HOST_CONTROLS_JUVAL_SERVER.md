@@ -885,3 +885,15 @@ added 2026-08-26; `juval-fusionauth-backup` **system** timer/service for H-17
 added 2026-08-27, not yet installed),
 [`IDENTITY_DEPLOYMENT_FUSIONAUTH.md`](IDENTITY_DEPLOYMENT_FUSIONAUTH.md) §0,
 [`ADR-031`](../adr/ADR-031-fusionauth-hosting-location.md).
+
+
+## Accelerator runtime update — 2026-09-10
+
+Supersedes historical "backup not scheduled" status: system
+`juval-fusionauth-backup.timer` enabled/active, service exit success at
+2026-09-10 03:33:11 UTC. User `juval-host-monitor.timer` enabled/active,
+service exit success 16:56:41 UTC. Exit codes do not prove dump contents,
+restore success or off-host durability. H-17 is PARTIALLY_VERIFIED_RUNTIME;
+H-18 remains HUMAN/EXTERNAL. Reboot-required marker exists; no reboot or
+OS upgrade performed. Listener inventory and remaining verification boundaries
+are in `docs/IDENTITY_SECURITY_READINESS.md`. No service/firewall change.

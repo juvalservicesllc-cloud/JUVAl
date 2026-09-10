@@ -4385,3 +4385,54 @@ AMAZON_COMPLIANCE_READINESS = NOT_READY
 laboratory measurement. The only stage that counts as Amazon evidence —
 `PRODUCTION_BEHAVIORAL_EVIDENCE` (§53.1) — remains empty, because
 `JUVAL_AUTH_MODE` is unset and no production user exists.
+
+## 55. Autonomous accelerator — technical readiness, no Amazon promotion (2026-09-10)
+
+Current operational ledger and batched operator session:
+[`IDENTITY_SECURITY_READINESS.md`](../IDENTITY_SECURITY_READINESS.md).
+
+- Repository reconstructed at `16189b7`, clean, cached remote 0/3. SSH fetch
+  denied publickey; no safe push or current remote-synchronization claim.
+- Exact tenant/application existence reverified publicly with controls. Names
+  and roles NOT_REVERIFIED. Real login remains blocked by redirect configuration;
+  no Admin baseline, temporary mutation, password or TOTP interaction occurred.
+- Session contract fixture no longer drops runtime tables from runtime DSNs:
+  dedicated test DSN, isolated schemas, reproducible private PostgreSQL lab.
+- BFF startup now actually checks database connectivity, tables/columns, owner
+  and zero-policy RLS, read-only with bounded waits and sanitized failures.
+- Session projection no longer reports authentication after refresh revocation.
+- ADR-037 fixes N-1 and nginx version disclosure in the inactive template and
+  echo lab. No route additions; D-1 and hosted-login/MFA compatibility unresolved.
+- ADR-038 proposes browser/API site topology because Lax cookies cannot support
+  cross-site provider-domain fetches merely by enabling CORS. Domain choice and
+  deployment remain pending, no cookie policy relaxed.
+- SEC-DEPS-01 reviewed: dependency paths and minimal patches documented in
+  `SEC_DEPS_01_REVIEW.md`; frontend freeze blocks patches, not investigation.
+- Backup and monitoring timers observed enabled/active with successful last
+  exits. That is not restore or off-host backup evidence. Reboot marker remains.
+
+`CONTROL_6_AMAZON=PARTIALLY_SATISFIED`, `RF03_BEHAVIORAL=NOT_EXECUTED`,
+`AMAZON_REAPPLICATION=BLOCKED`, `PRODUCTION_AUTH_ACTIVATION=NOT_EXECUTED`.
+No Amazon submission, live migration, public DNS or production nginx change.
+The original generic-form findings and N-1 history remain historical evidence;
+current statuses above supersede them without inventing production success.
+
+### 55.1 Updated remote / portal evidence
+
+HTTPS read-only fetch succeeded: `origin/master=6a6d07c`, two remote-only portal
+commits (`bafaa19`, `6a6d07c`) versus Linux identity/accelerator work. No push or
+merge authorized under the current divergence. Portal current source is remote;
+its auto-deployment is documented there, not independently verified in Vercel.
+
+```
+IDP_IMPLEMENTATION          = PARTIALLY_IMPLEMENTED
+CONTROL_6_AMAZON            = PARTIALLY_SATISFIED
+RF03_BEHAVIORAL             = NOT_EXECUTED
+PUBLIC_SURFACE (nginx)      = LAB_BEHAVIOURALLY_VERIFIED (N-1 fixed; D-1 open)
+REAPPLICATION GATE          = BLOCKED
+RF-01 PARTIAL
+RF-02 PARTIAL
+RF-03 PARTIAL
+RF-04 PARTIAL
+RF-05 PARTIAL
+```

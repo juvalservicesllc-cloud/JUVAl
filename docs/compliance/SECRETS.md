@@ -24,17 +24,17 @@ subject to password composition rules.
 
 ## 1. Credential inventory
 
-Five classes, deliberately kept separate. A compromise of one must not imply a
+Six classes, deliberately kept separate. A compromise of one must not imply a
 compromise of another.
 
 | # | Class | Examples | Where it lives | Rotation | Exists today? |
 |---|---|---|---|---|---|
-| 1 | **Human identity** | Operator passwords, MFA enrollments | Managed IdP only (ADR-022) | IdP policy: max 365 days, min 1 day | NO — no IdP tenant yet |
+| 1 | **Human identity** | Operator passwords, MFA enrollments | FusionAuth only (ADR-028/031) | IdP policy: max 365 days, min 1 day | Tenant exists; current human-user inventory NOT_REVERIFIED |
 | 2 | **SP-API credentials** | `JUVAL_SP_API_LWA_CLIENT_ID`, `..._CLIENT_SECRET`, `..._REFRESH_TOKEN` | Backend-only secret store | **≤12 months** and immediately on compromise (DPP §1.4.2) | **NO** — registration is `REJECTED_REMEDIATION_REQUIRED`; no credential has ever been issued |
 | 3 | **Database credentials** | `JUVAL_SUPABASE_DB_URL`, `SUPABASE_SERVICE_ROLE_KEY` | Backend-only secret store / provider dashboard | ≤12 months and on compromise | Provider-side; project exists |
 | 4 | **Deployment credentials** | Railway token, Vercel token, GitHub PAT / deploy keys | Provider account, protected by provider MFA | ≤12 months and on operator offboarding | Provider-side |
 | 5 | **Service identities** | Future worker/queue identity; the scheduled-job identity if one is ever introduced | Backend-only secret store, scoped per environment | ≤12 months | NO — not implemented |
-| 6 | **Session-layer secrets** (ADR-034/ADR-036) | `JUVAL_SESSION_ENCRYPTION_KEYS`, `JUVAL_OIDC_CLIENT_SECRET`, `JUVAL_SESSION_DB_URL` | Backend environment only — **never** in the database the keyring protects, never in a `VITE_*` variable | Keyring: additive rotation, ≤12 months; client secret: ≤12 months and on compromise | **NO** — code exists and is tested, no value has ever been issued (`JUVAL_AUTH_MODE` unset) |
+| 6 | **Session-layer secrets** (ADR-034/ADR-036) | `JUVAL_SESSION_ENCRYPTION_KEYS`, `JUVAL_OIDC_CLIENT_SECRET`, `JUVAL_SESSION_DB_URL` | Backend environment only — **never** in the database the keyring protects, never in a `VITE_*` variable | Keyring: additive rotation, ≤12 months; client secret: ≤12 months and on compromise | **NOT_ACTIVATED** — code tested; current secret issuance inventory not inspected |
 
 `SUPABASE_ANON_KEY` and `SUPABASE_URL` are **not** secrets: they are public by
 design and protected by Row Level Security. They are listed in `.env.example`
@@ -60,8 +60,8 @@ These are non-negotiable (`CLAUDE.md` §16):
 5. **No secret hardcoded in source.** Configuration comes from the
    environment.
 6. **The backend never needs a client secret to validate a token.** It
-   verifies signatures with the IdP's *public* JWKS (`auth.py`). There is no
-   IdP secret in the backend at all.
+   verifies signatures with the IdP's *public* JWKS (`auth.py`). The ADR-034 BFF can separately require a client secret for code/refresh
+   exchanges; that is distinct from JWT verification.
 
 ---
 

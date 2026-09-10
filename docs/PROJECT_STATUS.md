@@ -16,6 +16,11 @@ componente puede estar `IMPLEMENTED` sin que su fase esté `COMPLETE`.
 
 ## Current Phase
 
+**2026-09-10: Identity/Security production readiness — PARTIALLY IMPLEMENTED.**
+Current evidence and operator queue: [IDENTITY_SECURITY_READINESS.md](IDENTITY_SECURITY_READINESS.md).
+The phase closures below are historical and remain valid; they do not mean
+identity is active or that Amazon remediation is complete.
+
 **Fase 2 (SourcingRecord + Excel Vertical Slice): COMPLETE** (Completion
 Gate evaluado formalmente 2026-08-16, todos los criterios obligatorios
 en `PASS` — ver `docs/PHASE_GATES.md` §Fase 2 y ADR-012 para el cierre
@@ -32,7 +37,10 @@ persistir es responsabilidad explícita del caller.
 
 ## Frontend Handoff Status
 
-**FRONTEND_READY_FOR_BACKEND_INTEGRATION** (frontend checkpoint `ffe2a36`, 2026-08-17). React/TypeScript PWA routing, responsive shell, mobile navigation, theme/branding, and the real Upload/download flow are implemented. Dashboard remains **DEMO**; Runs and Products remain **DEMO / API-ready** pending reconciliation with the implemented run-scoped FastAPI resources. This status does not declare the full product or all backend integrations complete. See `docs/FRONTEND_BACKEND_HANDOFF.md` for the operational contract and ownership boundary.
+Frontend is implemented and frozen during identity/security recovery. No
+accelerator changes in `frontend/`, `frontend-next/` or `demo/`. Historical
+integration/parity evidence lives in `architecture/PRODUCT_BEHAVIORAL_PARITY.md`;
+BFF integration and browser site topology still require their activation gates.
 
 ## Data Acquisition Policy Status
 
@@ -73,71 +81,28 @@ reconciliación documental correspondiente.
 
 ## Implementation Status
 
-| Componente | Estado |
+| Component | Current classification |
 |---|---|
-| `domain/` (provenance, product, costs, risk, decision, identifiers, units, issues) | **IMPLEMENTED** |
-| `domain/sourcing_record.py` (`SourcingRecord`) | **IMPLEMENTED** — composición pura (ADR-011), 7 tests |
-| `domain/execution_run.py` (`ExecutionRun`) | **IMPLEMENTED** (estructura) — 11 tests unitarios + 2 de integración de reproducibilidad. **Persistencia entre corridas: IMPLEMENTED** vía SQLite local (`infrastructure/logging/sqlite_execution_run_store.py`, ADR-013 `Aceptada`, 12 tests) — no invocada automáticamente por `run_pipeline()` (decisión deliberada, Opción B) |
-| `processing/` (profitability, decision_engine, decision_score, data_quality) | **IMPLEMENTED** |
-| `processing/pipeline.py` (`process_record`/`process_batch`) | **IMPLEMENTED** — orquesta Data Quality → Profitability → Decision; la etapa "Risk" solo **lee** `RiskFlag`s ya construidos en import, no evalúa reglas nuevas — hoy solo HAZMAT/BULKY tienen fuente de datos (Excel), los otros 12 `RiskType` no están cableados. No se inventan fuentes nuevas para ellos. |
-| `application/run_pipeline.py` | **IMPLEMENTED** — único módulo que conecta `infrastructure/` y `processing/` |
-| `infrastructure/excel/` (importer, exporter, column_mapping) | **IMPLEMENTED** — columnas por nombre, normalización, validación por celda, fixtures, 21 tests de integración (import+export) |
-| `infrastructure/enrichment/` | **NOT IMPLEMENTED** — solo `README.md` |
-| `infrastructure/logging/` | **IMPLEMENTED** (parcial) — `sqlite_execution_run_store.py` (persistencia de `ExecutionRun`, ADR-013 `Aceptada`); logging técnico operacional (stdout/archivo) sigue sin implementar |
-| `interfaces/cli` | **IMPLEMENTED** (2026-08-17) — `src/juval/interfaces/cli/main.py`, `argparse` (stdlib) sobre `run_pipeline()`/`export_excel()`, thresholds/fees siempre explícitos por flag (ADR-007), persistencia opt-in vía `--persist-db` (ADR-013 Opción B), 7 tests de integración |
-| `interfaces/api` | **IMPLEMENTED** (Fase 4A, 2026-08-17) — `main.py`/`models.py`/`service.py`, FastAPI (ADR-016). The React/Vite PWA is **FRONTEND_READY_FOR_BACKEND_INTEGRATION**; Dashboard remains demo and Runs/Products await contract reconciliation. See `docs/FRONTEND_BACKEND_HANDOFF.md`. Deployment/auth status is unchanged. |
-| `interfaces/desktop` | **NOT IMPLEMENTED** — solo `README.md`; `.exe` no se construirá como interfaz principal (ADR-014); no se planea trabajo aquí |
-| `processing/decision_score.py` (`DecisionScoreResult`) | **IMPLEMENTED** (código, 6 tests) / **NOT FULLY INTEGRATED** en el pipeline — `process_record`/`process_batch` no lo invocan. Fórmulas de subscore no aprobadas por negocio. Pendiente técnico registrado en §Technical Debt; su resolución corresponde a Fase 5 (Decision Intelligence), no a esta fase. |
-| AI Analyst | **NOT IMPLEMENTED** — solo diseño (`AI_ANALYST.md`, ADR-008) |
-| Persistencia (Supabase) / Auth (Clerk) / Framework frontend+backend PWA (Next.js, FastAPI u otros) | **NOT IMPLEMENTED** — todas `PENDING` de aprobación (`CLAUDE.md` §14, `docs/architecture/TECHNOLOGY_DECISIONS.md`). La elección de *interfaz* (PWA) ya no es `PENDING` — ver ADR-014 |
-
-El **vertical slice Excel → dominio → processing → Excel** funciona de
-extremo a extremo (`tests/integration/test_pipeline_end_to_end.py`) —
-esto es exactamente el alcance de Fase 2, **no** un producto completo:
-sin enriquecimiento externo, sin IA, sin persistencia entre corridas, sin
-interfaz de usuario real.
+| Domain, processing, Excel/CSV, CLI, API | IMPLEMENTED_TESTED; business scoring/severity policy limitations remain |
+| SQLite and Supabase run/record persistence | IMPLEMENTED; historical live verification in SUPABASE/PROJECT_STATUS session records |
+| Frontend React/Vite | IMPLEMENTED, frozen; BFF integration pending |
+| FusionAuth instance and exact tenant/application | RUNTIME_READ_ONLY_VERIFIED existence; names/roles not reverified |
+| BFF and durable sessions | IMPLEMENTED_TESTED_NOT_ACTIVATED; live session migration pending |
+| Public nginx | Template/lab only; N-1 fixed, asset compatibility and D-1 pending |
+| AI/enrichment | NOT_IMPLEMENTED; authorized source/business decisions required |
 
 ## Completion Gate Status
 
-| Phase | Gate | Detalle |
-|---|---|---|
-| Phase 0 | **PASS** | `docs/PHASE_GATES.md` §Fase 0 |
-| Phase 1 | **PASS** | `docs/PHASE_GATES.md` §Fase 1 |
-| Phase 2 | **PASS** | `docs/PHASE_GATES.md` §Fase 2, evaluado formalmente 2026-08-16. Todos los criterios obligatorios (Universal Gate + extensiones de Fase 2) en `PASS`. `record_ref` quedó formalmente documentado y aprobado por ADR-012. CLI ausente queda anotado como deuda técnica no bloqueante (no es criterio de cierre de esta fase). **Declarado `COMPLETE`.** |
-| Phase 3 | **PASS** | `docs/PHASE_GATES.md` §Fase 3, evaluado formalmente 2026-08-16. Todos los criterios obligatorios (Universal Gate + específicos de Fase 3) en `PASS`. Persistencia de `ExecutionRun` implementada vía SQLite (ADR-013 `Aceptada`). Integración con `run_pipeline()` resuelta explícitamente (Opción B): no se integra, por diseño deliberado. **Declarado `COMPLETE`.** |
-| Phase 4-10 | **BLOCKED** | Todas dependen de al menos una decisión `PENDING` (ver `docs/architecture/TECHNOLOGY_DECISIONS.md` y `docs/PROJECT_PLAN.md` §4). Sin cambio de estado respecto a versiones anteriores de este documento — no hay evidencia nueva que lo justifique. |
+Phases 0–3 remain historically COMPLETE. No new global phase closure is
+claimed. Identity/security activation and Amazon reapplication remain BLOCKED;
+see `PHASE_GATES.md` and the current readiness ledger. Technical implementation,
+lab verification and production readiness are separate claims.
 
 ## Tests
 
-```
-.venv/Scripts/python -m pytest -q
-209 passed, 0 failed, 0 skipped, ~2s
-```
-
-138 en `tests/unit/` (14 archivos: +`test_supabase_execution_run_store.py`,
-2 tests estructurales, ADR-017, sin verificación contra una base real —
-ver `docs/architecture/SUPABASE.md` §1) + 71 en `tests/integration/`
-(7 archivos: `test_execution_run_store.py` (12, ADR-013), `test_cli.py`
-(7, `interfaces/cli/main.py`), `test_excel_exporter.py` (5),
-`test_excel_importer.py` (20, incluye fallback fail-closed de
-`DEFAULT_RISK_SEVERITY`, ADR-015), `test_api.py` nuevo 2026-08-17 (19,
-`interfaces/api/`, Fase 4A, ADR-016)). Desglose completo por archivo:
-`docs/architecture/TESTING_STRATEGY.md`.
-
-**111 tests** es el número histórico de cierre de Fase 1, **165** el de
-cierre de Fase 2, y **177** el estado del repositorio inmediatamente
-después de cerrar Fase 3 (2026-08-16, antes del CLI) — ninguno es el
-estado actual, no citarlos como tal. Los tres se conservan como
-referencia histórica en `docs/architecture/TESTING_STRATEGY.md` y en
-`CLAUDE.md` §17, no se borran.
-
-**Unit test coverage ≠ product validation** (`TESTING_STRATEGY.md` §0):
-209 tests en verde confirman que el código se comporta como sus autores
-esperaban con datos sintéticos — no confirman que el modelo de negocio
-(thresholds, severidad de riesgo) sea correcto para el negocio real, ni
-que el sistema funcione con archivos de proveedores reales, ni que el
-CLI se haya usado con datos reales de un usuario final (solo con la
-fixture sintética y con argv construidos a mano en los tests).
+Current measured results are recorded in the dated accelerator blocks below.
+Backend, disposable PostgreSQL and real nginx suites have separate counts and
+skip conditions. Historical counts are not the current baseline.
 
 ## Documentation
 
@@ -856,51 +821,10 @@ Todas `PENDING`, ninguna se resuelve en este documento (ver
 
 ## Next Recommended Action
 
-Fase 2 y Fase 3 están `COMPLETE` (ambas 2026-08-16, ver §Current Phase).
-El único trabajo de categoría A identificado y ejecutable sin ninguna
-decisión `PENDING` (CLI, export gap, docstring desactualizado) se
-completó el 2026-08-17 (ver §Sesión 2026-08-17 arriba). Tras esa
-sesión, se auditó de nuevo la lista de deuda técnica conocida
-completa y no queda ningún ítem restante de categoría A: todo lo que
-sigue (Decision Score en el pipeline, ampliar `ExecutionRun` con
-thresholds/sources_used, `DEFAULT_RISK_SEVERITY`, cobertura de los 12
-`RiskType` restantes) requiere una decisión de negocio o de diseño
-explícita que no le corresponde inventar al agente.
-
-**Actualizado 2026-08-17**: el usuario resolvió explícitamente la
-elección de interfaz (ADR-014, PWA) — ver §Pending Decisions. Esto
-**no** desbloquea código de Fase 4 todavía: sigue `BLOCKED` por
-framework de backend, framework de frontend, y deployment, ninguno
-aprobado. El siguiente trabajo de código solo puede avanzar sobre fases
-posteriores (Fase 4+), y todas siguen `BLOCKED` por decisiones `PENDING`
-ajenas a esta tarea (framework backend/frontend/deployment de la PWA,
-Supabase, Clerk, fuente externa, proveedor de IA, fórmulas de negocio de
-Decision Score — ver §Pending Decisions). No se recomienda ninguna
-acción de código adicional hasta que el usuario resuelva explícitamente
-al menos una de esas decisiones bloqueantes.
-
-No iniciar código de Fase 4 en adelante (dashboard/PWA/API HTTP) ni
-resolver ninguna decisión `PENDING` de la lista de arriba como parte de
-ese siguiente paso — ambos requieren aprobación explícita del usuario
-primero. El CLI ya construido puede seguir usándose y extendiéndose con
-ajustes menores (más flags, mejor mensaje de error) sin que eso cuente
-como "iniciar Fase 4" — pero un backend HTTP, una PWA, o un empaquetado
-`.exe` sí lo harían y quedan fuera de alcance hasta esa aprobación.
-
-**Actualizado 2026-08-17 (bloque 3)**: el usuario aprobó explícitamente
-FastAPI, React+Vite, Vercel, Git/GitHub, y Supabase — Fase 4A (backend
-FastAPI) quedó **IMPLEMENTED** (ver §Sesión 2026-08-17 (bloque 3)), no
-`COMPLETE` (Fase 4 global sigue sin cerrar su Completion Gate). El
-siguiente trabajo recomendado, en orden, es: (1) instalar Node.js/npm
-para poder iniciar el scaffold de React+Vite (Fase 4B, framework ya
-elegido, no requiere nueva decisión); (2) que el usuario provisione un
-proyecto Supabase real para poder verificar `SupabaseExecutionRunStore`
-contra una base de datos de verdad; (3) investigar restricciones reales
-de Vercel para Python/uploads/tiempo de ejecución antes de configurar
-el deployment. Ninguno de los tres requiere una decisión de arquitectura
-nueva — son pasos de ejecución de decisiones ya tomadas, bloqueados
-únicamente por herramientas/credenciales que solo el usuario puede
-proveer.
+Follow the prioritized queue in `IDENTITY_SECURITY_READINESS.md`. Autonomous
+safe work proceeds under the operator's accelerator authorization; Admin
+credentials, DNS/topology, live migration, business policy and Amazon submission
+remain human boundaries. Do not restart obsolete provider-selection work.
 
 ## Relacionado
 
@@ -1179,3 +1103,35 @@ Gate nginx ampliado: **224 tests compliance passed** con nginx real; script de
 lab 0 fallos, `Location: /css/`, sin Host/scheme/port reflejado y `Server: nginx`.
 Self-review: ninguna ruta añadida, ninguna cabecera de upstream reinterpretada;
 el gate de compatibilidad real y producción permanece abierto.
+
+### Accelerator — truthful session projection and dependency review
+
+`/auth/session` no longer reports an authenticated snapshot after refresh has
+revoked its store record. It reloads and clears cookies on missing state;
+provider outages retain the valid session. Regression covers both HTTP outcomes.
+
+SEC-DEPS-01 reviewed against current npm advisories and local dependency paths:
+five unique frontend advisories (four fast-uri high, one Vitest moderate),
+dev/build-only paths; no reachable exploit sink found in reviewed product/config.
+Minimal patched targets and gates in `docs/compliance/SEC_DEPS_01_REVIEW.md`.
+Remediation blocked by explicit frontend freeze; no files there changed.
+Backend pip-audit and other two frontend lock audits show no known advisories.
+
+
+### Accelerator — new remote evidence changes consolidation boundary
+
+Read-only HTTPS fallback succeeded after SSH denial: fetched `origin/master`
+**6a6d07c04c17cbf7e3714c32d3d2e1576d5ddf6a**, with two remote-only commits
+`bafaa19` and `6a6d07c` adding `project-portal/` and its connected Git deployment
+configuration. This supersedes the earlier statement that the remote could not
+be read or that no portal existed. At discovery divergence was **2 remote-only /
+8 local-only**. No local work overwritten, no merge/rebase or push performed.
+The user's no-merge-to-synchronize/no-rebase rules require an explicit
+preservation/integration decision. Portal deployed status is a remote doc claim,
+not newly verified Vercel runtime evidence.
+
+Final core milestone gate: backend with real nginx **821 passed / 36 skipped**;
+disposable sessions **44 passed / 2 skipped** separately. Discovery **103 passed**;
+auth/BFF selection **93 passed**. Compliance **9 PASS / 1 WARN / 0 FAIL**;
+secret scan clean (427 files at that pass). Frontend content diff from starting
+HEAD is empty. ADR-038 topology is PENDING, no cookie policy or DNS changed.

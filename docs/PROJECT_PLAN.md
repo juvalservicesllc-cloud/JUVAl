@@ -46,6 +46,15 @@ Supabase). Fase 4 pasa a **`IMPLEMENTED` parcial (solo backend) /
 Completion Gate `PENDING`** — no `COMPLETE`, ver §Fase 4 actualizada
 abajo.
 
+## Estado vigente — 2026-09-10
+
+Identity/security production readiness is the active workstream, PARTIALLY
+IMPLEMENTED. [IDENTITY_SECURITY_READINESS.md](IDENTITY_SECURITY_READINESS.md)
+contains measured status, dependencies and operator queue. Dated 2026-08-17
+phase-4 checklists below are historical plans, not current deployment evidence.
+BFF/session implementation is not public auth activation; no frontend work is
+authorized by this roadmap during the freeze.
+
 ## 0. Cómo leer este documento
 
 Cada fase documenta: **Objetivo**, **Alcance**, **Fuera de alcance**,
@@ -97,10 +106,10 @@ Fase 0 (repo + docs) — COMPLETE
    └─ Fase 1 (domain + processing core) — COMPLETE
         └─ Fase 2 (SourcingRecord + Excel vertical slice) — COMPLETE (gate PASS, 2026-08-16)
              ├─ Fase 3 (data quality + ExecutionRun + auditability) — COMPLETE (gate PASS, 2026-08-16, ADR-013 Aceptada)
-             │     ├─ Fase 4 (dashboard PWA)                 [BLOCKED: interfaz elegida (ADR-014, PWA), pero stack frontend/backend/deployment sin aprobar]
-             │     │     └─ Fase 9 (auth)                    [BLOCKED: Clerk PENDING]
+             │     ├─ Fase 4 (dashboard PWA)                 [IMPLEMENTED; global gate not reclosed]
+             │     │     └─ Fase 9 (auth)                    [IMPLEMENTED_TESTED_NOT_ACTIVATED; identity gate blocked]
              │     ├─ Fase 6 (fuentes externas autorizadas)   [BLOCKED: fuente concreta no aprobada]
-             │     └─ Fase 8 (persistencia/Supabase)          [BLOCKED: Supabase PENDING]
+             │     └─ Fase 8 (persistencia/Supabase)          [IMPLEMENTED; session live migration pending]
              │           └─ Fase 9 (también depende de Fase 8)
              └─ Fase 5 (decision intelligence)                [BLOCKED: fórmulas de negocio no aprobadas]
                    └─ Fase 7 (AI Analyst)                     [BLOCKED: proveedor de IA no aprobado]
@@ -113,10 +122,10 @@ Fase 10 (production hardening) — depende de todas las fases relevantes al path
 |---|---|---|---|
 | ~~PWA vs. `.exe` vs. ambos~~ | Fase 4, Fase 10 | **RESUELTO 2026-08-17**: PWA elegida explícitamente por el usuario | ADR-014 (`Estado: Aceptada`); ADR-005 sigue vigente para la independencia de diseño, no se modifica |
 | ~~Framework frontend (React + Vite)~~ | Fase 4B | **RESUELTO 2026-08-18**: implementado y finalizado — Dashboard analítico, catálogo server-side (paginación/búsqueda/filtro/orden), Run Detail, Upload, Export, Appearance/branding; 59/59 tests unitarios, 20/20 E2E reales, build/PWA verificados, visibilidad local verificada contra backend/frontend reales | `frontend/README.md`; commit `9127c64` |
-| Vercel (deployment) | Fase 4, Fase 10 | **APROBADO como plataforma objetivo 2026-08-17**, restricciones reales (runtime Python, tamaño de payload, tiempo de ejecución) sin investigar todavía (sin Vercel CLI) | `docs/PROJECT_STATUS.md` §Sesión 2026-08-17 (bloque 3) |
+| Vercel frontend / Railway backend | Fase 4/10 | APPROVED; historical deployments recorded 2026-08-18. Current auth hostname/topology not established | ADR-018; `IDENTITY_SECURITY_READINESS.md` |
 | ~~Framework backend de `interfaces/api/`~~ | Fase 4A | **RESUELTO 2026-08-17**: FastAPI, implementado (ADR-016, `Estado: Aceptada`, 19 tests) | `docs/adr/ADR-016-backend-fastapi.md` |
-| Supabase | Fase 8 (persistencia compartida) — **y ahora también persistencia de producción de `ExecutionRun`, adelantado a Fase 4A** | **APROBADO como decisión arquitectónica 2026-08-17** (ADR-017, `Estado: Aceptada`); implementación preparada, **no verificada contra un proyecto real** (sin CLI, sin credenciales) | `docs/adr/ADR-017-supabase-persistencia-remota.md`, `docs/architecture/SUPABASE.md` |
-| Identity Provider (**FusionAuth = dirección aprobada**, ADR-028; Okta **RECHAZADO** 2026-08-19; Clerk y el resto de candidatos CIAM descartados en ADR-021) | Fase 9 | **PROVIDER_SELECTED / NOT_IMPLEMENTED** — la dirección de proveedor está decidida (ADR-028), pero no hay tenant, despliegue ni configuración, el runtime sigue inactivo (`JUVAL_AUTH_MODE` sin definir) y **Amazon RF-03/RF-04 siguen `NOT_VERIFIED`**. Gap abierto: control 6 (exclusión del nombre) `B — PARTIALLY_SATISFIED` en FusionAuth 1.63.0+; la aclaración a Amazon Developer Support sigue pendiente de respuesta (ver `SP_API_REGISTRATION_REMEDIATION.md` §30) | `docs/adr/ADR-028-*.md`, `docs/adr/ADR-021-*.md`, `docs/adr/ADR-022-*.md`, `docs/compliance/SP_API_REGISTRATION_REMEDIATION.md` §30 |
+| Supabase | Fase 8 | APPROVED / run-record adapter implemented and historically verified live; session migration remains unapplied | ADR-017/019/036 |
+| FusionAuth | Fase 9 | APPROVED ADR-028/031; instance and exact IDs exist. BFF/sessions implemented, public activation and RF03 blocked | `IDENTITY_SECURITY_READINESS.md` |
 | Fuente(s) externa(s) autorizada(s) concreta(s) | Fase 6 | **PENDING** | `DATA_SOURCES.md` §5 |
 | Proveedor/modelo de IA | Fase 7 | **PENDING** | `AI_ANALYST.md` §6 |
 | Fórmulas de negocio de Decision Score / thresholds reales | Fase 5 | **PENDING** | `DECISION_ENGINE.md` §7 |
@@ -652,65 +661,24 @@ aprobados por negocio (`DECISION_ENGINE.md` §7).
 
 ## FASE 8 — Persistence / Supabase
 
-**Estado: NOT STARTED — BLOCKED**
-
-⚠️ Bloqueada: introducir Supabase no está aprobado (`CLAUDE.md` §14).
-
-- **Objetivo**: introducir persistencia durable (histórico de
-  `SourcingRecord`/`ExecutionRun`) solo cuando exista necesidad real
-  demostrada.
-- **Alcance**: `infrastructure/persistence/` (nuevo) implementando un
-  puerto definido por `processing/`/`application/`.
-- **Fuera de alcance**: autenticación (Fase 9).
-- **Dependencias**: Fase 3 con gate en `PASS` — **satisfecho**
-  (2026-08-16; la persistencia local de Fase 3 es SQLite/single-user,
-  ADR-013 — no sustituye ni resuelve la persistencia compartida/remota
-  que es el objeto de esta fase). **BLOCKED además** hasta aprobación
-  explícita de Supabase + necesidad real demostrada.
-- **Entradas**: decisión aprobada de usar Supabase + caso de uso real.
-- **Salidas**: esquema/migraciones, adapter de persistencia.
-- **Componentes**: `src/juval/infrastructure/persistence/*.py`,
-  migraciones SQL.
-- **Documentación**: `docs/architecture/PERSISTENCE.md` (nuevo, a
-  crear).
-- **Tests**: tests de migración, round-trip, aislamiento de datos si
-  aplica.
-- **Criterios de aceptación**: ninguna tabla creada "para estar
-  preparados"; cada tabla mapea a un concepto de dominio ya
-  implementado.
-- **Riesgos**: fijar el esquema antes de que el dominio termine de
-  estabilizarse.
-- **Completion Gate**: ver `docs/PHASE_GATES.md` §Fase 8 — **BLOCKED**.
-
----
+**Estado: IMPLEMENTED for runs/records; session production activation pending.**
+Supabase is approved (ADR-017/019), with historical live run-record verification
+recorded in `architecture/SUPABASE.md`. ADR-036 adds independent identity tables;
+its migration is tested in a disposable database but not authorized/applied live.
+Acceptance: domain-backed schemas only, reproducible run snapshots, isolation
+and round-trip evidence; no silent backend fallback. Do not recreate approved
+persistence infrastructure or treat sessions as sourcing records.
 
 ## FASE 9 — Authentication / Authorization
 
-**Estado: NOT STARTED — BLOCKED**
-
-⚠️ Bloqueada: introducir Clerk no está aprobado (`CLAUDE.md` §14).
-
-- **Objetivo**: introducir autenticación solo cuando el producto ya no
-  pueda funcionar razonablemente sin ella.
-- **Alcance**: users, sessions, organizations/workspaces, roles,
-  permissions, data isolation.
-- **Fuera de alcance**: rediseño del modelo de dominio.
-- **Dependencias**: Fase 4 (UI) y Fase 8 (persistencia). **BLOCKED
-  además** hasta aprobación explícita de Clerk + diseño documentado.
-- **Entradas**: documento de diseño de auth aprobado.
-- **Salidas**: middleware/wiring de auth, aislamiento de datos
-  reforzado.
-- **Componentes**: wiring de auth en `src/juval/interfaces/api/`.
-- **Documentación**: `docs/architecture/AUTH.md` (nuevo, a crear antes
-  de implementar).
-- **Tests**: aislamiento de datos por usuario, permisos por rol.
-- **Criterios de aceptación**: ninguna ruta/dato accesible sin pasar por
-  el límite de auth documentado.
-- **Riesgos**: retrofitting de auth después de UI/datos ya existentes es
-  más invasivo.
-- **Completion Gate**: ver `docs/PHASE_GATES.md` §Fase 9 — **BLOCKED**.
-
----
+**Estado: IMPLEMENTED_TESTED_NOT_ACTIVATED / production gate BLOCKED.**
+FusionAuth selected and installed (ADR-028/031); BFF, RBAC, CSRF and session
+storage implemented (ADR-034/036). Control 6 mitigation implemented with residual
+(ADR-035). Remaining acceptance: public hosted-login surface and MFA compatibility,
+TLS/hostname/browser site topology, live session migration, human RF03 and
+production-path role/revocation tests. ADR-038 is a proposal; Clerk/Okta are not
+candidates awaiting implementation. No code/test count establishes Amazon
+compliance. Exact next tasks and human queue: `IDENTITY_SECURITY_READINESS.md`.
 
 ## FASE 10 — Production Hardening
 

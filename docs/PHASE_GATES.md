@@ -93,42 +93,12 @@ Criterios específicos de Fase 3:
 - Universal Gate ítem 6 (documentación actualizada) — **PASS**: `ARCHITECTURE.md` §8 y `EXECUTION_MODEL.md` §5 actualizados 2026-08-16 para describir el estado real (SQLite implementado, alcance y limitaciones explícitas), reemplazando la descripción de persistencia en JSON que el código nunca implementó.
 
 ### Fase 4 — Dashboard PWA
-**Estado del gate: PENDING** (backend y frontend implementados y
-probados, 2026-08-17 bloque 4; Fase 4 global no se declara `COMPLETE`
-hasta deployment real + Supabase verificado + resto del gate)
-- Elección de interfaz (PWA vs. `.exe`) — **RESUELTO** 2026-08-17 vía
-  ADR-014 (`Estado: Aceptada`): PWA.
-- Framework de backend — **RESUELTO** 2026-08-17 vía ADR-016
-  (`Estado: Aceptada`): FastAPI, implementado, 19 tests.
-- Framework de frontend — **RESUELTO e IMPLEMENTED** 2026-08-17
-  (bloque 4): React + Vite + PWA (`frontend/`), 9 tests, `npm run build`
-  exitoso.
-- Deployment del frontend (Vercel) — **aprobado como plataforma
-  objetivo**, CLI instalada, `frontend/vercel.json` preparado; **sin
-  desplegar** (`vercel login` requiere interacción del usuario). Sigue
-  bloqueando el cierre del gate global.
-- Hosting del backend (Railway) — **RESUELTO/aprobado** 2026-08-17
-  (bloque 8) vía ADR-018 (`Estado: Aceptada`): Railway, tras
-  comparación explícita con Render/Fly.io/VPS. CLI instalada,
-  `railway.toml` preparado; **sin desplegar** (`railway login` requiere
-  interacción del usuario). Vercel Functions descartado explícitamente
-  para el backend (incompatibilidad real verificada, `API_CONTRACT.md`
-  §8.4). Sigue bloqueando el cierre del gate global.
-- Persistencia de producción (Supabase) — **aprobada** (ADR-017),
-  adapter preparado; **sin verificar contra un proyecto real**
-  (`supabase login` requiere interacción del usuario). Sigue
-  bloqueando el cierre del gate global.
-- Git/GitHub — repositorio local inicializado, sin commit (bloqueo de
-  `git config`, ver `docs/PROJECT_STATUS.md` §Sesión 2026-08-17
-  (bloque 4)); sin remoto GitHub configurado. Sigue bloqueando el
-  cierre del gate global.
-- Ningún componente de UI debe contener una regla de negocio —
-  **verificado para backend y frontend** (`interfaces/api/service.py` y
-  `frontend/src/` revisados línea por línea: sin cálculos de negocio en
-  ninguno de los dos).
-- Test E2E del camino feliz contra un `ExecutionRun` real de Fase 3 —
-  **PASS**, `frontend/e2e/smoke.spec.ts`, contra el backend real (no
-  mock), 1/1.
+**Global gate: NOT_RECERTIFIED in this security pass.** Backend/frontend and
+historical deployment/Supabase evidence exist; Git is initialized with remote.
+The 2026-08-17 blockers claiming these decisions were absent are superseded.
+Frontend remains frozen; this task did not run frontend tests or change UI.
+See `architecture/PRODUCT_BEHAVIORAL_PARITY.md` for historical product evidence
+and `IDENTITY_SECURITY_READINESS.md` for the current activation gate.
 
 ### Fase 5 — Decision Intelligence
 **Estado del gate: BLOCKED**
@@ -149,20 +119,22 @@ hasta deployment real + Supabase verificado + resto del gate)
 - Cada llamada de IA queda registrada de forma auditable (verificado por un test).
 
 ### Fase 8 — Persistence / Supabase
-**Estado del gate: BLOCKED**
-- Gate previo bloqueante: aprobación explícita de Supabase + necesidad real (no especulativa) documentada.
-- Ninguna tabla del esquema corresponde a un concepto no implementado en el dominio.
-- Test de aislamiento de datos si aplica; si no, explícitamente fuera de scope y anotado como tal.
+**Runs/records: IMPLEMENTED; current production gate NOT_RECERTIFIED.**
+Supabase approved (ADR-017/019); historical live evidence exists. Identity session
+migration (ADR-036) remains separately BLOCKED_LIVE_AUTHORIZATION. Disposable
+migration, rollback, RLS and owner checks pass; never infer live application.
 
 ### Fase 9 — Authentication / Authorization
-**Estado del gate: BLOCKED_PENDING_AMAZON_RESPONSE**
-- Gate previo bloqueante: Clerk fue descartado (ver ADR-022); ningún IdP está
-  aprobado. Aclaración enviada a Amazon Developer Support sobre passwordless/
-  MFA/enforcement de contraseña — respuesta pendiente (`docs/compliance/SP_API_REGISTRATION_REMEDIATION.md`
-  §21). El gate se mantiene bloqueado hasta que exista respuesta de Amazon y
-  un proveedor aprobado + documento de diseño de auth antes del código.
-- Test de aislamiento de datos: usuario A no puede acceder a datos de usuario B bajo ninguna ruta.
-- Test de permisos por rol.
+**Gate: BLOCKED_PRODUCTION_VERIFICATION.** FusionAuth is approved and installed;
+BFF/RBAC/session implementation tested, not activated. Remaining gate items:
+- Exact real hosted-login asset and MFA flow evidence, D-1 compatibility.
+- Stable HTTPS hostname/issuer and approved browser/API site topology (ADR-038).
+- Authorized live session migration with role/RLS verification and recovery plan.
+- Human RF03/password/lockout/MFA and effective Control 6 production evidence.
+- Production-path permissions, CSRF, revocation and required data isolation.
+
+The active phase is partial, not complete; Amazon reapplication stays blocked.
+No literal marker can substitute for these checks.
 
 ### Fase 10 — Production Hardening
 **Estado del gate: BLOCKED**
