@@ -14,6 +14,15 @@ aceptación, documentación actualizada, sin conflictos arquitectónicos
 abiertos, sin decisiones de negocio pendientes sin resolver. Un
 componente puede estar `IMPLEMENTED` sin que su fase esté `COMPLETE`.
 
+## Restricted authentication evidence lab — 2026-09-15
+
+JUVAl-owned finite evidence controller and authenticated temporary Xvfb :100
+passed synthetic sentinel tests. This is synthetic verification only, not RF-03
+completion or permission for MFA. Admin remained untouched; frontend frozen.
+See [measured scope and limitations](research/RESTRICTED_AUTH_EVIDENCE_LAB_20260915.md)
+and [ADR-042 (Proposed)](adr/ADR-042-restricted-auth-evidence-controller.md).
+ADR-040 criteria/weights are unchanged; no readiness credit is asserted.
+
 ## Current Phase
 
 **2026-09-10: Identity/Security production readiness — PARTIALLY IMPLEMENTED.**

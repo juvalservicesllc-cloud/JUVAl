@@ -5,6 +5,17 @@ workspace: `/home/juval/JUVAl/APP`. This ledger supersedes dated implementation
 snapshots in project plans, contracts and research; historical experiments are
 not reclassified as production evidence. Git commits identify the exact changes.
 
+## Restricted evidence gate — 2026-09-15
+
+Supersedes browser-tool availability statements in the historical checkpoint below:
+stock `juval_browser` connected and controlled a dedicated sandboxed blank page,
+but is not cleared for secret-bearing flows. The JUVAl-owned restricted controller
+and separate authenticated Xvfb passed synthetic leakage/cleanup checks. See
+[the scoped evidence](research/RESTRICTED_AUTH_EVIDENCE_LAB_20260915.md).
+Whole-tree sandbox remains PARTIAL. MFA is NOT_AUTHORIZED by this lab; Marcus
+remains USER_REPORTED and untouched. Private viewer and real-flow/callback design
+require the next explicit gate. ADR-042 is Proposed, not accepted.
+
 ## Current accelerator checkpoint — 2026-09-15
 
 This section supersedes the operational queue and stale present-tense statements
