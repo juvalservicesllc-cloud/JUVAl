@@ -5,6 +5,15 @@ workspace: `/home/juval/JUVAl/APP`. This ledger supersedes dated implementation
 snapshots in project plans, contracts and research; historical experiments are
 not reclassified as production evidence. Git commits identify the exact changes.
 
+## Private viewer gate — 2026-09-15
+
+The private viewer requirement below now has synthetic behavioral evidence:
+human confirmed the harmless page and button interaction through loopback-only
+noVNC on a dedicated authenticated :100. Normal cleanup and Admin preservation
+verified. [Scoped evidence](research/PRIVATE_VIEWER_LAB_20260915.md).
+Real-flow/callback design and acceptance of same-host viewer risks remain pending;
+Marcus remains untouched/USER_REPORTED. No MFA authorization or RF-03 closure.
+
 ## Restricted evidence gate — 2026-09-15
 
 Supersedes browser-tool availability statements in the historical checkpoint below:

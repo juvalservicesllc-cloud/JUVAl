@@ -44,6 +44,18 @@ def require(value, code):
         raise RuntimeError(code)
 
 
+def write_authority(auth):
+    # Xauthority binary record: wildcard family, empty address, display 100.
+    # Only the fresh test X server receives this credential; no Admin auth is read.
+    def field(value):
+        return struct.pack('!H', len(value)) + value
+    payload = struct.pack('!H', 65535) + field(b'') + field(b'100') + field(b'MIT-MAGIC-COOKIE-1') + field(secrets.token_bytes(16))
+    fd = os.open(auth, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, 'wb') as stream:
+        stream.write(payload)
+    del payload
+
+
 def main():
     display = ':100'
     socket = Path('/tmp/.X11-unix/X100')
@@ -57,15 +69,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix='juval-auth-display-') as directory:
         base = Path(directory)
         auth = base / 'Xauthority'
-        # Xauthority binary record: wildcard family, empty address, display 100.
-        # Only the fresh test X server receives this credential; no Admin auth is read.
-        def field(value):
-            return struct.pack('!H', len(value)) + value
-        payload = struct.pack('!H', 65535) + field(b'') + field(b'100') + field(b'MIT-MAGIC-COOKIE-1') + field(secrets.token_bytes(16))
-        fd = os.open(auth, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        with os.fdopen(fd, 'wb') as stream:
-            stream.write(payload)
-        del payload
+        write_authority(auth)
         empty = base / 'no-authority'
         empty.touch(mode=0o600)
         runtime = base / 'runtime'

@@ -45,3 +45,14 @@ Actual hosted paths, private human viewer, callback containment, independent
 Marcus/Admin readback and cleanup must be explicitly designed/authorized before
 MFA. Do not enable real authentication by merely changing a port or allowlist.
 See ../research/RESTRICTED_AUTH_EVIDENCE_LAB_20260915.md for measured evidence.
+
+## Private viewer synthetic extension — 2026-09-15
+
+The operator authorized and confirmed a non-sensitive human viewer experiment.
+A temporary x11vnc/noVNC bridge on IPv4 loopback, attached only to authenticated
+:100, passed visual/interaction and normal cleanup checks. Clipboard-related
+flags are configured; no clipboard contents were inspected. No VNC password was
+created. Same-host and forwarded-port access remain residual risks, unacceptable
+to silently waive for real credentials. See
+[private viewer evidence](../research/PRIVATE_VIEWER_LAB_20260915.md).
+This evidence does not accept the ADR or authorize MFA.

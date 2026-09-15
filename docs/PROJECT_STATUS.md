@@ -14,6 +14,13 @@ aceptación, documentación actualizada, sin conflictos arquitectónicos
 abiertos, sin decisiones de negocio pendientes sin resolver. Un
 componente puede estar `IMPLEMENTED` sin que su fase esté `COMPLETE`.
 
+## Private human viewer synthetic gate — 2026-09-15
+
+Temporary authenticated :100 with loopback-only VNC/noVNC passed human visual
+confirmation, synthetic interaction and cleanup. Admin preserved, frontend
+unchanged. [Evidence and limitations](research/PRIVATE_VIEWER_LAB_20260915.md).
+MFA remains unauthorized; ADR-042 remains Proposed; no ADR-040 metric credit.
+
 ## Restricted authentication evidence lab — 2026-09-15
 
 JUVAl-owned finite evidence controller and authenticated temporary Xvfb :100
