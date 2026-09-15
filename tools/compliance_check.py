@@ -20,6 +20,7 @@ only the file and line where one was found.
 
 from __future__ import annotations
 
+import ast
 import datetime as dt
 import json
 import re
@@ -212,7 +213,7 @@ def scan_for_secrets(root: Path | None = None) -> list[Finding]:
 
 
 def check_auth_posture() -> list[Finding]:
-    """The API must fail closed, and must not be able to silently run open."""
+    """Check source declarations; this does not verify runtime enforcement."""
     auth_path = REPO_ROOT / "src" / "juval" / "interfaces" / "api" / "auth.py"
     if not auth_path.is_file():
         return [Finding("auth.module", FAIL, "interfaces/api/auth.py is missing (RF-03/RF-04)")]
@@ -226,28 +227,56 @@ def check_auth_posture() -> list[Finding]:
         findings.append(Finding("auth.algorithms", FAIL, "JWT algorithms are not pinned to an asymmetric allow-list"))
 
     main_path = REPO_ROOT / "src" / "juval" / "interfaces" / "api" / "main.py"
-    main_text = main_path.read_text(encoding="utf-8") if main_path.is_file() else ""
-    unprotected = [
-        line.strip()
-        for line in main_text.splitlines()
-        if line.strip().startswith("@app.") and "exception_handler" not in line
-    ]
-    protected_count = main_text.count("Depends(require(")
-    if unprotected and protected_count < len(unprotected):
-        findings.append(
-            Finding(
-                "auth.endpoints",
-                FAIL,
-                f"{len(unprotected)} route(s) declared but only {protected_count} permission check(s) -- "
-                "every endpoint must enforce a permission server-side (RF-04)",
-            )
-        )
+    try:
+        module = ast.parse(main_path.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError, UnicodeError):
+        findings.append(Finding("auth.endpoints", FAIL, "static route check incomplete: main.py unreadable or invalid"))
+        return findings
+
+    methods = {"get", "post", "put", "patch", "delete", "options", "head", "trace", "api_route"}
+    routes = []
+    for node in ast.walk(module):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            if (isinstance(decorator, ast.Call)
+                    and isinstance(decorator.func, ast.Attribute)
+                    and isinstance(decorator.func.value, ast.Name)
+                    and decorator.func.value.id == "app"
+                    and decorator.func.attr in methods):
+                routes.append(node)
+    missing = [node.name for node in routes if not any(
+        _is_permission_dependency(default)
+        for default in [*node.args.defaults, *node.args.kw_defaults]
+    )]
+    if not routes:
+        findings.append(Finding("auth.endpoints", FAIL, "static route check found no main.py HTTP routes; coverage not established"))
+    elif missing:
+        findings.append(Finding("auth.endpoints", FAIL,
+            f"main.py HTTP handler(s) missing a direct permission dependency: {', '.join(sorted(set(missing)))}"))
     else:
-        findings.append(
-            Finding("auth.endpoints", PASS, f"static counts: {len(unprotected)} route(s), {protected_count} permission dependency marker(s); per-route enforcement requires behavioral tests")
-        )
+        findings.append(Finding("auth.endpoints", PASS,
+            f"static AST check: all {len(routes)} main.py HTTP route declaration(s) bind a direct permission dependency; runtime behavior and included routers not checked"))
 
     return findings
+
+
+def _is_permission_dependency(expression: ast.AST | None) -> bool:
+    """Recognize the existing Depends(require(permission)) parameter convention.
+
+    No code is executed. Other dependency conventions require explicit support;
+    a marker in a comment, another function or function body is not a binding.
+    """
+    if not (isinstance(expression, ast.Call)
+            and isinstance(expression.func, ast.Name)
+            and expression.func.id == "Depends"
+            and len(expression.args) == 1):
+        return False
+    dependency = expression.args[0]
+    return (isinstance(dependency, ast.Call)
+            and isinstance(dependency.func, ast.Name)
+            and dependency.func.id == "require"
+            and len(dependency.args) == 1)
 
 
 # --- Runner -----------------------------------------------------------

@@ -1332,3 +1332,36 @@ change. No IdP/user/redirect/configuration mutation or cleanup was performed.
 Ponytail unavailable; manual disclosure, chronology and evidence-level review.
 Documentation-only gates use compliance, current-tree secret scan and diff-check;
 backend, nginx, PostgreSQL and frontend suites are not repeated for this change.
+
+
+## Accelerator 2026-09-15 — per-route compliance guard
+
+A disposable two-route source demonstrated a false PASS: two permission markers
+on one protected handler hid another handler without any permission dependency.
+The checker now parses main.py without execution and verifies the existing direct
+`Depends(require(permission))` parameter convention separately for each HTTP
+route declaration. Comments, unrelated functions and function-body calls cannot
+satisfy another route; empty/invalid source fails instead of passing vacuously.
+Multiline and stacked decorators and keyword-only parameters are covered.
+
+Focused tests: 42 PASS. Compliance regression: 176 PASS / 86 SKIP (nginx binary
+unavailable; no new nginx behavioral claim). Only checker/tests/docs changed;
+no API behavior, RBAC policy, IdP, database, frontend or production changes.
+Decision APPROVED by accelerator verification authorization; no new ADR required.
+Manual self-review: existing Python AST/stdlib only; no new dependency, no runtime
+source execution. Scope is main.py's direct app HTTP declarations, not included
+routers, alias/shadowing resolution, effective permission semantics or deployed
+authorization. Existing behavioral RBAC evidence is neither rerun nor promoted.
+
+The preceding documentation commit 355e4c4 passed compliance 9 PASS / 2 WARN /
+0 FAIL, current-tree secret scan 495 files, and diff-check. ADR-040/model 1.2
+measured that exact committed snapshot: implementation 44/68 (65%), verification
+17/68 (25%), production 0/12 (0%), security 5/16 (31%), Amazon 0/18 (0%). The
+model/scopes were not changed to award credit for these tooling improvements.
+
+Remaining high-value branches require external/browser/secret/production or
+organizational action, as enumerated in IDENTITY_SECURITY_READINESS. No new
+source integration, business scoring, production deployment, live migration,
+provider mutation, host hardening or human exercise is authorized by these
+checker fixes. Full backend, scratch PostgreSQL and frontend suites were not
+run for this tooling-only diff.

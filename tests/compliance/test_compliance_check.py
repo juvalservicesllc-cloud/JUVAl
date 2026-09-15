@@ -259,3 +259,41 @@ def test_audit_cannot_pass_when_every_dependency_is_skipped(monkeypatch):
     report = json.dumps({"dependencies": [{"name": "local-project", "skip_reason": "not auditable"}]})
     monkeypatch.setattr(compliance_check.subprocess, "run", lambda *a, **kw: CompletedProcess([], 0, report, ""))
     assert statuses(compliance_check.check_dependency_vulnerabilities(), "deps.audit") == [WARN]
+
+
+@pytest.mark.parametrize("source", [
+    '@app.get("/protected")\ndef protected(a=Depends(require(RUNS_READ)), b=Depends(require(RUNS_READ))): pass\n@app.get("/open")\ndef open_route(): pass\n',
+    '# Depends(require(RUNS_READ))\n@app.get("/open")\ndef open_route(): pass\n',
+    '@app.get("/open")\ndef open_route():\n    unused = Depends(require(RUNS_READ))\n',
+    'def unrelated(a=Depends(require(RUNS_READ))): pass\n@app.get("/open")\ndef open_route(): pass\n',
+    '@app.get("/open")\ndef open_route(a=Depends(require())): pass\n',
+    '',
+    'invalid python syntax !',
+])
+def test_static_route_check_rejects_unbound_or_missing_permissions(monkeypatch, tmp_path, source):
+    api = tmp_path / "src/juval/interfaces/api"
+    api.mkdir(parents=True)
+    (api / "auth.py").write_text('_ALLOWED_ALGORITHMS = ["RS256"]')
+    (api / "main.py").write_text(source)
+    monkeypatch.setattr(compliance_check, "REPO_ROOT", tmp_path)
+    assert statuses(compliance_check.check_auth_posture(), "auth.endpoints") == [FAIL]
+
+
+def test_static_route_check_accepts_multiline_and_stacked_routes(monkeypatch, tmp_path):
+    api = tmp_path / "src/juval/interfaces/api"
+    api.mkdir(parents=True)
+    (api / "auth.py").write_text('_ALLOWED_ALGORITHMS = ["RS256"]')
+    (api / "main.py").write_text('''@app.get(
+    "/one"
+)
+@app.post("/two")
+async def protected(*, principal=Depends(
+    require(RUNS_READ)
+)):
+    pass
+''')
+    monkeypatch.setattr(compliance_check, "REPO_ROOT", tmp_path)
+    finding = next(f for f in compliance_check.check_auth_posture() if f.check == "auth.endpoints")
+    assert finding.status == PASS
+    assert "2 main.py HTTP route" in finding.message
+    assert "runtime behavior and included routers not checked" in finding.message
