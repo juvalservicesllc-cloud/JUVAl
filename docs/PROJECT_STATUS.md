@@ -1280,3 +1280,33 @@ Cambio de contraseña autorizado por humano rechazado por política, sin relajar
 Usuario eliminado; JUVAl volvió a 0, redirects [] / ExactMatch restaurados.
 D-1 PARTIAL; RF03 no autorizado; Control 6 parcialmente satisfecho. Evidencia:
 `docs/research/MFA_DISPOSABLE_DISCOVERY_20260910.md`.
+
+
+## Accelerator 2026-09-15 — compliance evidence classification
+
+Starting local HEAD and cached origin/master: f03574b, clean, divergence 0/0.
+Fresh SSH fetch failed with publickey rejection; current remote state is not
+verified. No push may be claimed until an authenticated fetch succeeds.
+
+The compliance checker now rejects invalid audit reports without calling them
+confirmed vulnerabilities, reports skipped audit coverage, and fails on unreadable
+scan files. Its static auth/deadline checks no longer claim behavioral or human
+verification. The one ROLE PLACEHOLDER marker is historical; the incident plan's
+§2/§12 already records named roles and approval. No organizational approval changed.
+
+Focused first run: 32 PASS / 1 FAIL exposed the local skipped package's absent
+version. The parser and fixture were corrected; focused rerun 33 PASS. Added
+all-skipped negative; final focused gate 34 PASS; compliance regression: 168 PASS / 86 SKIP. The 86 nginx
+behavioral cases skip because no nginx binary is available; they are not verified
+by this run. No nginx template, backend runtime, database or frozen frontend change.
+Compliance: 9 PASS / 2 WARN / 0 FAIL; working-tree secret scan: 494 files, no
+pattern findings. Warnings are the historical role marker and partial dependency
+audit coverage; local audits do not close GitHub alerts. Full backend/PostgreSQL/
+frontend suites not run for this tooling-only change.
+
+Decision: APPROVED by accelerator authorization to correct evidence/tooling;
+no new architecture or production decision. Ponytail callable capability is
+unavailable; manual correctness/security/simplicity review performed. The real
+MFA branch is not started: Chromium Admin remains open, no usable browser tool
+is connected, no redirect or user mutation was performed. Browser reconnection
+and local SSH authentication have been requested while independent work proceeds.

@@ -106,7 +106,7 @@ def check_incident_response_plan(today: dt.date | None = None) -> list[Finding]:
             )
         else:
             findings.append(
-                Finding("irp.review_due", PASS, f"review current; next due {due.isoformat()} ({(due - today).days} days)")
+                Finding("irp.review_due", PASS, f"documented review deadline not overdue; next due {due.isoformat()} ({(due - today).days} days); review execution not checked")
             )
 
     placeholders = len(PLACEHOLDER_RE.findall(text))
@@ -115,7 +115,7 @@ def check_incident_response_plan(today: dt.date | None = None) -> list[Finding]:
             Finding(
                 "irp.placeholders",
                 WARN,
-                f"{placeholders} unfilled ROLE PLACEHOLDER item(s) remain in the document "
+                f"{placeholders} ROLE PLACEHOLDER marker(s) remain in the document "
                 "(check whether they are live role assignments or a preserved historical "
                 "record) -- do not cite the plan as fully evidenced until §12 confirms "
                 "every required action is DONE (EXTERNAL USER ACTION REQUIRED)",
@@ -182,11 +182,12 @@ def scan_for_secrets(root: Path | None = None) -> list[Finding]:
     scanned = 0
 
     for path in _scannable_files(root):
-        scanned += 1
         try:
             content = path.read_text(encoding="utf-8", errors="ignore")
         except OSError:
+            findings.append(Finding("secret_scan", FAIL, f"scan incomplete: could not read {path.relative_to(root).as_posix()} (error details withheld)"))
             continue
+        scanned += 1
         for line_no, line in enumerate(content.splitlines(), start=1):
             for name, pattern in SECRET_PATTERNS:
                 match = pattern.search(line)
@@ -220,7 +221,7 @@ def check_auth_posture() -> list[Finding]:
     findings = [Finding("auth.module", PASS, "interfaces/api/auth.py present")]
 
     if '_ALLOWED_ALGORITHMS = ["RS256"]' in text:
-        findings.append(Finding("auth.algorithms", PASS, "JWT algorithms pinned to RS256 (no alg-confusion)"))
+        findings.append(Finding("auth.algorithms", PASS, "static source marker pins RS256; runtime validation not checked"))
     else:
         findings.append(Finding("auth.algorithms", FAIL, "JWT algorithms are not pinned to an asymmetric allow-list"))
 
@@ -243,7 +244,7 @@ def check_auth_posture() -> list[Finding]:
         )
     else:
         findings.append(
-            Finding("auth.endpoints", PASS, f"all {len(unprotected)} route(s) enforce a permission server-side")
+            Finding("auth.endpoints", PASS, f"static counts: {len(unprotected)} route(s), {protected_count} permission dependency marker(s); per-route enforcement requires behavioral tests")
         )
 
     return findings
@@ -275,9 +276,39 @@ def check_dependency_vulnerabilities() -> list[Finding]:
     output = (result.stdout or "") + (result.stderr or "")
     if "No module named" in output:
         return [Finding("deps.audit", WARN, "pip-audit is not installed; dependency scanning is NOT running")]
-    if result.returncode == 0:
-        return [Finding("deps.audit", PASS, "pip-audit: no known vulnerabilities in installed dependencies")]
-    return [Finding("deps.audit", FAIL, f"pip-audit reported known vulnerabilities: {_vulnerable_packages(result.stdout)}")]
+    try:
+        report = json.loads(result.stdout)
+        dependencies = report["dependencies"]
+        if not isinstance(dependencies, list) or not dependencies:
+            raise ValueError
+        for dependency in dependencies:
+            if not isinstance(dependency["name"], str):
+                raise ValueError
+            if "skip_reason" in dependency and "vulns" not in dependency:
+                if not isinstance(dependency["skip_reason"], str):
+                    raise ValueError
+                continue
+            if not isinstance(dependency["version"], str) or not isinstance(dependency["vulns"], list):
+                raise ValueError
+            for vulnerability in dependency["vulns"]:
+                if not isinstance(vulnerability["id"], str):
+                    raise ValueError
+                fixes = vulnerability.get("fix_versions") or []
+                if not isinstance(fixes, list) or not all(isinstance(fix, str) for fix in fixes):
+                    raise ValueError
+    except (ValueError, TypeError, KeyError):
+        return [Finding("deps.audit", FAIL, "pip-audit inconclusive: missing or invalid dependency report; no vulnerability conclusion (raw output withheld)")]
+
+    findings = []
+    if any(dependency.get("vulns") for dependency in dependencies):
+        findings.append(Finding("deps.audit", FAIL, f"pip-audit reported known vulnerabilities: {_vulnerable_packages(result.stdout)}"))
+    elif result.returncode != 0:
+        findings.append(Finding("deps.audit", FAIL, "pip-audit inconclusive: non-zero exit without reported vulnerabilities (raw output withheld)"))
+    elif any("skip_reason" not in dependency for dependency in dependencies):
+        findings.append(Finding("deps.audit", PASS, "pip-audit: no known vulnerabilities in successfully audited packages; GitHub alerts not checked"))
+    if any("skip_reason" in dependency for dependency in dependencies):
+        findings.append(Finding("deps.audit", WARN, "pip-audit skipped dependencies; installed-environment coverage is PARTIAL (skip details withheld)"))
+    return findings
 
 
 def _vulnerable_packages(stdout: str) -> str:
@@ -328,11 +359,11 @@ def main() -> int:
     print(f"{len(findings)} checks: {len(findings) - len(fails) - len(warns)} pass, {len(warns)} warn, {len(fails)} fail")
 
     if fails:
-        print("\nRESULT: FAIL -- compliance artifacts are structurally incomplete.")
+        print("\nRESULT: FAIL -- one or more checks failed; see the scoped findings above.")
         return 1
     if warns:
-        print("\nRESULT: PASS WITH WARNINGS -- structurally complete, but not yet")
-        print("approved/evidenced. See the warnings above before citing anything to Amazon.")
+        print("\nRESULT: PASS WITH WARNINGS -- these scoped checks are not")
+        print("a certification of approval or operational compliance. Review warnings before citing to Amazon.")
         return 0
     print("\nRESULT: PASS")
     return 0

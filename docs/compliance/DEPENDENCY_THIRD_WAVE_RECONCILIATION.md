@@ -97,3 +97,23 @@ pip advisories (duplicated service entries), separate from project dependencies
 and from GitHub's unknown six alerts. Upgrade this disposable installer to
 pip 26.2.0 before reproducing the whole-environment audit; do not hide toolchain
 findings or claim them to be GitHub alerts. No system pip/apt changes made.
+
+
+## Evidence-checker correction — 2026-09-15
+
+The checker now distinguishes a reported vulnerability from failed execution or
+an invalid report. Both failures keep the gate non-green, but only parsed
+advisory findings are called known vulnerabilities. A zero exit alone no longer
+proves an audit result. Skipped packages produce an explicit PARTIAL coverage
+warning, including the local project entry that has no version in pip-audit's
+JSON. Raw stderr and skip diagnostics are withheld. A wholly skipped report
+cannot earn PASS. This is local tooling evidence, not GitHub alert metadata.
+
+Secret-scan file read failures now fail the scan instead of being counted as
+successfully scanned. The scanner remains a high-signal working-tree check with
+its existing suffix/directory scope; no full-history or universal absence claim.
+Static auth-marker counts and the documented review deadline are now described
+as static checks, not behavioral authorization or proof of a human review.
+Focused negative tests cover malformed/failed audits, partial coverage, retained
+advisory findings and unreadable scan input. Dated execution results are recorded
+in PROJECT_STATUS; RF-01 through RF-05 remain PARTIAL.

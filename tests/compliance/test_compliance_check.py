@@ -46,17 +46,16 @@ def test_incident_response_plan_is_structurally_complete():
     assert not failures, "; ".join(f.message for f in failures)
 
 
-def test_incident_response_plan_still_reports_unfilled_roles():
-    """Honesty check: while roles are unnamed the plan must NOT look approved.
+def test_incident_response_plan_still_reports_historical_placeholder():
+    """A historical placeholder marker does not prove roles are unassigned.
 
-    If someone fills in the roles this test should be updated deliberately --
-    it exists so the transition is a conscious act, not an accident.
+    The check remains conservative; current assignments are recorded in §2/§12.
     """
     findings = compliance_check.check_incident_response_plan()
     assert WARN in statuses(findings, "irp.placeholders")
 
 
-def test_every_api_route_enforces_a_permission():
+def test_static_auth_source_markers_are_present():
     findings = compliance_check.check_auth_posture()
     assert statuses(findings, "auth.endpoints") == [PASS]
     assert statuses(findings, "auth.algorithms") == [PASS]
@@ -206,3 +205,57 @@ def test_secret_scan_covers_javascript_and_typescript_module_files(tmp_path, suf
     failures = [finding for finding in findings if finding.status == FAIL]
     assert failures
     assert all(secret not in finding.message for finding in findings)
+
+
+@pytest.mark.parametrize("returncode, stdout", [
+    (0, ""), (1, "connection failed"), (0, "null"), (0, "[]"),
+    (0, '{"dependencies": []}'),
+    (0, '{"dependencies": [{"name": "demo", "version": "1"}]}'),
+    (1, '{"dependencies": [{"name": "demo", "version": "1", "vulns": []}]}'),
+])
+def test_audit_execution_failure_is_inconclusive_not_a_vulnerability(monkeypatch, returncode, stdout):
+    from subprocess import CompletedProcess
+    monkeypatch.setattr(compliance_check.subprocess, "run", lambda *a, **kw: CompletedProcess([], returncode, stdout, "private diagnostic"))
+    findings = compliance_check.check_dependency_vulnerabilities()
+    assert statuses(findings, "deps.audit") == [FAIL]
+    assert "inconclusive" in findings[0].message
+    assert "reported known vulnerabilities" not in findings[0].message
+    assert "private diagnostic" not in findings[0].message
+
+
+@pytest.mark.parametrize("vulnerable", [False, True])
+def test_audit_preserves_findings_and_reports_skipped_coverage(monkeypatch, vulnerable):
+    from subprocess import CompletedProcess
+    report = json.dumps({"dependencies": [
+        {"name": "demo", "version": "1", "vulns": [{"id": "TEST-1", "fix_versions": ["2"]}] if vulnerable else []},
+        {"name": "local-project", "skip_reason": "private diagnostic"},
+    ]})
+    monkeypatch.setattr(compliance_check.subprocess, "run", lambda *a, **kw: CompletedProcess([], int(vulnerable), report, ""))
+    findings = compliance_check.check_dependency_vulnerabilities()
+    assert statuses(findings, "deps.audit") == [FAIL if vulnerable else PASS, WARN]
+    assert "PARTIAL" in findings[-1].message
+    assert all("private diagnostic" not in finding.message for finding in findings)
+    if vulnerable:
+        assert "TEST-1" in findings[0].message
+
+
+def test_secret_scan_cannot_pass_after_an_unreadable_file(monkeypatch, tmp_path):
+    target = tmp_path / "unreadable.py"
+    target.write_text("ordinary content")
+    original = Path.read_text
+    def read(path, *args, **kwargs):
+        if path == target:
+            raise PermissionError("private diagnostic")
+        return original(path, *args, **kwargs)
+    monkeypatch.setattr(Path, "read_text", read)
+    findings = compliance_check.scan_for_secrets(tmp_path)
+    assert statuses(findings, "secret_scan") == [FAIL]
+    assert "scan incomplete" in findings[0].message
+    assert "private diagnostic" not in findings[0].message
+
+
+def test_audit_cannot_pass_when_every_dependency_is_skipped(monkeypatch):
+    from subprocess import CompletedProcess
+    report = json.dumps({"dependencies": [{"name": "local-project", "skip_reason": "not auditable"}]})
+    monkeypatch.setattr(compliance_check.subprocess, "run", lambda *a, **kw: CompletedProcess([], 0, report, ""))
+    assert statuses(compliance_check.check_dependency_vulnerabilities(), "deps.audit") == [WARN]
