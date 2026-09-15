@@ -1310,3 +1310,25 @@ unavailable; manual correctness/security/simplicity review performed. The real
 MFA branch is not started: Chromium Admin remains open, no usable browser tool
 is connected, no redirect or user mutation was performed. Browser reconnection
 and local SSH authentication have been requested while independent work proceeds.
+
+
+## Accelerator 2026-09-15 — reviewed local historical scan and queue reconciliation
+
+The user reviewed and approved `NO_PATTERN_FINDINGS_IN_SCANNED_LOCAL_HISTORY`:
+164 locally reachable commits, 1008 eligible unique blobs, 22 excluded unique
+blobs, zero findings. The scan was not repeated after approval. Structural
+review confirms the JSON contains only aggregate evidence and nine explicit
+scope limitations; no individual finding, secret content or derived identifier.
+Evidence: `research/history-secret-scan-20260915.json`. SECRETS S-3 is PARTIAL,
+not proof of absolute absence, remote synchronization or GitHub alert closure.
+
+The current identity ledger now distinguishes the USER_REPORTED Marcus identity
+from an independently read baseline, preserves the existing browser session,
+and identifies the real remaining RF-01/RF-05 exercises instead of requesting
+role assignments already approved in the incident plan. A local configuration
+observation no longer asserts absence of secrets in every environment.
+Decision APPROVED: explicit review/accelerator authorization, no architecture
+change. No IdP/user/redirect/configuration mutation or cleanup was performed.
+Ponytail unavailable; manual disclosure, chronology and evidence-level review.
+Documentation-only gates use compliance, current-tree secret scan and diff-check;
+backend, nginx, PostgreSQL and frontend suites are not repeated for this change.

@@ -1,9 +1,56 @@
 # JUVAl identity/security — current readiness and operator runbook
 
-**2026-09-10 accelerator fifth wave. Status: PARTIALLY IMPLEMENTED.** Authoritative
+**Current reconciliation: 2026-09-15. Status: PARTIALLY IMPLEMENTED.** Authoritative
 workspace: `/home/juval/JUVAl/APP`. This ledger supersedes dated implementation
 snapshots in project plans, contracts and research; historical experiments are
 not reclassified as production evidence. Git commits identify the exact changes.
+
+## Current accelerator checkpoint — 2026-09-15
+
+This section supersedes the operational queue and stale present-tense statements
+in the dated waves below; their experiment results remain historical.
+
+- Fresh local Git baseline: f03574b, clean, cached origin/master identical, 0/0.
+  SSH fetch failed with publickey rejection. Cached equality is not current
+  remote verification; gated local commits can proceed, push awaits SSH recovery.
+- The operator authorizes exactly the existing Marcus disposable identity
+  `mfa.test.20260913@example.invalid`, viewer only. Existence/registration and
+  fresh tenant count are USER_REPORTED, not independently read back this session.
+  Do not create another user. No experiment or cleanup has started. The prior
+  experiment's count zero and cleanup do not describe this new identity.
+- Existing-factor MFA is the first behavioral gap. Password/TOTP remain entirely
+  human-private; Control 6, forced change, lockout, recovery and full RF03 are
+  outside authorization. ADR-041 remains Proposed. JUVAL_AUTH_MODE is not changed.
+- Chromium's existing Admin window was observed via its X11 window title, without
+  page/secret inspection. Loopback VNC/noVNC listeners were observed. No browser
+  tool is connected to this agent and no TCP debugging listener was observed.
+  Plugin discovery found no connector for that existing Chromium session. No
+  restart, duplicate browser, screenshot, cookie export or provider mutation.
+- Temporary redirect BEFORE/TEMPORARY/AFTER remains NOT_ESTABLISHED for this
+  session. No URI was added. No candidate configuration was changed. Do not
+  assert restoration from the historical []/ExactMatch baseline.
+- Incident roles and plan approval already have explicit dated evidence in
+  `compliance/INCIDENT_RESPONSE_PLAN.md` §2/§12 (2026-08-18). Do not request a
+  second role assignment or infer that a historical placeholder revokes approval.
+  Current availability/contact custody has not been independently reverified.
+
+### Ranked remaining work and required evidence
+
+| Branch | Current blocker / next evidence | Autonomy boundary |
+|---|---|---|
+| MFA/D-1 | Exact user/redirect baseline, hosted enrollment if needed, second clean challenge, callback/logout, exact cleanup | Reconnect existing controllable Admin browser; then secret-only human checkpoints. No first password attempt yet |
+| Git durability | Fresh authenticated fetch, remote-only=0, gated fast-forward push/readback | Operator SSH authentication; never request a private key/passphrase |
+| Dependabot | Exact non-secret alert metadata and manifest/version reconciliation | Existing GitHub account authorization unavailable; gh absent. SSH is a separate permission |
+| RF-01/RF-05 | Exercise notification drafting, CA-01 containment and CA-02 evidence manifest using TABLETOP-002 | Actual human participant decisions and timing; agent cannot impersonate responders or certify an exercise |
+| RF-02 | Effective selected public boundary/TLS/logging and host/workstation residuals | Domain/provider and production authorization; no firewall/SSH/OS mutations in this run |
+| RF-04 | Approved-user job duties, access review, removal exercise and effective production authorization | Human personnel decisions and production identity gate; synthetic RBAC evidence already exists |
+| Sessions | Real target/owner/backup/pooler evidence, authorized migration and real BFF flow | Production mutation excluded; scratch evidence does not authorize live SQL |
+| Recovery/operations | Off-host destination, encryption-key custody, recovery owner and isolated host | Human destination/custody decisions; fresh-host E2E remains NOT_VERIFIED; no live installer run |
+
+RF-01 through RF-05 remain PARTIAL; Amazon Developer Profile NOT_APPROVED and
+case 21652891301 is not resubmitted. Readiness scores use ADR-040's committed
+snapshot model, never these local checks as production credit. Compliance
+verification improvements and measured results: PROJECT_STATUS 2026-09-15.
 
 ## Evidence ledger
 
@@ -183,8 +230,8 @@ acceptance support any stronger claim. No Amazon submission is authorized.
 5. Authorize RF03 disposable identities/procedure and private password/TOTP
    input. RF03 runbook ready, execution NOT authorized; effective Control 6
    behavior and production provisioning remain unverified.
-6. Name security owner, off-host destination/recovery custody and maintenance
-   window. Backup targets are proposals, not achieved RTO/RPO. No reboot,
+6. Security owner/Deputy were already named in the incident plan on 2026-08-18.
+   Select off-host destination/recovery custody and maintenance window. Backup targets are proposals, not achieved RTO/RPO. No reboot,
    apt upgrade, firewall/SSH change, paid purchase or Amazon submission.
 
 Backend/domain roadmap review: Decision Score formulas, commercial thresholds
