@@ -56,3 +56,13 @@ created. Same-host and forwarded-port access remain residual risks, unacceptable
 to silently waive for real credentials. See
 [private viewer evidence](../research/PRIVATE_VIEWER_LAB_20260915.md).
 This evidence does not accept the ADR or authorize MFA.
+
+## Real MFA preflight — 2026-09-15
+
+[Real MFA preflight](../research/REAL_MFA_PREFLIGHT_20260915.md) defines the
+observed/candidate route split, pre-network callback interception, fresh-cycle
+protocol and human-only cleanup path. Execution remains BLOCKED pending fresh
+Admin baseline/cleanup commitment, real-flow adapter tests and acceptance of
+viewer residual risks. No authenticated execution is approved by this document.
+Status remains Proposed; historical renderer evidence does not verify whole-tree
+sandboxing or provider-side authentication/cleanup.

@@ -14,6 +14,14 @@ aceptación, documentación actualizada, sin conflictos arquitectónicos
 abiertos, sin decisiones de negocio pendientes sin resolver. Un
 componente puede estar `IMPLEMENTED` sin que su fase esté `COMPLETE`.
 
+## Real MFA preflight — 2026-09-15
+
+Documentation-only preflight completed; real execution **BLOCKED** pending fresh
+human Admin baseline/cleanup commitment and a synthetically tested real-flow
+adapter/callback boundary. No real MFA executed; Marcus untouched; Admin preserved.
+[Plan and exact prerequisites](research/REAL_MFA_PREFLIGHT_20260915.md).
+ADR-042 remains Proposed; Control 6/RF-03/readiness metrics unchanged.
+
 ## Private human viewer synthetic gate — 2026-09-15
 
 Temporary authenticated :100 with loopback-only VNC/noVNC passed human visual

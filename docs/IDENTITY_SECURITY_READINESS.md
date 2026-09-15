@@ -5,6 +5,14 @@ workspace: `/home/juval/JUVAl/APP`. This ledger supersedes dated implementation
 snapshots in project plans, contracts and research; historical experiments are
 not reclassified as production evidence. Git commits identify the exact changes.
 
+## Real MFA preflight — 2026-09-15
+
+Documentation-only preflight completed; real execution **BLOCKED** pending fresh
+human Admin baseline/cleanup commitment and a synthetically tested real-flow
+adapter/callback boundary. No real MFA executed; Marcus untouched; Admin preserved.
+[Plan and exact prerequisites](research/REAL_MFA_PREFLIGHT_20260915.md).
+ADR-042 remains Proposed; Control 6/RF-03/readiness metrics unchanged.
+
 ## Private viewer gate — 2026-09-15
 
 The private viewer requirement below now has synthetic behavioral evidence:
