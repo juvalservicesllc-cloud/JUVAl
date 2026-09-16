@@ -1,5 +1,11 @@
 # Real MFA preflight — 2026-09-15
 
+Current outcome: [2026-09-16 controlled resumption](REAL_MFA_ABORT_20260916.md)
+aborted before login for a live HTTP redirect containment gap. Fresh human gates
+were supplied except pre-experiment count; deletion/final baseline were subsequently
+confirmed by HUMAN_ADMIN_READBACK. The pre-existing callback was preserved. The
+remainder is the historical contract, not current Marcus existence or restart approval.
+
 **REAL_MFA_PREFLIGHT = BLOCKED (execution prerequisites unresolved).**
 **REAL_MFA_EXECUTED = NO.** This is a documentation/design review, not permission
 to log in or change FusionAuth. Starting HEAD:

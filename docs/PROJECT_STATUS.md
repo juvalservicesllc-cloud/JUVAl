@@ -1398,3 +1398,26 @@ source integration, business scoring, production deployment, live migration,
 provider mutation, host hardening or human exercise is authorized by these
 checker fixes. Full backend, scratch PostgreSQL and frontend suites were not
 run for this tooling-only diff.
+
+
+## Controlled MFA resumption — 2026-09-16
+
+ABORTED_AT_PREFLIGHT / BLOCKED, initial HEAD 958447c, clean, cached origin f03574b
+(0/7). Existing seven commits preserved. No runtime/login created. Static local
+Playwright review found HTTP redirects bypass the route handler; synthetic tests
+remain valid but do not establish live redirect containment. No workaround or
+transport activation. [Detailed evidence](research/REAL_MFA_ABORT_20260916.md).
+Human Admin deletion/readback confirms Marcus absent, JUVAl 0, Default/Daniel
+intact, pre-existing callback and Exact match unchanged. HUMAN_ADMIN_READBACK,
+not machine verification. Full pytest 787 PASS / 129 SKIP, Node controllers 13 PASS.
+Skips: missing nginx/unconfigured databases and storage-inapplicable cases.
+No frontend/dependency/runtime change; ADR-041/042 Proposed; ADR-040 unchanged.
+Ponytail unavailable; manual review. Next: separately reviewed containment design
+and synthetic HTTP redirect-chain coverage before a future authorized experiment.
+
+Closeout checks: offline compliance + worktree secret scan 8 PASS / 1 historical
+marker WARN / 0 FAIL, 513 files without pattern findings. Private ports free,
+:100/dedicated Chromium absent, existing Admin viewer loopback listeners present.
+Diff-check and frozen frontend comparison passed. SSH fetch failed (publickey);
+origin/master f03574b remains cached, remote state NOT_VERIFIED. No push; publication
+awaits authenticated fetch and remote-only=0. No network dependency audit repeated.

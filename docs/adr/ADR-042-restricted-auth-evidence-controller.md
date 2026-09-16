@@ -74,3 +74,14 @@ cycles passed synthetic tests; see [scoped evidence](../research/REAL_MFA_TECHNI
 No real provider transport is enabled. This supersedes the pending synthetic
 adapter-test portion above, not human cleanup/baseline/viewer-risk prerequisites.
 Candidate challenge routes remain unverified against FusionAuth. Status: Proposed.
+
+## Controlled real resumption — 2026-09-16
+
+Explicit operator authorization supplied human cleanup commitment, viewer-risk
+acceptance and fresh identity/redirect readback. Execution aborted before login:
+static installed-Playwright review found HTTP redirects bypass the route handler;
+synthetic fulfillment tests do not establish live HTTP redirect containment.
+No transport enabled or runtime created. [Evidence and human cleanup](../research/REAL_MFA_ABORT_20260916.md).
+Marcus deletion and unchanged pre-existing redirect/Exact match confirmed by
+HUMAN_ADMIN_READBACK. Retain Proposed status; a reviewed live boundary and synthetic
+redirect-chain tests precede any newly authorized real attempt.

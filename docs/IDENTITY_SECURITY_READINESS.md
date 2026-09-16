@@ -1,9 +1,27 @@
 # JUVAl identity/security — current readiness and operator runbook
 
-**Current reconciliation: 2026-09-15. Status: PARTIALLY IMPLEMENTED.** Authoritative
+**Current reconciliation: 2026-09-16. Status: PARTIALLY IMPLEMENTED.** Authoritative
 workspace: `/home/juval/JUVAl/APP`. This ledger supersedes dated implementation
 snapshots in project plans, contracts and research; historical experiments are
 not reclassified as production evidence. Git commits identify the exact changes.
+
+## Controlled real MFA resumption — 2026-09-16
+
+ABORTED_AT_PREFLIGHT; no real login/runtime started. Human cleanup commitment,
+fresh identity/redirect readback and viewer-risk acceptance were supplied. Static
+installed-Playwright review found HTTP redirects bypass the route handler; existing
+fulfilled-response synthetic tests do not establish live HTTP redirect containment.
+Real transport remains disabled; scoped synthetic results remain valid.
+[Abort evidence and cleanup](research/REAL_MFA_ABORT_20260916.md).
+
+Marcus was deleted by the operator: separate HUMAN_ADMIN_READBACK confirms JUVAl
+count 0, exact identity absent, Default/Daniel intact, redirects exactly
+[http://127.0.0.1:18080/oauth/callback] and Exact match preserved. No machine Admin
+verification. Do not restore the historical empty list or implicitly recreate
+Marcus. Next gate: reviewed live containment and synthetic HTTP redirect-chain
+evidence, then separately scoped future real authorization. ADR-041/042 Proposed;
+whole-tree sandbox PARTIAL; Control 6/RF-03 and ADR-040 unchanged. This section
+supersedes earlier present-tense blockers and Marcus/redirect status.
 
 ## Synthetic real-flow technical closeout — 2026-09-16 UTC
 
