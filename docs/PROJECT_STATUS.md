@@ -14,6 +14,15 @@ aceptación, documentación actualizada, sin conflictos arquitectónicos
 abiertos, sin decisiones de negocio pendientes sin resolver. Un
 componente puede estar `IMPLEMENTED` sin que su fase esté `COMPLETE`.
 
+## Synthetic real-flow technical closeout — 2026-09-16 UTC
+
+Finite route/transition adapter and pre-network callback containment passed the
+synthetic gate (8 runtime cases, clean independent browser cycles, no callback
+server, no real provider contact). [Evidence and resume checkpoint](research/REAL_MFA_TECHNICAL_SYNTHETIC_20260916.md).
+REAL_MFA_PREFLIGHT remains BLOCKED by HUMAN_CLEANUP_COMMITMENT, FRESH_BASELINES,
+and VIEWER_RISK_ACCEPTANCE. Real MFA not executed; transport disabled; Marcus and
+Admin untouched. ADR-042 Proposed; Control 6 and ADR-040 metrics unchanged.
+
 ## Real MFA preflight — 2026-09-15
 
 Documentation-only preflight completed; real execution **BLOCKED** pending fresh

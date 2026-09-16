@@ -5,6 +5,16 @@
 to log in or change FusionAuth. Starting HEAD:
 54f7822d7d0582c1c749af38d878a892978b99c7.
 
+## Technical closeout — 2026-09-16 UTC
+
+REAL_FLOW_ADAPTER_TESTS = PASS; CALLBACK_CONTAINMENT = SYNTHETICALLY_VERIFIED.
+See [technical evidence](REAL_MFA_TECHNICAL_SYNTHETIC_20260916.md).
+This closes the synthetic technical portion of item 3 below, superseding its
+pending implementation status. Real transport remains disabled. Current unresolved
+preflight blockers are HUMAN_CLEANUP_COMMITMENT, FRESH_BASELINES and
+VIEWER_RISK_ACCEPTANCE. The following plan remains the real-execution contract,
+not permission to run it. REAL_MFA_PREFLIGHT remains BLOCKED.
+
 ## 1. Evidence and hard prerequisites
 
 Authority: operator's preflight-only instruction. Sources:

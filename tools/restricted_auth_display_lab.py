@@ -10,6 +10,7 @@ import secrets
 import signal
 import struct
 import subprocess
+import sys
 import tempfile
 import time
 
@@ -56,7 +57,7 @@ def write_authority(auth):
     del payload
 
 
-def main():
+def main(real_flow=False):
     display = ':100'
     socket = Path('/tmp/.X11-unix/X100')
     lock = Path('/tmp/.X100-lock')
@@ -64,6 +65,7 @@ def main():
     before_admin, before_ports, before_browser = admin(), listeners(), browser_pids()
     before_git = subprocess.run(['git', 'status', '--porcelain', '--untracked-files=all'], cwd=ROOT, capture_output=True, check=True).stdout
     require(not before_browser, 'DEDICATED_BROWSER_BUSY')
+    require(not any(a.rsplit(':', 1)[-1] in {'5901', '6081', '9222'} | ({'18080'} if real_flow else set()) for _, a in before_ports), 'PORT_BUSY')
     xvfb = None
     result = {}
     with tempfile.TemporaryDirectory(prefix='juval-auth-display-') as directory:
@@ -89,7 +91,8 @@ def main():
             bad = subprocess.run(['xdpyinfo', '-display', display], env={**env, 'XAUTHORITY': str(empty)}, capture_output=True, timeout=10)
             require(good.returncode == 0 and bad.returncode != 0, 'X11_AUTH_FAILED')
             require(listeners() == before_ports, 'DISPLAY_LISTENER_CHANGE')
-            run = subprocess.Popen(['node', 'tests/security/restricted_auth_synthetic.mjs'], cwd=ROOT,
+            script = 'tests/security/real_auth_synthetic.mjs' if real_flow else 'tests/security/restricted_auth_synthetic.mjs'
+            run = subprocess.Popen(['node', script], cwd=ROOT,
                                    env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                    text=True, start_new_session=True)
             try:
@@ -121,7 +124,8 @@ def main():
 
 if __name__ == '__main__':
     try:
-        main()
+        require(sys.argv[1:] in ([], ['--real-flow']), 'INVALID_ARGUMENT')
+        main(real_flow=sys.argv[1:] == ['--real-flow'])
     except Exception:
         # No raw subprocess output, exception messages, X credentials or browser data.
         print(json.dumps({'classification': 'LAB_BLOCKED_OR_FAILED'}))

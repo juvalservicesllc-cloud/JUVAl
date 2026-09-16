@@ -66,3 +66,11 @@ Admin baseline/cleanup commitment, real-flow adapter tests and acceptance of
 viewer residual risks. No authenticated execution is approved by this document.
 Status remains Proposed; historical renderer evidence does not verify whole-tree
 sandboxing or provider-side authentication/cleanup.
+
+## Synthetic real-flow technical closeout — 2026-09-16 UTC
+
+The finite adapter, permanent abort latch, callback interception and fresh-worker
+cycles passed synthetic tests; see [scoped evidence](../research/REAL_MFA_TECHNICAL_SYNTHETIC_20260916.md).
+No real provider transport is enabled. This supersedes the pending synthetic
+adapter-test portion above, not human cleanup/baseline/viewer-risk prerequisites.
+Candidate challenge routes remain unverified against FusionAuth. Status: Proposed.
