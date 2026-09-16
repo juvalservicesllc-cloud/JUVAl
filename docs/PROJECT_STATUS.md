@@ -14,6 +14,27 @@ aceptación, documentación actualizada, sin conflictos arquitectónicos
 abiertos, sin decisiones de negocio pendientes sin resolver. Un
 componente puede estar `IMPLEMENTED` sin que su fase esté `COMPLETE`.
 
+## Synthetic HTTP redirect containment review — 2026-09-16
+
+BLOCKED. The new isolated reproducer stopped at its direct-navigation control:
+1 callback route-handler invocation, 1 accepted TCP connection, 0 HTTP requests,
+no code sentinel observed at the sink. No HTTP 302 was emitted; that branch was
+not reached. This is SYNTHETIC_TEST evidence of a direct TCP connection, not a
+code leak or behavioral verification of HTTP redirect containment. Failure cleanup
+restored listeners/Admin process metadata and removed private runtime resources.
+[Measurements, design options and unexecuted matrix](research/HTTP_REDIRECT_CONTAINMENT_20260916.md).
+
+No fix selected or live transport enabled. Real MFA remains blocked, Marcus remains
+deleted per prior HUMAN_ADMIN_READBACK; no IdP/configuration/frontend change.
+ADR-041/042 Proposed, whole-tree sandbox PARTIAL, ADR-040 unchanged. Architectural
+review is required before further containment experiments; no real MFA authorized.
+This entry supersedes earlier operational next steps, preserving historical evidence.
+Closeout: reproducer exit 1 / INCONCLUSIVE; focused regressions 47 PASS; broader
+compliance tests 181 PASS / 86 SKIP (nginx unavailable). Offline compliance/scan
+8 PASS / 1 historical-marker WARN / 0 FAIL, 516 files without pattern findings.
+Diff-check and frontend/backend no-diff from 2714dbf pass. Six pending files;
+HEAD unchanged, no commit/fetch/push. No dependency network audit.
+
 ## Synthetic real-flow technical closeout — 2026-09-16 UTC
 
 Finite route/transition adapter and pre-network callback containment passed the

@@ -85,3 +85,13 @@ No transport enabled or runtime created. [Evidence and human cleanup](../researc
 Marcus deletion and unchanged pre-existing redirect/Exact match confirmed by
 HUMAN_ADMIN_READBACK. Retain Proposed status; a reviewed live boundary and synthetic
 redirect-chain tests precede any newly authorized real attempt.
+
+## Synthetic HTTP reproducer stop — 2026-09-16
+
+The direct-navigation control admitted one TCP connection despite one callback
+route invocation; no HTTP request/code sentinel was received. The harness stopped
+before emitting its actual HTTP 302. Redirect containment remains NOT_VERIFIED;
+this does not claim a code leak. [Evidence and candidate tradeoffs](../research/HTTP_REDIRECT_CONTAINMENT_20260916.md).
+No candidate was implemented/selected as a safe live boundary. Independent network
+isolation would change approved assumptions and requires architectural review.
+Status remains Proposed; no runtime MFA, user, redirect or readiness change.

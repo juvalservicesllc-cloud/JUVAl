@@ -5,6 +5,22 @@ workspace: `/home/juval/JUVAl/APP`. This ledger supersedes dated implementation
 snapshots in project plans, contracts and research; historical experiments are
 not reclassified as production evidence. Git commits identify the exact changes.
 
+## Synthetic HTTP redirect containment review — 2026-09-16
+
+BLOCKED. The new isolated reproducer stopped at its direct-navigation control:
+1 callback route-handler invocation, 1 accepted TCP connection, 0 HTTP requests,
+no code sentinel observed at the sink. No HTTP 302 was emitted; that branch was
+not reached. This is SYNTHETIC_TEST evidence of a direct TCP connection, not a
+code leak or behavioral verification of HTTP redirect containment. Failure cleanup
+restored listeners/Admin process metadata and removed private runtime resources.
+[Measurements, design options and unexecuted matrix](research/HTTP_REDIRECT_CONTAINMENT_20260916.md).
+
+No fix selected or live transport enabled. Real MFA remains blocked, Marcus remains
+deleted per prior HUMAN_ADMIN_READBACK; no IdP/configuration/frontend change.
+ADR-041/042 Proposed, whole-tree sandbox PARTIAL, ADR-040 unchanged. Architectural
+review is required before further containment experiments; no real MFA authorized.
+This entry supersedes earlier operational next steps, preserving historical evidence.
+
 ## Controlled real MFA resumption — 2026-09-16
 
 ABORTED_AT_PREFLIGHT; no real login/runtime started. Human cleanup commitment,
