@@ -64,3 +64,12 @@ test('resource permission is GET-only and distinct from main-document transition
  assert.equal(p.request(PROVIDER_ORIGIN+'/js/Util.js','GET',false),'ABORT');
  const q=new FlowPolicy(1,state);request(q,'/oauth2/authorize');assert.equal(q.request(PROVIDER_ORIGIN+'/js/Util.js','POST',false),'ABORT');
 });
+
+test('explicit authorized real start uses fixed provider path while default stays disabled',async()=>{
+ let called=0;const p=new FlowPolicy(1,state);
+ const c=new RealFlowController({goto:async()=>{called++}},{close:async()=>{}},p,PROVIDER_ORIGIN+'/oauth2/authorize',true);
+ await c.command({op:'start'});assert.equal(called,1);
+ const q=new FlowPolicy(1,state);
+ const bad=new RealFlowController({goto:async()=>{called++}},{close:async()=>{}},q,PROVIDER_ORIGIN+'/api/users',true);
+ assert.equal((await bad.command({op:'start'})).status,'FAILED');assert.equal(called,1);
+});

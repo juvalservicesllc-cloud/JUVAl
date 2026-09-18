@@ -161,3 +161,14 @@ observed and permitted. Cleanup and absence of port 9222 were checked. This clos
 the bounded synthetic callback gate, not the real MFA, production or Amazon gates.
 Existing same-host/UID, whole-tree sandbox PARTIAL and non-forensic memory limits
 remain. No automatic acceptance of this ADR follows from the synthetic result.
+
+## Explicit real-experiment wiring — 2026-09-18
+
+Operator authorization now covers one human-created disposable Marcus identity,
+private human password/TOTP entry, two cycles and mandatory cleanup. An explicit
+real entry point uses the existing protocol implementation with fixed provider and
+callback origins; synthetic entry remains closed to real policies. Existing finite
+policy remains unchanged. The private viewer commands/isolation are reused.
+[Preparation and evidence scope](../research/REAL_MFA_EXECUTION_20260918.md).
+Shared-wiring direct/302 regression passed; no real flow has executed yet.
+Status remains **Proposed**, with no production/authentication activation implied.

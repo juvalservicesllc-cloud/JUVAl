@@ -126,8 +126,8 @@ export async function installSyntheticBoundary(context, policy, responder) {
 
 /** Finite agent-facing operations only; navigation is a fixed start action. */
 export class RealFlowController {
-  #page; #browser; #policy; #startURL; #started=false;
-  constructor(page,browser,policy,startURL) { this.#page=page;this.#browser=browser;this.#policy=policy;this.#startURL=startURL; }
+  #page; #browser; #policy; #startURL; #started=false; #authorizedReal;
+  constructor(page,browser,policy,startURL,authorizedReal=false) { this.#page=page;this.#browser=browser;this.#policy=policy;this.#startURL=startURL;this.#authorizedReal=authorizedReal===true; }
   async command(r) {
     if(!r || typeof r!=='object' || Object.keys(r).join(',')!=='op' || !['start','observe','close'].includes(r.op))
       return finiteEvidence('REJECTED');
@@ -136,7 +136,7 @@ export class RealFlowController {
       if(r.op==='start') {
         if(this.#started) return finiteEvidence('REJECTED');
         this.#started=true;
-        if(!this.#policy.synthetic) {this.#policy.fail();return this.#policy.evidence();}
+        if(!this.#policy.synthetic && !this.#authorizedReal) {this.#policy.fail();return this.#policy.evidence();}
         const u=new URL(this.#startURL);
         if(u.origin!==this.#policy.origin || u.pathname!=='/oauth2/authorize') {this.#policy.fail();return this.#policy.evidence();}
         await this.#page.goto(this.#startURL,{waitUntil:'load',timeout:10000});

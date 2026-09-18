@@ -5,6 +5,24 @@ workspace: `/home/juval/JUVAl/APP`. This ledger supersedes dated implementation
 snapshots in project plans, contracts and research; historical experiments are
 not reclassified as production evidence. Git commits identify the exact changes.
 
+## Authorized real MFA preparation — 2026-09-18 (current)
+
+**REAL_MFA_PREFLIGHT = PASS; experiment awaiting human identity creation/readback.**
+Explicit operator authorization covers one new Marcus identity, two controlled real
+cycles and mandatory human cleanup. Prior viewer-risk acceptance remains valid;
+architecture unchanged. Current runtime prerequisites passed read-only checks.
+[Evidence classifications, prepared runner and exact pending action](research/REAL_MFA_EXECUTION_20260918.md).
+
+The real entry point is now explicitly wired to the same protocol boundary and
+FlowPolicy; default synthetic mode still rejects real policies. Fixed provider/client/
+callback, private pipe, human-only secrets, no token exchange or production auth.
+Because shared wiring changed, the existing direct/302 regression ran once and
+passed with 0 receiver bytes/sentinel. No real provider contact or MFA yet.
+Latest identity baseline remains Marcus absent / tenant 0 (HUMAN_ADMIN_READBACK).
+Await new identity ID/registration/count 1 before launching the dedicated viewer.
+ADR-041/042 Proposed, Control 6 separate/PARTIAL, ADR-040 unchanged. This entry
+supersedes the prior authorization-blocked status without changing its history.
+
 ## Callback protocol gate CLOSED — 2026-09-18 (current)
 
 **IMPLEMENTED / INTEGRATION_VERIFIED in bounded synthetic scope.** Corrective

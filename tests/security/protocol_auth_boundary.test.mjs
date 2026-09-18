@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {EventEmitter} from 'node:events';
 import {FlowPolicy} from '../../tools/real_auth_flow.mjs';
-import {installProtocolBoundary} from '../../tools/protocol_auth_boundary.mjs';
+import {installProtocolBoundary,installAuthorizedRealBoundary} from '../../tools/protocol_auth_boundary.mjs';
 
 const sourceOrigin='http://127.0.0.1:24001', callbackOrigin='http://127.0.0.1:24002';
 const state='SYNTHETIC_PROTOCOL_STATE';
@@ -36,7 +36,8 @@ async function fixture({cycle=1,synthetic=true,args=['--remote-debugging-pipe'],
     await new Promise(resolve=>setImmediate(resolve));
     return commands.filter(c=>c.params?.requestId===event.requestId).map(c=>c.method);
   };
-  return {policy,commands,root,session,start,pause,closed:()=>closed,contacted:()=>contacted};
+  const startReal=()=>installAuthorizedRealBoundary(browser,context,page,policy);
+  return {policy,commands,root,session,start,startReal,pause,closed:()=>closed,contacted:()=>contacted};
 }
 
 test('direct and redirected callbacks use the same policy and fulfill without continue',async()=>{
@@ -112,4 +113,18 @@ test('pre-existing auxiliary target is destroyed before installation without res
   const rejected=await fixture({auxiliary:true,reject:'Target.closeTarget'});
   await assert.rejects(rejected.start(),/PROTOCOL_BOUNDARY_UNAVAILABLE/);
   assert(rejected.closed());
+});
+
+test('explicit real entry preserves exact origin policy and local callback fulfillment',async()=>{
+  const f=await fixture({synthetic:false}), boundary=await f.startReal();
+  assert.deepEqual(await f.pause('http://127.0.0.1:9011/oauth2/authorize'),['Fetch.continueRequest']);
+  assert.deepEqual(await f.pause('http://127.0.0.1:18080/oauth/callback?code=SYNTHETIC_PROTOCOL_CODE&state='+state,
+    {redirectedRequestId:'previous'}),['Fetch.fulfillRequest']);
+  assert(f.policy.evidence().status==='CALLBACK_REACHED');
+  assert(boundary.evidence().redirectCallbackIntercepted);
+  assert(!JSON.stringify(f.commands).includes('SYNTHETIC_PROTOCOL_CODE'));
+  await boundary.close();
+  const bad=await fixture({synthetic:false});await bad.startReal();
+  assert.deepEqual(await bad.pause('http://127.0.0.1:9012/oauth2/authorize'),['Fetch.failRequest']);
+  assert(bad.closed());
 });

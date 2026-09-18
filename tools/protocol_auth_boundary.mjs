@@ -1,7 +1,7 @@
-/** Internal Chromium Fetch enforcement. Synthetic-only until separately authorized.
+/** Internal Chromium Fetch enforcement. Synthetic default; real mode requires the explicit authorized entry point.
  * No protocol session, request object, URL, error or arbitrary command is exported.
  */
-import {FlowPolicy, SYNTHETIC_ORIGIN, CALLBACK_ORIGIN} from './real_auth_flow.mjs';
+import {FlowPolicy, SYNTHETIC_ORIGIN, CALLBACK_ORIGIN, PROVIDER_ORIGIN} from './real_auth_flow.mjs';
 
 export const SETUP_FAILURES = Object.freeze(['OWNERSHIP','PIPE_CHECK','PAGE_SESSION',
   'ROOT_TARGET_GUARD','CHILD_TARGET_GUARD','OWNED_TARGET_PAUSED','OTHER_TARGET_ATTACHED',
@@ -25,6 +25,17 @@ function fixtureOrigin(raw) {
 export async function installProtocolBoundary(browser, context, page, policy, fixture) {
   if(!(policy instanceof FlowPolicy) || !policy.synthetic || policy.origin !== SYNTHETIC_ORIGIN)
     throw new Error('LIVE_TRANSPORT_DISABLED');
+  return installBoundary(browser,context,page,policy,fixture,false);
+}
+
+/** Fixed real experiment boundary, explicitly authorized 2026-09-18. No caller URL. */
+export async function installAuthorizedRealBoundary(browser, context, page, policy) {
+  if(!(policy instanceof FlowPolicy) || policy.synthetic || policy.origin !== PROVIDER_ORIGIN)
+    throw new Error('INVALID_REAL_POLICY');
+  return installBoundary(browser,context,page,policy,null,true);
+}
+
+async function installBoundary(browser, context, page, policy, fixture, real) {
   let closing = false, failed = false, closePromise, stage = 'OWNERSHIP';
   let callbackIntercepted = false, redirectCallbackIntercepted = false;
   const close = () => {
@@ -38,8 +49,8 @@ export async function installProtocolBoundary(browser, context, page, policy, fi
     void close().catch(() => {}); // Lifecycle owner independently verifies teardown.
   };
   try {
-    const source = fixtureOrigin(fixture.sourceOrigin);
-    const sink = fixtureOrigin(fixture.callbackOrigin);
+    const source = real ? PROVIDER_ORIGIN : fixtureOrigin(fixture.sourceOrigin);
+    const sink = real ? CALLBACK_ORIGIN : fixtureOrigin(fixture.callbackOrigin);
     if(source === sink || page.url() !== 'about:blank' || context.pages().length !== 1 ||
        browser.contexts().length !== 1) throw new Error('INVALID_OWNERSHIP');
     stage = 'PIPE_CHECK';
@@ -92,12 +103,12 @@ export async function installProtocolBoundary(browser, context, page, policy, fi
         if(closing) return; // Keep paused until owned browser destruction.
         const u = new URL(event.request.url);
         const originalOrigin = u.origin;
-        if(originalOrigin === source || originalOrigin === sink) {
+        if((originalOrigin === source || originalOrigin === sink) && !real) {
           // Mutate origin components only; never read the code value.
           const logical = new URL(originalOrigin === source ? SYNTHETIC_ORIGIN : CALLBACK_ORIGIN);
           u.protocol = logical.protocol; u.hostname = logical.hostname; u.port = logical.port;
-        } else {
-          // Synthetic transport guard: even a policy-shaped real URL cannot pass.
+        } else if(originalOrigin !== source && originalOrigin !== sink) {
+          // Transport guard: no destination outside the two exact origins can pass.
           policy.fail('UNEXPECTED_ROUTE');
         }
         const main = event.resourceType === 'Document' && event.frameId === mainFrame;
