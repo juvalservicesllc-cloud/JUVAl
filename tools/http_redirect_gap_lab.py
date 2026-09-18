@@ -26,7 +26,10 @@ def validate_evidence(evidence):
         'GAP_REPRODUCED_CONTAINMENT_BLOCKED', 'PROTOCOL_CALLBACK_CONTAINMENT_PASS',
         'REPRODUCER_INCONCLUSIVE'}, 'SCHEMA')
     require(evidence['setup_failure'] in (None, 'OWNERSHIP', 'PIPE_CHECK', 'PAGE_SESSION',
-                                         'TARGET_GUARD', 'WEBSOCKET_GUARD', 'FETCH_ENABLE'), 'SCHEMA')
+                                         'ROOT_TARGET_GUARD', 'CHILD_TARGET_GUARD', 'OWNED_TARGET_PAUSED',
+                                         'OTHER_TARGET_ATTACHED', 'EXPECTED_TARGET_NOT_PAGE', 'OTHER_TARGET_PAGE',
+                                         'OTHER_TARGET_IFRAME', 'OTHER_TARGET_OTHER', 'OTHER_TARGET_BROWSER', 'OTHER_TARGET_TAB',
+                                         'OTHER_TARGET_SERVICE_WORKER', 'OTHER_TARGET_WORKER', 'PREEXISTING_TARGET_CLOSE', 'WEBSOCKET_GUARD', 'FETCH_ENABLE'), 'SCHEMA')
     for key in ('browser_closed', 'servers_closed'):
         require(type(evidence[key]) is bool, 'SCHEMA')
     for mode in ('direct', 'redirect'):

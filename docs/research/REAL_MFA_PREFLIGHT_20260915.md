@@ -1,5 +1,12 @@
 # Real MFA preflight — 2026-09-15
 
+Current corrective result 2026-09-18: [protocol callback gate CLOSED](HTTP_REDIRECT_CONTAINMENT_20260916.md)
+after direct and actual 302 passed with zero receiver application bytes. No further
+callback experiment is pending. REAL_MFA_PREFLIGHT remains BLOCKED_BY_HUMAN_AUTHORIZATION
+for the future single identity/real experiment and renewed cleanup scope. Existing
+viewer-risk acceptance and unchanged HUMAN_ADMIN_READBACK baselines are retained.
+No identity creation, real transport or MFA is authorized by this synthetic result.
+
 Latest 2026-09-18 update: private-pipe protocol mitigation is explicitly approved
 and implemented, but its single integration execution stopped at setup before any
 navigation. [Current evidence](HTTP_REDIRECT_CONTAINMENT_20260916.md). Preflight

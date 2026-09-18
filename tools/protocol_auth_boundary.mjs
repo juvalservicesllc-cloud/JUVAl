@@ -4,7 +4,10 @@
 import {FlowPolicy, SYNTHETIC_ORIGIN, CALLBACK_ORIGIN} from './real_auth_flow.mjs';
 
 export const SETUP_FAILURES = Object.freeze(['OWNERSHIP','PIPE_CHECK','PAGE_SESSION',
-  'TARGET_GUARD','WEBSOCKET_GUARD','FETCH_ENABLE']);
+  'ROOT_TARGET_GUARD','CHILD_TARGET_GUARD','OWNED_TARGET_PAUSED','OTHER_TARGET_ATTACHED',
+  'EXPECTED_TARGET_NOT_PAGE','OTHER_TARGET_PAGE','OTHER_TARGET_IFRAME','OTHER_TARGET_OTHER',
+  'OTHER_TARGET_BROWSER','OTHER_TARGET_TAB','OTHER_TARGET_SERVICE_WORKER','OTHER_TARGET_WORKER',
+  'PREEXISTING_TARGET_CLOSE','WEBSOCKET_GUARD','FETCH_ENABLE']);
 
 function fixtureOrigin(raw) {
   const u = new URL(raw);
@@ -50,19 +53,37 @@ export async function installProtocolBoundary(browser, context, page, policy, fi
     const session = await context.newCDPSession(page);
     session.on('close', fail);
     const {targetInfo} = await session.send('Target.getTargetInfo');
+    if(targetInfo.type !== 'page') { stage = 'EXPECTED_TARGET_NOT_PAGE'; throw new Error('TARGET_MISMATCH'); }
     const {frameTree} = await session.send('Page.getFrameTree');
     const mainFrame = frameTree.frame.id;
-    // Unknown targets remain paused; never resume them or install a broader policy.
+    // Before navigation, destroy pre-existing auxiliary targets instead of treating
+    // their discovery as a runtime escape. No target is whitelisted or resumed.
+    let installing = true;
+    const discardedTargets = [];
+    // Unknown targets created after installation still abort the whole browser.
     const attached = event => {
-      if(event.targetInfo.targetId !== targetInfo.targetId || event.waitingForDebugger) fail();
+      if(event.targetInfo.targetId !== targetInfo.targetId && installing) {
+        if(discardedTargets.length >= 16) { fail(); return; }
+        discardedTargets.push(root.send('Target.closeTarget', {targetId:event.targetInfo.targetId})
+          .then(result => { if(!result.success) fail(); }).catch(() => fail()));
+      } else if(event.targetInfo.targetId !== targetInfo.targetId || event.waitingForDebugger) {
+        stage = event.targetInfo.targetId === targetInfo.targetId ? 'OWNED_TARGET_PAUSED' : 'OTHER_TARGET_ATTACHED';
+        fail();
+      }
     };
     root.on('Target.attachedToTarget', attached);
     session.on('Target.attachedToTarget', attached);
     const guard = {autoAttach:true, waitForDebuggerOnStart:true, flatten:true,
       filter:[{type:'browser',exclude:true},{type:'tab',exclude:true},{}]};
-    stage = 'TARGET_GUARD';
+    stage = 'ROOT_TARGET_GUARD';
     await root.send('Target.setAutoAttach', guard);
+    if(closing) throw new Error('BOUNDARY_SETUP_FAILED');
+    stage = 'CHILD_TARGET_GUARD';
     await session.send('Target.setAutoAttach', guard);
+    stage = 'PREEXISTING_TARGET_CLOSE';
+    for(const discarded of discardedTargets) await discarded;
+    installing = false;
+    if(closing) throw new Error('BOUNDARY_SETUP_FAILED');
     stage = 'WEBSOCKET_GUARD';
     await context.routeWebSocket('**/*', socket => { policy.fail('UNEXPECTED_ROUTE'); socket.close(); fail(); });
     session.on('Fetch.authRequired', () => fail());

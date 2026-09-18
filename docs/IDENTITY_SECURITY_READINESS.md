@@ -5,7 +5,27 @@ workspace: `/home/juval/JUVAl/APP`. This ledger supersedes dated implementation
 snapshots in project plans, contracts and research; historical experiments are
 not reclassified as production evidence. Git commits identify the exact changes.
 
-## Protocol-pipe callback adapter — 2026-09-18 (latest)
+## Callback protocol gate CLOSED — 2026-09-18 (current)
+
+**IMPLEMENTED / INTEGRATION_VERIFIED in bounded synthetic scope.** Corrective
+execution of the existing laboratory passed both actual direct and HTTP 302
+navigation with active private-pipe interception and finite callback completion.
+Receiver: direct 1 TCP / 0 bytes / 0 HTTP; 302 0 TCP / 0 bytes / 0 HTTP; no sentinel.
+Corrections: explicit automation flag required for private command-line verification,
+and destruction of pre-existing auxiliary targets before navigation. Runtime
+unknown-target abort and the unchanged FlowPolicy remain enforced.
+[Correction history, exact evidence and human checkpoint](research/HTTP_REDIRECT_CONTAINMENT_20260916.md).
+
+CALLBACK_CONTAINMENT = SYNTHETICALLY_VERIFIED_AT_HTTP_OAUTH_MATERIAL_BOUNDARY.
+Cleanup/listeners/Admin metadata verified; 9222 absent. No further callback test due.
+REAL_MFA_PREFLIGHT remains BLOCKED_BY_HUMAN_AUTHORIZATION: future single disposable
+identity/real experiment and its human cleanup scope need explicit authorization.
+Marcus absent / JUVAl 0 and redirect Exact remain HUMAN_ADMIN_READBACK; prior viewer
+risk acceptance is retained, not requested again. No provider state changed.
+Real transport disabled; MFA not executed; ADR-041/042 Proposed, ADR-040 unchanged.
+This supersedes the operational blockers below, preserving their historical evidence.
+
+## Protocol-pipe callback adapter — 2026-09-18 (historical)
 
 **PARTIALLY IMPLEMENTED; integration INCONCLUSIVE, callback gate NOT CLOSED.**
 Operator approved private-pipe protocol interception delegating to FlowPolicy.

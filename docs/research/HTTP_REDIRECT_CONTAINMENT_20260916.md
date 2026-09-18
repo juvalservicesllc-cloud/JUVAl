@@ -1,6 +1,133 @@
 # HTTP redirect containment: synthetic reproducer and design review — 2026-09-16
 
-## Protocol-pipe implementation attempt — 2026-09-18 (latest)
+## Corrective protocol integration — 2026-09-18 (current, gate CLOSED)
+
+**IMPLEMENTED / PROTOCOL_BOUNDARY = INTEGRATION_VERIFIED (synthetic scope).**
+Initial HEAD 7699d02de78492a71d160199a62bbf8d176a151c, clean. Operator explicitly
+authorized autonomous corrections and reruns of the same synthetic laboratory.
+No new architecture, real provider, identity creation or real MFA authorization.
+
+### Root causes and bounded correction history
+
+Six invocations of the same tools/http_redirect_gap_lab.py; no second laboratory.
+The first five stopped before navigation; the sixth executed both cases and PASSED.
+No browser callback experiment was repeated after PASS.
+
+| Invocation | Finite result | Action before next invocation |
+|---|---|---|
+| 1 | PIPE_CHECK | Add --enable-automation to the owned laboratory browser launch |
+| 2 | TARGET_GUARD | Separate root/child/target-event diagnostic stages |
+| 3 | OTHER_TARGET_ATTACHED | Check expected page type and classify attached target type finitely |
+| 4 | OTHER_TARGET_OTHER | Refine known auxiliary target-type labels, without exporting target data |
+| 5 | OTHER_TARGET_OTHER | Destroy discovered auxiliary targets during blank-page preparation |
+| 6 | PROTOCOL_CALLBACK_CONTAINMENT_PASS | Close gate; no further browser experiment |
+
+Two functional corrections, three bounded diagnostic refinements. First cause:
+installed Playwright does not add --enable-automation by default, while installed
+protocol.d.ts explicitly requires it for Browser.getBrowserCommandLine. Adding it
+allows the existing pipe/sandbox assertion to execute; no assertion was removed.
+Second cause: initial auto-attachment discovers an auxiliary target, triggering the
+runtime unknown-target abort before navigation. No arbitrary target details were
+exported; do not infer that auxiliary target's role or content from its category.
+
+The correction destroys every unowned target discovered during blank-page setup,
+awaits successful closure, and never resumes it. Closure failure aborts installation.
+After setup, an unexpected target still closes the entire owned browser. The bound
+of 16 setup discards prevents an unbounded lifecycle loop. This is initialization
+wiring, not a target allowlist expansion. FlowPolicy remains unchanged and is the
+sole route/transition/callback authority. The exact logical callback stays
+http://127.0.0.1:18080/oauth/callback; only owned synthetic ports are relocated.
+Unit tests cover successful setup discard, failed discard and runtime target abort.
+
+### Decisive measured acceptance
+
+Command for each invocation: PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B
+ tools/http_redirect_gap_lab.py. Final exit **0**, setup_failure=null.
+
+| Measurement | Direct callback | Actual HTTP 302 callback |
+|---|---:|---:|
+| Navigation actually attempted | true | true |
+| Browser callback request event | 1 | 1 |
+| Pipe-only protocol installation checked | true | true |
+| Callback intercepted by protocol | true | true |
+| Redirect-generated callback intercepted | false (not a redirect) | true |
+| Source HTTP 302 emitted | 0 | 1 |
+| Receiver TCP connections | 1 | 0 |
+| Receiver application bytes | 0 | 0 |
+| Receiver HTTP requests | 0 | 0 |
+| Receiver code sentinel observed | false | false |
+| Sensor observation complete | true | true |
+| Finite policy/controller callback reached | true | true |
+| Protocol failure | false | false |
+
+CALLBACK_302_CONTAINMENT = PASS.
+CALLBACK_TCP_CONNECTION = MAY_OCCUR (direct case observed one).
+CALLBACK_HTTP_OAUTH_MATERIAL_NETWORK_EXPOSURE = NONE_DETECTED_IN_BOUNDED_SYNTHETIC_TEST.
+CALLBACK_CONTAINMENT = SYNTHETICALLY_VERIFIED_AT_HTTP_OAUTH_MATERIAL_BOUNDARY.
+Zero received bytes supports the query/code/state/fragment-equivalent material
+boundary in these cases; no separate fragment-transmission claim is made. This is
+not proof of zero packets, zero TCP, absolute nondisclosure or memory erasure.
+
+Each case used a newly launched sandboxed browser. All runs reported owned browser,
+servers, display and temporary runtime removed; listener set restored and Admin
+process metadata unchanged. Port 9222 was absent before, throughout runtime polling
+and after. The final successful run had no code sentinel in child output, empty
+stderr and 0 code-marker matches in 41 owned runtime regular files scanned after
+browser close. Scope excludes deleted files, memory/swap/crash forensics and hostile
+same-UID processes. No provider contact, real secret/OAuth material, user/config
+change, frontend edit, host-security change or Git publication occurred.
+
+The historical route-level failure remains below: actual 302 delivered 1 HTTP
+request, 753 bytes and the synthetic code marker. The first protocol attempt was
+inconclusive before navigation. Neither result is rewritten as a first-try success.
+The corrected protocol gate is now closed; no further callback laboratory is due.
+
+### Current MFA preflight and single human checkpoint
+
+REAL_MFA_PREFLIGHT = BLOCKED_BY_HUMAN_AUTHORIZATION, not callback containment.
+Marcus absent and complete JUVAl Users count 0 remain HUMAN_ADMIN_READBACK.
+Existing redirect [http://127.0.0.1:18080/oauth/callback], Exact match and earlier
+PKCE Required retain their recorded human evidence; these synthetic corrections
+changed no provider configuration and do not make that baseline newly stale.
+Viewer residual-risk acceptance is already recorded in REAL_MFA_ABORT_20260916;
+no repeat acceptance is requested while that boundary remains unchanged.
+
+One next checkpoint: explicit authorization for the future real-flow preparation,
+human creation of exactly one Marcus disposable identity (not an additional second
+identity), and the two-cycle real experiment; plus a named/available human operator's
+cleanup commitment for that newly created identity on success, failure, abort,
+controller failure or disconnection. Delete only that exact user; independently
+read back complete tenant list at 0; restore any temporarily changed redirects
+exactly. Do not create or start anything under this synthetic authorization.
+
+After authorized creation, its exact identity/application registration and changed
+pre-experiment count require readback once; this is new-state evidence, not repeated
+verification of the unchanged zero-user baseline. Real transport remains deliberately
+disabled in code and must only be wired for the separately authorized next phase.
+No real-provider/MFA behavior is credited by this gate. ADR-041/042 remain Proposed;
+Control 6 PARTIAL and ADR-040 measurements unchanged.
+
+
+### Final delivery checks (after PASS; no further browser execution)
+
+- Targeted Node/security suite once: 18 PASS / 0 SKIP, covering finite policy,
+  protocol enforcement and restricted evidence output. Setup-discard positive and
+  failure tests added for the actual correction; no new policy matrix or sensor lab.
+- Relevant pytest regression once: 181 PASS / 86 SKIP; all skips require unavailable
+  nginx, which this change does not modify. No skip counted as evidence.
+- Offline compliance plus worktree secret-pattern scan: 8 PASS / 1 WARN / 0 FAIL;
+  521 eligible files without findings. Warning is the pre-existing historical
+  ROLE PLACEHOLDER. No dependency network audit, historical scan or absolute claim.
+- git diff --check PASS; frontend/frontend-next/demo/src unchanged from initial HEAD.
+- Self-review: actual direct and 302 navigation, active pipe interception and finite
+  completion proved in the bounded fixture; no received callback application bytes
+  or sentinel; no real provider/secret/identity; sandbox preserved; owned resources
+  cleaned; Admin preserved; prior failed/inconclusive evidence retained. No new
+  validation layer or browser experiment after PASS. Manual simplicity review;
+  repository-required review tool unavailable. ADR-040 metrics unchanged.
+- One coherent local corrective/evidence commit; no push or remote Git operation.
+
+## Protocol-pipe implementation attempt — 2026-09-18 (historical)
 
 **PARTIALLY IMPLEMENTED / integration INCONCLUSIVE / callback gate NOT CLOSED.**
 Initial HEAD d9c1434db45348fe1c153792136f2ad0d751c0e6, clean worktree.

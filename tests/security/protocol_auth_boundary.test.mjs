@@ -7,14 +7,18 @@ import {installProtocolBoundary} from '../../tools/protocol_auth_boundary.mjs';
 const sourceOrigin='http://127.0.0.1:24001', callbackOrigin='http://127.0.0.1:24002';
 const state='SYNTHETIC_PROTOCOL_STATE';
 const callback=callbackOrigin+'/oauth/callback?code=SYNTHETIC_PROTOCOL_CODE&state='+state;
-async function fixture({cycle=1,synthetic=true,args=['--remote-debugging-pipe'],reject=null}={}) {
+async function fixture({cycle=1,synthetic=true,args=['--remote-debugging-pipe'],reject=null,auxiliary=false}={}) {
   const policy=new FlowPolicy(cycle,state,synthetic), commands=[];
   const root=new EventEmitter(), session=new EventEmitter();
   const send=async(method,params)=>{
     commands.push({method,params});
     if(method===reject) throw new Error('SYNTHETIC_PRIVATE_ERROR');
+    if(method==='Target.setAutoAttach' && auxiliary) {
+      auxiliary=false;root.emit('Target.attachedToTarget',{targetInfo:{targetId:'auxiliary',type:'other'},waitingForDebugger:false});
+    }
+    if(method==='Target.closeTarget') return {success:true};
     if(method==='Browser.getBrowserCommandLine') return {arguments:args};
-    if(method==='Target.getTargetInfo') return {targetInfo:{targetId:'owned'}};
+    if(method==='Target.getTargetInfo') return {targetInfo:{targetId:'owned',type:'page'}};
     if(method==='Page.getFrameTree') return {frameTree:{frame:{id:'main'}}};
     return {};
   };
@@ -96,4 +100,16 @@ test('setup failure, protocol failure, detach and extra targets close the owned 
     assert(f.closed());assert(boundary.evidence().failed);
     assert(!f.commands.some(c=>c.method==='Runtime.runIfWaitingForDebugger'));
   }
+});
+
+test('pre-existing auxiliary target is destroyed before installation without resuming it',async()=>{
+  const f=await fixture({auxiliary:true}), boundary=await f.start();
+  const closed=f.commands.findIndex(c=>c.method==='Target.closeTarget');
+  const enabled=f.commands.findIndex(c=>c.method==='Fetch.enable');
+  assert(closed>=0 && enabled>closed);assert(!f.closed());
+  assert(!f.commands.some(c=>c.method==='Runtime.runIfWaitingForDebugger'));
+  await boundary.close();
+  const rejected=await fixture({auxiliary:true,reject:'Target.closeTarget'});
+  await assert.rejects(rejected.start(),/PROTOCOL_BOUNDARY_UNAVAILABLE/);
+  assert(rejected.closed());
 });

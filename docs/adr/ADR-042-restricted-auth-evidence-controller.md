@@ -112,7 +112,7 @@ one TCP connection. Thus the HTTP/OAuth boundary also fails for HTTP redirects.
 That candidate adds a privileged protocol interception boundary and remains PENDING;
 no namespace/broker/protocol implementation is silently approved by this amendment.
 
-## Approved protocol-pipe extension — 2026-09-18 (latest)
+## Approved protocol-pipe extension — 2026-09-18 (initial implementation)
 
 The operator explicitly **APPROVED implementation** of Chromium protocol-layer
 interception through a private process pipe, preserving the existing finite policy.
@@ -138,3 +138,26 @@ Finite setup-phase diagnostics were added after the run and tested without anoth
 browser execution. [Measured evidence and exact continuation scope](../research/HTTP_REDIRECT_CONTAINMENT_20260916.md).
 Same-host/UID, browser/process memory and whole-tree sandbox PARTIAL limitations
 remain. Historical failed 302 evidence is preserved. **Status remains Proposed.**
+
+## Corrective integration evidence — 2026-09-18 (current)
+
+**Status remains Proposed.** Explicit operator authorization permitted corrections
+and reruns within the same synthetic scope. The protocol implementation now passes
+actual direct and HTTP 302 callbacks at the HTTP/OAuth-material boundary, using the
+existing policy. [Measured results and preserved failures](../research/HTTP_REDIRECT_CONTAINMENT_20260916.md).
+
+The launch now supplies --enable-automation, required by Chromium's private command
+line inspection API. Initial attachment also discovers auxiliary targets: before
+any navigation these are destroyed and closure awaited, without resuming them or
+adding them to an allowlist. Failed closure aborts; unexpected targets after setup
+still abort the browser. This corrects setup wiring without weakening transport,
+policy or sandbox checks. The additional closure path has positive/negative unit
+coverage. No live-provider support was enabled and no new architectural alternative
+was adopted. The initial inconclusive protocol attempt remains historical evidence.
+
+Both cases reached finite callback state with protocol interception active; neither
+delivered any application bytes/HTTP/sentinel to the owned receiver. Direct TCP was
+observed and permitted. Cleanup and absence of port 9222 were checked. This closes
+the bounded synthetic callback gate, not the real MFA, production or Amazon gates.
+Existing same-host/UID, whole-tree sandbox PARTIAL and non-forensic memory limits
+remain. No automatic acceptance of this ADR follows from the synthetic result.

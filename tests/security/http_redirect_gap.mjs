@@ -84,7 +84,8 @@ try {
     requireCondition(!stopped);
     active = result[mode];
     browser = await chromium.launch({executablePath:'/opt/juval-browser/chromium-1243/chrome',
-      chromiumSandbox:true,headless:false,timeout:15000});
+      // Required by Browser.getBrowserCommandLine; installed Playwright omits it.
+      args:['--enable-automation'],chromiumSandbox:true,headless:false,timeout:15000});
     const policy = new FlowPolicy(1, syntheticState, true);
     if(mode === 'direct') policy.request(policy.origin+'/oauth2/authorize','GET',true);
     const context = await browser.newContext({acceptDownloads:false,serviceWorkers:'block'});
