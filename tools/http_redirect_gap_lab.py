@@ -29,12 +29,13 @@ def validate_evidence(evidence):
         require(type(evidence[key]) is bool, 'SCHEMA')
     for mode in ('direct', 'redirect'):
         row = evidence[mode]
-        booleans = {'navigation_attempted', 'code_crossed_boundary'}
+        booleans = {'navigation_attempted', 'code_crossed_boundary',
+                    'sensor_observation_complete', 'finite_controller_callback'}
         counts = {'callback_request_event', 'callback_route_calls', 'callback_tcp_connections',
-                  'callback_http_requests', 'source_http_redirects'}
+                  'callback_http_requests', 'source_http_redirects', 'callback_application_bytes'}
         require(isinstance(row, dict) and set(row) == booleans | counts, 'SCHEMA')
         require(all(type(row[k]) is bool for k in booleans), 'SCHEMA')
-        require(all(type(row[k]) is int and 0 <= row[k] <= 100 for k in counts), 'SCHEMA')
+        require(all(type(row[k]) is int and 0 <= row[k] <= (409600 if k == 'callback_application_bytes' else 100) for k in counts), 'SCHEMA')
 
 
 def main():

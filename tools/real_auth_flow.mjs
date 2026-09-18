@@ -86,9 +86,10 @@ export class FlowPolicy {
   }
 }
 
-/** Installs the actual pre-network callback handler. No receiver/listener exists.
+/** Installs the synthetic callback handler. No receiver/listener exists here.
+ * This is not proof of zero TCP or containment of network HTTP redirect chains.
  * responder is trusted fixture code, never a protocol argument. Live transport
- * must not be enabled until the three independent human gates are resolved.
+ * must not be enabled until HTTP redirect containment and human gates are resolved.
  */
 export async function installSyntheticBoundary(context, policy, responder) {
   if (!policy.synthetic || policy.origin!==SYNTHETIC_ORIGIN) throw new Error('LIVE_TRANSPORT_DISABLED');

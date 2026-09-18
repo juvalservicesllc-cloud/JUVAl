@@ -1,9 +1,26 @@
 # JUVAl identity/security — current readiness and operator runbook
 
-**Current reconciliation: 2026-09-16. Status: PARTIALLY IMPLEMENTED.** Authoritative
+**Current reconciliation: 2026-09-18. Status: PARTIALLY IMPLEMENTED.** Authoritative
 workspace: `/home/juval/JUVAl/APP`. This ledger supersedes dated implementation
 snapshots in project plans, contracts and research; historical experiments are
 not reclassified as production evidence. Git commits identify the exact changes.
+
+## Callback HTTP/OAuth boundary — 2026-09-18
+
+**BLOCKED by measured synthetic HTTP redirect bypass.** Operator approved an
+HTTP/OAuth-material boundary; zero TCP is not required. One final bounded run:
+direct callback 1 TCP / 0 bytes / finite callback reached; actual 302 callback
+1 TCP / 753 bytes / 1 HTTP request / synthetic code marker received / 0 handler
+invocations. Cleanup restored listeners and Admin metadata and removed owned
+runtime resources. No real provider/MFA/user/configuration changes.
+[Decision, measurements and next architectural checkpoint](research/HTTP_REDIRECT_CONTAINMENT_20260916.md).
+
+REAL_MFA_PREFLIGHT remains BLOCKED by transport containment, not merely the old
+three human gates. Marcus absent and tenant count 0 remain HUMAN_ADMIN_READBACK;
+existing redirect/Exact match preserved. Prior viewer-risk acceptance is recorded;
+a future new identity/cleanup scope requires authorization after technical closure.
+ADR-041/042 Proposed; ADR-040 unchanged. This section supersedes the earlier
+present-tense blockers and pre-network wording; historical results retain scope.
 
 ## Synthetic HTTP redirect containment review — 2026-09-16
 
@@ -41,7 +58,7 @@ supersedes earlier present-tense blockers and Marcus/redirect status.
 
 ## Synthetic real-flow technical closeout — 2026-09-16 UTC
 
-Finite route/transition adapter and pre-network callback containment passed the
+Finite route/transition adapter and fulfilled-response callback interception passed the
 synthetic gate (8 runtime cases, clean independent browser cycles, no callback
 server, no real provider contact). [Evidence and resume checkpoint](research/REAL_MFA_TECHNICAL_SYNTHETIC_20260916.md).
 REAL_MFA_PREFLIGHT remains BLOCKED by HUMAN_CLEANUP_COMMITMENT, FRESH_BASELINES,

@@ -3,18 +3,31 @@
  * Exit 2 means containment violated: stop after cleanup, never count as PASS.
  */
 import {createServer} from 'node:http';
+import {createServer as createSocketServer} from 'node:net';
+import {MARKER, observeSocket} from './socket_observation_sensor.mjs';
+import {FlowPolicy, RealFlowController, CALLBACK_ORIGIN} from '../../tools/real_auth_flow.mjs';
 import {createRequire} from 'node:module';
 
-const sentinel = 'SYNTHETIC_REDIRECT_CODE_SENTINEL';
+const sentinel = MARKER;
+const syntheticState = 'SYNTHETIC_REDIRECT_STATE';
 const requireCondition = value => { if (!value) throw new Error('LAB_FAILED'); };
 const counters = () => ({navigation_attempted:false, callback_request_event:0,
   callback_route_calls:0, callback_tcp_connections:0, callback_http_requests:0,
-  code_crossed_boundary:false, source_http_redirects:0});
+  code_crossed_boundary:false, source_http_redirects:0, callback_application_bytes:0,
+  sensor_observation_complete:false, finite_controller_callback:false});
 const result = {classification:'REPRODUCER_INCONCLUSIVE', direct:counters(), redirect:counters(),
   browser_closed:false, servers_closed:false};
 let active = result.direct, browser, stopped = false, shutdownPromise;
 const servers = [];
 const sockets = new Set();
+const observations = [];
+async function collectObservations(row) {
+  const reports = await Promise.all(observations.filter(o => o.row === row).map(o => o.report));
+  row.callback_application_bytes = reports.reduce((n,r) => n+r.application_bytes_received,0);
+  row.callback_http_requests = reports.reduce((n,r) => n+r.http_requests_parsed,0);
+  row.code_crossed_boundary = reports.some(r => r.marker_observed);
+  row.sensor_observation_complete = row.navigation_attempted && reports.every(r => r.observation_complete);
+}
 async function listen(server) {
   servers.push(server);
   server.on('connection', socket => { sockets.add(socket); socket.on('close', () => sockets.delete(socket)); });
@@ -32,7 +45,7 @@ async function shutdown() {
     for(const socket of sockets) socket.destroy();
     await Promise.all(servers.map(server => new Promise(resolve => {
       if (!server.listening) return resolve();
-      server.close(() => resolve()); server.closeAllConnections();
+      server.close(() => resolve()); server.closeAllConnections?.();
     })));
     result.servers_closed = servers.every(server => !server.listening);
   })();
@@ -44,18 +57,17 @@ try {
   requireCondition(process.env.DISPLAY === ':100' && process.argv.length === 2);
   for(const key of Object.keys(process.env))
     if(!['PATH','HOME','TMPDIR','DISPLAY','XAUTHORITY'].includes(key)) delete process.env[key];
-  const sink = createServer((request,response) => {
-    active.callback_http_requests++;
-    // Synthetic fixture only: reduce request-target comparison immediately to a boolean.
-    active.code_crossed_boundary ||= request.url.includes(sentinel);
-    // Do not emit a response or initiate another navigation after the stop condition.
-    stopped = true;
-    request.socket.destroy();
-    void shutdown();
+  const sink = createSocketServer({allowHalfOpen:true}, socket => {
+    const row = active;
+    row.callback_tcp_connections++;
+    // Owned fixture only: observe bytes before parsing, never export payload.
+    // Any received bytes stop the experiment conservatively.
+    const observer = observeSocket(socket, {attributed:true, timeoutMs:5000});
+    observations.push({row, report:observer.report});
+    socket.on('data', () => { stopped=true; setImmediate(() => { void shutdown(); }); });
   });
-  sink.on('connection', () => { active.callback_tcp_connections++; });
   const sinkOrigin = await listen(sink);
-  const callback = sinkOrigin + '/oauth/callback?code=' + sentinel + '&state=SYNTHETIC_REDIRECT_STATE';
+  const callback = sinkOrigin + '/oauth/callback?code=' + sentinel + '&state=' + syntheticState + '#SYNTHETIC_REDIRECT_FRAGMENT';
   const source = createServer((request,response) => {
     if(stopped || request.method !== 'GET' || request.url !== '/start') {
       response.writeHead(404,{'Cache-Control':'no-store'}); response.end(); return;
@@ -71,41 +83,56 @@ try {
   for(const mode of ['direct','redirect']) {
     requireCondition(!stopped);
     active = result[mode];
+    const policy = new FlowPolicy(1, syntheticState, true);
+    if(mode === 'direct') policy.request(policy.origin+'/oauth2/authorize','GET',true);
     const context = await browser.newContext({acceptDownloads:false,serviceWorkers:'block'});
     await context.routeWebSocket('**/*', socket => { stopped=true; socket.close(); void shutdown(); });
-    context.on('request', request => { if(request.url() === callback) active.callback_request_event++; });
+    context.on('request', request => { if(request.url() === callback.split('#')[0]) active.callback_request_event++; });
     await context.route('**/*', async route => {
       try {
         if(stopped) { await route.abort(); return; }
         const request = route.request();
-        if(request.method() === 'GET' && request.url() === callback) {
+        if(request.method() === 'GET' && request.url() === callback.split('#')[0]) {
           active.callback_route_calls++;
+          // Fixture-only relocation of the ephemeral receiver to the policy's
+          // fixed callback origin; never configurable or used for live auth.
+          requireCondition(policy.request(CALLBACK_ORIGIN+request.url().slice(sinkOrigin.length),
+            request.method(),request.isNavigationRequest()) === 'CALLBACK');
           await route.fulfill({status:200,contentType:'text/html',
             headers:{'Cache-Control':'no-store','Referrer-Policy':'no-referrer'},
             body:'<!doctype html><title>Synthetic control</title>'});
         } else if(request.method() === 'GET' && request.url() === sourceOrigin + '/start') {
+          requireCondition(policy.request(policy.origin+'/oauth2/authorize','GET',true) === 'PROVIDER');
           await route.continue(); // Only the owned synthetic source; NOT a real-flow adapter.
-        } else await route.abort();
+        } else { policy.fail('UNEXPECTED_ROUTE'); await route.abort(); }
       } catch { stopped=true; void shutdown(); }
     });
     const page = await context.newPage();
     active.navigation_attempted = true;
     try { await page.goto(mode === 'direct' ? callback : sourceOrigin+'/start', {waitUntil:'load',timeout:10000}); }
-    catch { if(!active.code_crossed_boundary) throw new Error('LAB_FAILED'); }
-    if(active.code_crossed_boundary) {
+    catch { if(!stopped) throw new Error('LAB_FAILED'); }
+    const controller = new RealFlowController(page,browser,policy,policy.origin+'/oauth2/authorize');
+    active.finite_controller_callback = (await controller.command({op:'observe'})).status === 'CALLBACK_REACHED';
+    if(!stopped) await context.close();
+    await collectObservations(active);
+    if(active.callback_application_bytes > 0) {
       result.classification = 'GAP_REPRODUCED_CONTAINMENT_BLOCKED';
-      break; // User STOP: no additional cases or candidate implementation.
+      break;
     }
-    await context.close();
-    requireCondition(active.callback_tcp_connections === 0 && active.callback_http_requests === 0 &&
-      active.callback_request_event === 1 && active.callback_route_calls === 1);
+    requireCondition(active.sensor_observation_complete && active.callback_http_requests === 0 &&
+      active.callback_request_event === 1 && active.callback_route_calls === 1 && active.finite_controller_callback);
     if(mode === 'redirect') {
       requireCondition(active.source_http_redirects === 1);
       result.classification = 'GAP_NOT_REPRODUCED_SINGLE_302_ONLY';
     }
   }
 } catch { /* Only finite classification/counters leave this process. */ }
-finally { await shutdown(); }
+finally {
+  await shutdown();
+  for(const row of [result.direct,result.redirect]) await collectObservations(row);
+  if([result.direct,result.redirect].some(row => row.callback_application_bytes > 0))
+    result.classification = 'GAP_REPRODUCED_CONTAINMENT_BLOCKED';
+}
 if(!result.browser_closed || !result.servers_closed) result.classification = 'REPRODUCER_INCONCLUSIVE';
 process.stdout.write(JSON.stringify(result)+'\n');
 process.exitCode = result.classification === 'GAP_REPRODUCED_CONTAINMENT_BLOCKED' ? 2 :

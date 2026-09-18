@@ -95,3 +95,19 @@ this does not claim a code leak. [Evidence and candidate tradeoffs](../research/
 No candidate was implemented/selected as a safe live boundary. Independent network
 isolation would change approved assumptions and requires architectural review.
 Status remains Proposed; no runtime MFA, user, redirect or readiness change.
+
+## Approved callback property and failed redirect gate — 2026-09-18
+
+Explicit operator decision APPROVED: protect callback HTTP/OAuth material from
+network delivery; a TCP connection without application bytes is not itself failure.
+This replaces any interpretation of pre-network as a zero-TCP requirement. The
+broader controller ADR remains **Proposed**; no live transport is authorized.
+
+The single bounded test of the existing route/continue architecture completed the
+previously unexecuted 302 case: one HTTP request, 753 received bytes and the synthetic
+code marker reached the owned receiver without callback handler invocation.
+Direct interception reached the finite callback with zero received bytes despite
+one TCP connection. Thus the HTTP/OAuth boundary also fails for HTTP redirects.
+[Exact evidence and proposed internal pipe interceptor](../research/HTTP_REDIRECT_CONTAINMENT_20260916.md).
+That candidate adds a privileged protocol interception boundary and remains PENDING;
+no namespace/broker/protocol implementation is silently approved by this amendment.

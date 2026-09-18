@@ -1,5 +1,10 @@
 # Real MFA preflight — 2026-09-15
 
+Current override 2026-09-18: the [HTTP/OAuth boundary test](HTTP_REDIRECT_CONTAINMENT_20260916.md)
+failed on the actual synthetic 302. Empty TCP is permitted by explicit operator
+decision, but OAuth-bearing HTTP delivery is not. Preflight remains BLOCKED by
+transport containment; the historical three-human-gate list alone is insufficient.
+
 Current outcome: [2026-09-16 controlled resumption](REAL_MFA_ABORT_20260916.md)
 aborted before login for a live HTTP redirect containment gap. Fresh human gates
 were supplied except pre-experiment count; deletion/final baseline were subsequently

@@ -1,5 +1,115 @@
 # HTTP redirect containment: synthetic reproducer and design review — 2026-09-16
 
+## Current decision and final bounded execution — 2026-09-18
+
+**PARTIALLY IMPLEMENTED; CALLBACK GATE FAILED / REAL_MFA_PREFLIGHT BLOCKED.**
+Initial HEAD e2dec00de3d4c47a333a0c6ee3109aade9e0de33. Three pre-existing
+untracked calibration files were inspected before modification: report
+SOCKET_SENSOR_CALIBRATION_20260916.md and tests/security/socket_observation_sensor.mjs
+plus socket_observation_sensor.test.mjs. Legitimate authorized synthetic calibration,
+not generated artifacts; no real credentials/material found in source review.
+They add raw-byte and incomplete-observation detection absent from the old HTTP
+counter, not a second containment mechanism. Retained for this local commit;
+the calibrated sensor and its test implementation are unchanged.
+
+**APPROVED by explicit operator instruction:** required property is
+NO_CALLBACK_HTTP_REQUEST_WITH_OAUTH_MATERIAL_LEAVES_BROWSER_BOUNDARY.
+Zero TCP is not required. An empty connection alone does not fail the gate.
+This supersedes the old zero-TCP acceptance condition below, not its measurements.
+Memory/kernel/swap/crash erasure and absence of packets are not claimed.
+
+Reused the existing reproducer/lifecycle harness and calibrated receive-side
+sensor. One bounded browser execution only; no second lab or rerun. Receiver and
+source bound only ephemeral IPv4 loopback ports, excluding IdP/viewer/CDP/18080.
+The receiver observes raw application bytes before an unbound in-memory HTTP
+parser. Any received bytes conservatively stop the experiment and trigger cleanup.
+Direct interception uses existing FlowPolicy and RealFlowController.observe;
+fixture-only origin relocation maps the ephemeral sink to the policy callback.
+This does not enable the production controller or prove its entire live lifecycle.
+A fixed synthetic fragment is included in navigation, with no claim that fragments
+normally travel in HTTP. The detector reports the code marker, not separate state
+or fragment matches. Zero received bytes covers all material for the direct case;
+the positive code marker alone is sufficient to fail the redirect case.
+
+Command: PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B tools/http_redirect_gap_lab.py.
+Exit **2**, GAP_REPRODUCED_CONTAINMENT_BLOCKED, expected failure signaling preserved.
+
+| Measured field | Direct interception | Actual HTTP 302 |
+|---|---:|---:|
+| Navigation attempted | true | true |
+| Source 302 emitted | 0 | 1 |
+| Callback browser request event | 1 | 1 |
+| Callback handler invoked | 1 | 0 |
+| TCP connections accepted | 1 | 1 |
+| Application bytes received | 0 | 753 |
+| Complete HTTP requests parsed | 0 | 1 |
+| Synthetic code marker received | false | true |
+| Sensor observation complete | true | true |
+| Finite controller CALLBACK_REACHED | true | false |
+
+Evidence classification: **BEHAVIORALLY_VERIFIED_SYNTHETIC_HTTP_REDIRECT_BYPASS**.
+CALLBACK_TCP_CONNECTION = MAY_OCCUR / OBSERVED.
+CALLBACK_HTTP_REQUEST_WITH_OAUTH_MATERIAL = OBSERVED_AT_SYNTHETIC_RECEIVER_302.
+CALLBACK_OAUTH_SENTINEL_NETWORK_EXPOSURE = DETECTED_SYNTHETIC_ONLY.
+CALLBACK_CONTAINMENT = FAILED_AT_HTTP_OAUTH_MATERIAL_BOUNDARY_FOR_302.
+Direct success is scoped; it cannot close the combined gate. Route/transition
+policy regressions remain separate from transport enforcement: a bypassed handler
+cannot enforce its policy on the redirected network request.
+
+Browser and both servers closed; authenticated X11 positive/negative checks passed;
+owned display/socket/lock/runtime removed; full listener baseline restored;
+Admin process metadata unchanged, with no Admin content interaction.
+Child output contained no sentinel and stderr was empty. After browser close,
+41 owned runtime regular files contained zero code-marker matches. This is a
+scoped artifact check, not forensic memory/swap/deleted-file erasure evidence.
+No real provider contact, real OAuth values, password/TOTP, real MFA, Marcus
+recreation, redirect mutation, public listener, sandbox weakening or frontend edit.
+
+Marcus absent, tenant count 0, redirect [http://127.0.0.1:18080/oauth/callback]
+and Exact match remain **HUMAN_ADMIN_READBACK** from the prior cleanup, reaffirmed
+by the operator in this task; no automated provider verification. Prior viewer-risk
+acceptance remains documented. No repetitive confirmation is requested. A future
+new identity and its cleanup obligation need explicitly scoped authorization after
+a valid transport boundary exists; this run authorizes neither.
+
+Next concrete decision, **PENDING**: approve a narrowly scoped internal browser
+protocol interceptor over the existing private pipe, pausing every request/hop,
+including redirects, applying the existing finite policy before HTTP delivery,
+fulfilling the callback locally and aborting unknown routes/transitions. No TCP CDP,
+agent-facing arbitrary commands, secret exports or sandbox change. Target attachment
+and disconnect failure behavior must be resolved in that implementation; this is a
+candidate, not a proven boundary. Broker and namespace alternatives remain below.
+This extends a privileged security boundary and requires architectural approval.
+The one-run authorization is exhausted; no further browser validation was run.
+
+Other next branches remain human/external gated in IDENTITY_SECURITY_READINESS:
+RF-01/RF-05 actual participant decisions/timing, RF-02 public boundary authorization,
+RF-04 personnel/access decisions, sessions production migration authorization.
+No independent implementation gap justifies bypassing those boundaries.
+ADR-041/042 remain Proposed, Control 6 PARTIAL; ADR-040 scores unchanged.
+
+### Validation and closeout — 2026-09-18
+
+- Single bounded browser run: exit 2, measured 302 containment failure above;
+  not counted as a passing security test. No correction/retest browser loop.
+- Relevant regression once: pytest -q -rs tests/compliance, 181 PASS / 86 SKIP;
+  all skips require unavailable nginx. Includes finite unexpected-route/transition
+  latch and disabled-live-transport tests; these do not prove network enforcement
+  when a redirect bypasses the handler.
+- Node syntax checks PASS for reproducer, sensor, calibration tests and controller.
+  Unchanged 13-case calibration retains its dated passing evidence; not rerun.
+- Offline compliance and worktree pattern scan: 8 PASS / 1 WARN / 0 FAIL;
+  519 eligible files without secret-pattern findings. Warning is the existing
+  historical ROLE PLACEHOLDER. No dependency network audit or history scan.
+- Diff whitespace and unchanged frontend/frontend-next/demo/src gates PASS.
+  Review: measured positive evidence preserved; no raw payload exported; no
+  absolute nondisclosure/erasure claim; no new dependency or production code.
+  Repository-mandated review tool unavailable; manual simplicity review performed.
+- One coherent local evidence/instrumentation commit authorized by this task;
+  no fetch/push. A failed containment result is retained honestly, not marked green.
+
+### Historical 2026-09-16 report (superseded where stated above)
+
 Status: BLOCKED / PENDING DECISION. No containment implementation selected.
 Starting HEAD 2714dbf, clean; cached origin/master f03574b, remote-only/local-only
 0/8. REMOTE_STATE = NOT_VERIFIED. No fetch, SSH remediation, commit or push.

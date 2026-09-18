@@ -1,5 +1,9 @@
 # Real-shaped MFA technical gate — closeout 2026-09-16 UTC
 
+Scope clarification 2026-09-18: this fulfilled-response gate does not prove zero
+TCP or HTTP redirect-chain containment. The [single final bounded test](HTTP_REDIRECT_CONTAINMENT_20260916.md)
+observed synthetic OAuth material at the 302 receiver; real transport remains blocked.
+
 Operator session dated 2026-09-15; validation completed after UTC midnight.
 Starting committed baseline: 40561074308646d7eb55a4f7c90e9244fd2269d9.
 Status: IMPLEMENTED_AND_SYNTHETICALLY_VERIFIED. REAL_MFA_EXECUTED = NO.
@@ -8,7 +12,7 @@ REAL_MFA_PREFLIGHT remains BLOCKED.
 ## Boundary implemented
 
 `tools/real_auth_flow.mjs` supplies a finite route/transition policy, a restricted
-start/observe/close interface and the actual pre-network callback route handler.
+start/observe/close interface and the fulfilled-response synthetic callback route handler.
 Provider origin is explicitly 127.0.0.1:9011; callback origin is separately
 127.0.0.1:18080. Runtime transport for the real provider is disabled both before
 boundary installation and before controller navigation. Tests use only the
