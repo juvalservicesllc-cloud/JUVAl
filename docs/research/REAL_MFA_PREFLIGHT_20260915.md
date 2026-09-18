@@ -1,5 +1,10 @@
 # Real MFA preflight — 2026-09-15
 
+Latest 2026-09-18 update: private-pipe protocol mitigation is explicitly approved
+and implemented, but its single integration execution stopped at setup before any
+navigation. [Current evidence](HTTP_REDIRECT_CONTAINMENT_20260916.md). Preflight
+remains BLOCKED; no new identity or real experiment is authorized.
+
 Current override 2026-09-18: the [HTTP/OAuth boundary test](HTTP_REDIRECT_CONTAINMENT_20260916.md)
 failed on the actual synthetic 302. Empty TCP is permitted by explicit operator
 decision, but OAuth-bearing HTTP delivery is not. Preflight remains BLOCKED by

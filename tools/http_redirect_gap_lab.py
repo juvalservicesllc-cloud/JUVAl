@@ -1,4 +1,4 @@
-"""Explicit synthetic redirect reproducer. No FusionAuth, viewer or real callback port.
+"""Bounded synthetic protocol redirect acceptance. No FusionAuth, viewer or real callback port.
 
 Exit 2 is a measured containment failure, not a passing security gate.
 Only finite counters/booleans are exported; raw child output/errors are withheld.
@@ -21,17 +21,21 @@ SENTINEL = b'SYNTHETIC_REDIRECT_CODE_SENTINEL'
 
 def validate_evidence(evidence):
     require(isinstance(evidence, dict) and set(evidence) == {
-        'classification', 'direct', 'redirect', 'browser_closed', 'servers_closed'}, 'SCHEMA')
+        'classification', 'direct', 'redirect', 'browser_closed', 'servers_closed', 'setup_failure'}, 'SCHEMA')
     require(evidence['classification'] in {
-        'GAP_REPRODUCED_CONTAINMENT_BLOCKED', 'GAP_NOT_REPRODUCED_SINGLE_302_ONLY',
+        'GAP_REPRODUCED_CONTAINMENT_BLOCKED', 'PROTOCOL_CALLBACK_CONTAINMENT_PASS',
         'REPRODUCER_INCONCLUSIVE'}, 'SCHEMA')
+    require(evidence['setup_failure'] in (None, 'OWNERSHIP', 'PIPE_CHECK', 'PAGE_SESSION',
+                                         'TARGET_GUARD', 'WEBSOCKET_GUARD', 'FETCH_ENABLE'), 'SCHEMA')
     for key in ('browser_closed', 'servers_closed'):
         require(type(evidence[key]) is bool, 'SCHEMA')
     for mode in ('direct', 'redirect'):
         row = evidence[mode]
         booleans = {'navigation_attempted', 'code_crossed_boundary',
-                    'sensor_observation_complete', 'finite_controller_callback'}
-        counts = {'callback_request_event', 'callback_route_calls', 'callback_tcp_connections',
+                    'sensor_observation_complete', 'finite_controller_callback',
+                    'callback_protocol_intercepted', 'redirect_protocol_intercepted',
+                    'protocol_pipe_only', 'protocol_failed'}
+        counts = {'callback_request_event', 'callback_tcp_connections',
                   'callback_http_requests', 'source_http_redirects', 'callback_application_bytes'}
         require(isinstance(row, dict) and set(row) == booleans | counts, 'SCHEMA')
         require(all(type(row[k]) is bool for k in booleans), 'SCHEMA')
@@ -79,7 +83,15 @@ def main():
                                      env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                                      stderr=subprocess.PIPE, start_new_session=True)
             try:
-                stdout, stderr = child.communicate(timeout=45)
+                deadline = time.monotonic() + 45
+                while True:
+                    require(not any(a.rsplit(':', 1)[-1] == '9222' for _, a in listeners()), 'CDP_TCP')
+                    try:
+                        stdout, stderr = child.communicate(timeout=min(.1, max(.01, deadline - time.monotonic())))
+                        break
+                    except subprocess.TimeoutExpired:
+                        if time.monotonic() >= deadline:
+                            raise
             except subprocess.TimeoutExpired:
                 os.killpg(child.pid, signal.SIGTERM)
                 stdout, stderr = child.communicate(timeout=15)
@@ -109,7 +121,7 @@ def main():
                       'post_close_artifact_files': artifact_files,
                       'post_close_artifact_matches': artifact_matches,
                       'browser_display_temp_cleanup': True, 'listeners_restored': True,
-                      'admin_metadata_unchanged': True, 'repository_unchanged_by_runtime': True}))
+                      'admin_metadata_unchanged': True, 'repository_unchanged_by_runtime': True, 'port_9222_absent_during_polling': True}))
     return exit_code if not artifact_matches else 2
 
 

@@ -1,22 +1,24 @@
-/** Explicit synthetic reproducer, not a safe live transport implementation.
+/** Bounded protocol-boundary acceptance fixture. Live transport stays disabled.
  * Two owned IPv4-loopback ephemeral servers; no caller-supplied destinations.
  * Exit 2 means containment violated: stop after cleanup, never count as PASS.
  */
 import {createServer} from 'node:http';
 import {createServer as createSocketServer} from 'node:net';
 import {MARKER, observeSocket} from './socket_observation_sensor.mjs';
-import {FlowPolicy, RealFlowController, CALLBACK_ORIGIN} from '../../tools/real_auth_flow.mjs';
+import {FlowPolicy, RealFlowController} from '../../tools/real_auth_flow.mjs';
+import {installProtocolBoundary, SETUP_FAILURES} from '../../tools/protocol_auth_boundary.mjs';
 import {createRequire} from 'node:module';
 
 const sentinel = MARKER;
 const syntheticState = 'SYNTHETIC_REDIRECT_STATE';
 const requireCondition = value => { if (!value) throw new Error('LAB_FAILED'); };
 const counters = () => ({navigation_attempted:false, callback_request_event:0,
-  callback_route_calls:0, callback_tcp_connections:0, callback_http_requests:0,
+  callback_protocol_intercepted:false, redirect_protocol_intercepted:false,
+  protocol_pipe_only:false, protocol_failed:false, callback_tcp_connections:0, callback_http_requests:0,
   code_crossed_boundary:false, source_http_redirects:0, callback_application_bytes:0,
   sensor_observation_complete:false, finite_controller_callback:false});
 const result = {classification:'REPRODUCER_INCONCLUSIVE', direct:counters(), redirect:counters(),
-  browser_closed:false, servers_closed:false};
+  browser_closed:false, servers_closed:false, setup_failure:null};
 let active = result.direct, browser, stopped = false, shutdownPromise;
 const servers = [];
 const sockets = new Set();
@@ -69,7 +71,7 @@ try {
   const sinkOrigin = await listen(sink);
   const callback = sinkOrigin + '/oauth/callback?code=' + sentinel + '&state=' + syntheticState + '#SYNTHETIC_REDIRECT_FRAGMENT';
   const source = createServer((request,response) => {
-    if(stopped || request.method !== 'GET' || request.url !== '/start') {
+    if(stopped || request.method !== 'GET' || request.url !== '/oauth2/authorize') {
       response.writeHead(404,{'Cache-Control':'no-store'}); response.end(); return;
     }
     active.source_http_redirects++;
@@ -78,55 +80,47 @@ try {
   });
   const sourceOrigin = await listen(source);
   const {chromium} = createRequire(import.meta.url)('/home/juval/.npm/_npx/86170c4cd1c5da32/node_modules/playwright-core');
-  browser = await chromium.launch({executablePath:'/opt/juval-browser/chromium-1243/chrome',
-    chromiumSandbox:true,headless:false,timeout:15000});
   for(const mode of ['direct','redirect']) {
     requireCondition(!stopped);
     active = result[mode];
+    browser = await chromium.launch({executablePath:'/opt/juval-browser/chromium-1243/chrome',
+      chromiumSandbox:true,headless:false,timeout:15000});
     const policy = new FlowPolicy(1, syntheticState, true);
     if(mode === 'direct') policy.request(policy.origin+'/oauth2/authorize','GET',true);
     const context = await browser.newContext({acceptDownloads:false,serviceWorkers:'block'});
-    await context.routeWebSocket('**/*', socket => { stopped=true; socket.close(); void shutdown(); });
     context.on('request', request => { if(request.url() === callback.split('#')[0]) active.callback_request_event++; });
-    await context.route('**/*', async route => {
-      try {
-        if(stopped) { await route.abort(); return; }
-        const request = route.request();
-        if(request.method() === 'GET' && request.url() === callback.split('#')[0]) {
-          active.callback_route_calls++;
-          // Fixture-only relocation of the ephemeral receiver to the policy's
-          // fixed callback origin; never configurable or used for live auth.
-          requireCondition(policy.request(CALLBACK_ORIGIN+request.url().slice(sinkOrigin.length),
-            request.method(),request.isNavigationRequest()) === 'CALLBACK');
-          await route.fulfill({status:200,contentType:'text/html',
-            headers:{'Cache-Control':'no-store','Referrer-Policy':'no-referrer'},
-            body:'<!doctype html><title>Synthetic control</title>'});
-        } else if(request.method() === 'GET' && request.url() === sourceOrigin + '/start') {
-          requireCondition(policy.request(policy.origin+'/oauth2/authorize','GET',true) === 'PROVIDER');
-          await route.continue(); // Only the owned synthetic source; NOT a real-flow adapter.
-        } else { policy.fail('UNEXPECTED_ROUTE'); await route.abort(); }
-      } catch { stopped=true; void shutdown(); }
-    });
     const page = await context.newPage();
+    const boundary = await installProtocolBoundary(browser,context,page,policy,
+      {sourceOrigin,callbackOrigin:sinkOrigin});
     active.navigation_attempted = true;
-    try { await page.goto(mode === 'direct' ? callback : sourceOrigin+'/start', {waitUntil:'load',timeout:10000}); }
+    try { await page.goto(mode === 'direct' ? callback : sourceOrigin+'/oauth2/authorize', {waitUntil:'load',timeout:10000}); }
     catch { if(!stopped) throw new Error('LAB_FAILED'); }
     const controller = new RealFlowController(page,browser,policy,policy.origin+'/oauth2/authorize');
     active.finite_controller_callback = (await controller.command({op:'observe'})).status === 'CALLBACK_REACHED';
-    if(!stopped) await context.close();
+    const protocol = boundary.evidence();
+    active.callback_protocol_intercepted = protocol.callbackIntercepted;
+    active.redirect_protocol_intercepted = protocol.redirectCallbackIntercepted;
+    active.protocol_pipe_only = protocol.pipeOnly;
+    active.protocol_failed = protocol.failed;
+    await boundary.close();
     await collectObservations(active);
     if(active.callback_application_bytes > 0) {
       result.classification = 'GAP_REPRODUCED_CONTAINMENT_BLOCKED';
       break;
     }
     requireCondition(active.sensor_observation_complete && active.callback_http_requests === 0 &&
-      active.callback_request_event === 1 && active.callback_route_calls === 1 && active.finite_controller_callback);
+      active.callback_request_event === 1 && active.callback_protocol_intercepted && active.protocol_pipe_only &&
+      !active.protocol_failed && active.finite_controller_callback);
     if(mode === 'redirect') {
-      requireCondition(active.source_http_redirects === 1);
-      result.classification = 'GAP_NOT_REPRODUCED_SINGLE_302_ONLY';
+      requireCondition(active.source_http_redirects === 1 && active.redirect_protocol_intercepted);
+      result.classification = 'PROTOCOL_CALLBACK_CONTAINMENT_PASS';
     }
   }
-} catch { /* Only finite classification/counters leave this process. */ }
+} catch(error) {
+  // Installation failures are actionable without exporting protocol exceptions.
+  if(error?.message === 'PROTOCOL_BOUNDARY_UNAVAILABLE' && SETUP_FAILURES.includes(error.phase))
+    result.setup_failure = error.phase;
+}
 finally {
   await shutdown();
   for(const row of [result.direct,result.redirect]) await collectObservations(row);
@@ -136,4 +130,4 @@ finally {
 if(!result.browser_closed || !result.servers_closed) result.classification = 'REPRODUCER_INCONCLUSIVE';
 process.stdout.write(JSON.stringify(result)+'\n');
 process.exitCode = result.classification === 'GAP_REPRODUCED_CONTAINMENT_BLOCKED' ? 2 :
-  result.classification === 'GAP_NOT_REPRODUCED_SINGLE_302_ONLY' ? 0 : 1;
+  result.classification === 'PROTOCOL_CALLBACK_CONTAINMENT_PASS' ? 0 : 1;

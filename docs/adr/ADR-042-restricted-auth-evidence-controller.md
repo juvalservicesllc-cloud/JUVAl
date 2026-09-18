@@ -111,3 +111,30 @@ one TCP connection. Thus the HTTP/OAuth boundary also fails for HTTP redirects.
 [Exact evidence and proposed internal pipe interceptor](../research/HTTP_REDIRECT_CONTAINMENT_20260916.md).
 That candidate adds a privileged protocol interception boundary and remains PENDING;
 no namespace/broker/protocol implementation is silently approved by this amendment.
+
+## Approved protocol-pipe extension — 2026-09-18 (latest)
+
+The operator explicitly **APPROVED implementation** of Chromium protocol-layer
+interception through a private process pipe, preserving the existing finite policy.
+This supersedes the candidate's PENDING implementation authority above, but does
+not accept this ADR, authorize a real provider or enable live transport.
+
+Problem: route.continue allowed a genuine HTTP 302 to bypass the callback handler
+and expose a synthetic code to the receiver. The mitigation uses Fetch.requestPaused
+at Request stage on every hop and delegates origin/method/path/transition/callback
+shape to FlowPolicy. Trusted synthetic origin relocation does not change the exact
+production callback. Callback requests are fulfilled locally; rejected requests
+abort; approved fixture-provider requests alone continue. Code values are not read.
+Pipe-only launch arguments and sandbox flags are checked privately. Target guards
+pause extra targets and close the owned browser; protocol errors/detach close it.
+No CDP TCP/WebSocket endpoint, Fetch-disable-before-close or general agent protocol
+API is introduced. An internal Chromium API dependency is the principal tradeoff
+against higher-level routing; no HTTP broker or privileged namespace is added.
+
+Implementation and unit tests exist, but the single bounded integration run stopped
+at setup before either navigation. **Runtime enforcement remains NOT_VERIFIED**;
+no claim that target/disconnect failure handling is atomically proven in Chromium.
+Finite setup-phase diagnostics were added after the run and tested without another
+browser execution. [Measured evidence and exact continuation scope](../research/HTTP_REDIRECT_CONTAINMENT_20260916.md).
+Same-host/UID, browser/process memory and whole-tree sandbox PARTIAL limitations
+remain. Historical failed 302 evidence is preserved. **Status remains Proposed.**

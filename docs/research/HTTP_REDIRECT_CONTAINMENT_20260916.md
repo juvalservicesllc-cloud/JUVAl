@@ -1,5 +1,109 @@
 # HTTP redirect containment: synthetic reproducer and design review — 2026-09-16
 
+## Protocol-pipe implementation attempt — 2026-09-18 (latest)
+
+**PARTIALLY IMPLEMENTED / integration INCONCLUSIVE / callback gate NOT CLOSED.**
+Initial HEAD d9c1434db45348fe1c153792136f2ad0d751c0e6, clean worktree.
+Explicit operator approval authorizes private-pipe Chromium protocol interception,
+existing finite policy reuse and one bounded integration execution. No live transport,
+identity creation, MFA or production authorization. Zero TCP remains unnecessary.
+
+### Implementation and authority
+
+New tools/protocol_auth_boundary.mjs installs Fetch interception at Request stage
+for all URLs, including redirect-generated requests, on the owned blank page.
+It delegates request decisions to the unchanged FlowPolicy; no second route or
+transition policy. Only synthetic IPv4-loopback fixture origins can be relocated
+to the existing logical provider/callback origins. It preserves credentials, path,
+query and fragment for policy evaluation; it never retrieves a code value. Exact
+production callback remains http://127.0.0.1:18080/oauth/callback. Real policies,
+provider ports and non-fixture destinations are rejected before transport.
+
+The adapter requires --remote-debugging-pipe and rejects network debugging and
+sandbox-disabling flags using private Browser.getBrowserCommandLine output. No
+argument or protocol object is exported. Fetch callback fulfillment uses a fixed
+body, no-store, no-referrer and restrictive CSP; only approved fixture-provider
+requests may continue. Protocol errors or unknown requests close the owned browser.
+Extra targets are configured to pause and trigger closure; no arbitrary target is
+resumed. Normal close destroys the browser without first disabling Fetch. New
+unit tests exercise the protocol actions against the real finite policy, including
+origin/path/method/shape/transition rejection and setup/detach/error handling.
+
+The existing receiver, calibration and display/lifecycle harness are reused;
+no new browser laboratory, dependency, socket control endpoint or broker. The
+fixture now launches a fresh browser for each case and polls for port 9222 during
+execution. Existing sensor implementation/tests remain unchanged.
+
+### One authorized integration execution
+
+Command: PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B tools/http_redirect_gap_lab.py.
+Exit **1**, REPRODUCER_INCONCLUSIVE. Preparation/installation did not return successfully;
+the fixture sets navigation_attempted only after adapter installation returns.
+Both direct and 302 navigation_attempted=false. Thus **neither case executed**.
+No source HTTP 302 emitted, callback browser event, protocol callback interception,
+finite callback state, receiver TCP connection, application byte, HTTP request or
+code marker was observed. These zero counters are NOT containment evidence.
+
+The original finite error boundary suppressed the underlying installation error;
+the exact failed protocol operation is **NOT_ESTABLISHED**. Do not attribute this
+to Fetch redirect handling, target guards, pipe flags or sandbox configuration
+without evidence. No sentinel crossed a receiver in this run, but the historical
+route-level 302 failure below remains authoritative for that implementation.
+
+The run closed browser/servers and removed owned display/socket/lock/runtime.
+Listener baseline and Admin process metadata restored; X11 authentication checks
+passed. Port 9222 absent at baseline, runtime polling and final listener comparison.
+No sentinel in captured output, stderr empty; 41 remaining owned runtime regular
+files had zero code-marker matches before temporary-directory removal. These are
+scoped cleanup/artifact results, not RAM/swap/crash-erasure evidence.
+
+### Bounded correction and next checkpoint
+
+Targeted tests initially found origin relocation retained the ephemeral source
+port; corrected by assigning hostname and port explicitly. Policy tests then
+passed. The one browser integration subsequently stopped at installation as above.
+After that stop, the same adapter/harness gained a fixed setup-failure phase enum
+(ownership, pipe check, page session, target guard, WebSocket guard, Fetch enable).
+Only these labels can escape; underlying exceptions/URLs/arguments remain private.
+Unit tests verify the finite failure label. This improves the existing diagnostic
+output, not a second validation layer. **No second browser run occurred**, so no
+phase label is retroactively assigned to the measured failure.
+
+Next exact human action: authorize one corrective execution of this same synthetic
+harness with finite setup diagnostics, retaining the already-approved architecture
+and all prohibitions. The explicit one-integration budget is exhausted; this is
+an execution-scope checkpoint, not a request to approve another architecture or
+repeat an unchanged successful test. Implementation is not labeled verified.
+
+REAL_MFA_PREFLIGHT remains BLOCKED by incomplete protocol-adapter integration.
+Marcus absent, JUVAl count 0 and redirect/Exact match retain HUMAN_ADMIN_READBACK;
+no fresh provider observation. Prior viewer-risk acceptance remains recorded.
+Future identity creation, cleanup scope and real experiment still require explicit
+human authorization after technical closure; none is requested/executed here.
+ADR-041/042 Proposed. ADR-040 metrics and all production/Amazon claims unchanged.
+
+
+### Validation and review for the protocol attempt
+
+- Targeted unit tests: 13 PASS after port relocation correction (9 existing policy,
+  4 new adapter tests); affected adapter tests rerun after finite diagnostics,
+  4 PASS. No calibrated sensor or previous failed browser experiment rerun.
+- Relevant security regression once: pytest -q -rs tests/compliance,
+  181 PASS / 86 SKIP. Skips require unavailable nginx; no nginx behavior changed.
+- Single browser integration: exit 1 / INCONCLUSIVE before navigation, not PASS.
+- Offline compliance/worktree secret-pattern scan: 8 PASS / 1 historical
+  ROLE PLACEHOLDER WARN / 0 FAIL; 521 eligible files without pattern findings.
+  No dependency network audit or history scan. No absolute secret-absence claim.
+- Node syntax and git diff whitespace checks PASS; frontend/frontend-next/demo/src
+  unchanged from starting HEAD. New files are source/tests, not generated artifacts.
+- Self-review: policy centralized and unchanged, material containment not yet
+  demonstrated, historical 302 failure preserved, no live data/provider/identity,
+  no sandbox weakening/public control endpoint/push. Only configured private pipe
+  and port-polling evidence are claimed; successful adapter installation is not.
+  Repository-required review tool unavailable; manual simplicity review performed.
+- One local partial-implementation/evidence commit; no publication. The next scope
+  decision is one corrective synthetic execution, not real MFA or identity creation.
+
 ## Current decision and final bounded execution — 2026-09-18
 
 **PARTIALLY IMPLEMENTED; CALLBACK GATE FAILED / REAL_MFA_PREFLIGHT BLOCKED.**

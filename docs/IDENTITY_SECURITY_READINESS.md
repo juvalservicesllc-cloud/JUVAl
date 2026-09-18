@@ -5,6 +5,24 @@ workspace: `/home/juval/JUVAl/APP`. This ledger supersedes dated implementation
 snapshots in project plans, contracts and research; historical experiments are
 not reclassified as production evidence. Git commits identify the exact changes.
 
+## Protocol-pipe callback adapter — 2026-09-18 (latest)
+
+**PARTIALLY IMPLEMENTED; integration INCONCLUSIVE, callback gate NOT CLOSED.**
+Operator approved private-pipe protocol interception delegating to FlowPolicy.
+Adapter and targeted unit tests implemented. The single bounded browser run stopped
+during adapter installation, before direct or 302 navigation; no OAuth-material
+exposure observed, but no containment credit. Exact failing setup operation was
+not captured. Cleanup/listeners/Admin metadata verified; 9222 absent during polling.
+The existing harness now has finite setup-failure diagnostics, unit-tested only;
+no second integration run. [Implementation, measured result and checkpoint](research/HTTP_REDIRECT_CONTAINMENT_20260916.md).
+
+REAL_MFA_PREFLIGHT BLOCKED by incomplete integration. Next human action: authorize
+one corrective execution of the same synthetic harness with those diagnostics.
+No new architecture approval requested. No real provider/MFA/identity/configuration
+change. Marcus absent and JUVAl 0 remain HUMAN_ADMIN_READBACK; prior viewer-risk
+acceptance retained. ADR-041/042 Proposed, ADR-040 unchanged. Earlier sections below
+are historical and do not describe this adapter as either verified or disproven.
+
 ## Callback HTTP/OAuth boundary — 2026-09-18
 
 **BLOCKED by measured synthetic HTTP redirect bypass.** Operator approved an
