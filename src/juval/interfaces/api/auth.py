@@ -1,7 +1,9 @@
 """OIDC token validation and RBAC for the Juval API.
 
 Closes the *backend half* of Amazon finding RF-03 (authentication controls)
-and all of RF-04 (job-function / least-privilege access). The *IdP half* of
+and the backend enforcement portion of RF-04 (job-function / least-privilege
+access). Personnel reviews, removal drills and production activation remain
+separate evidence requirements. The *IdP half* of
 RF-03 -- password composition, history, minimum/maximum age, MFA, lockout --
 is owned by the Identity Provider -- FusionAuth, self-hosted on `juval-server`
 (ADR-028 provider, ADR-031 hosting) -- and is deliberately not implemented

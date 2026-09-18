@@ -4,7 +4,7 @@
 |---|---|
 | Status | **PARTIAL.** Technical enforcement is IMPLEMENTED and TESTED; the organizational half (named users, quarterly review, offboarding record) is PENDING. |
 | Last verified | `2026-09-10` (endpoint inventory, cookie path and provider citation corrected) |
-| Owner | `ROLE PLACEHOLDER — Security Owner` |
+| Owner | Daniel E. Liendo (existing Security Owner assignment, IRP §2; availability not reverified) |
 | Amazon finding | **RF-04** — restrict access to Amazon Information by job duties / business function |
 | Related controls | `AC-07` (DPP §§1.2–1.4), `AC-14A` (AUP §§4.6–4.9) |
 
@@ -41,9 +41,11 @@ declarations in `interfaces/api/main.py`.
 |---|---|---|
 | `viewer` | `runs:read` | Reviews results; cannot start work or extract data |
 | `operator` | `runs:read`, `runs:create`, `runs:export` | Performs sourcing analysis day to day |
-| `admin` | all | Manages the deployment and the integration |
+| `admin` | all three API permissions (same as `operator`) | Administrative job assignment; provider/deployment privileges require separate grants |
 
-Least privilege is the default: `viewer` deliberately cannot export, because
+In OIDC mode, unknown or absent roles receive no permissions. The development
+default is auth disabled and an anonymous principal with all three permissions;
+this is not production least privilege. `viewer` deliberately cannot export, because
 export is the data-egress path. An unrecognized role grants **nothing** — it
 never falls back to permissive.
 
@@ -76,12 +78,13 @@ token at login and are then held server-side; JUVAl does not call the IdP per
 request, which is why a session survives an unreachable IdP but not a *rejected*
 refresh (that revokes it).
 
-**Neither shape is active in production**: `JUVAL_AUTH_MODE` is unset.
+**Production enforcement is NOT_VERIFIED**: the last recorded deployment state
+had `JUVAL_AUTH_MODE` unset; deployment variables were not reread in this recovery.
 
 Verify: `.venv/bin/python -m pytest tests/integration/test_api_auth.py
-tests/integration/test_api_bff.py -q` (37 + 34 tests as of 2026-09-10) and
-`python tools/compliance_check.py` (asserts every route enforces a
-permission).
+tests/integration/test_api_bff.py -q` (counts must be measured for the tested revision) and
+`python tools/compliance_check.py` (static check of direct main.py route
+permission dependencies; included routers and runtime behavior are not checked).
 
 > **Not yet active in production.** The backend is deployed
 > (`https://juval-backend-production.up.railway.app`, since 2026-08-18), so
@@ -175,7 +178,7 @@ proving the gap was under 24 hours.
 | Requirement | State | Evidence |
 |---|---|---|
 | Role/permission model defined | **IMPLEMENTED** | `auth.py`, §1 |
-| Backend enforcement | **IMPLEMENTED + TESTED** | 33 tests |
+| Backend enforcement | **IMPLEMENTED + TESTED** | `test_api_auth.py`, `test_api_bff.py`; current scoped result in `RF_RECOVERY_20260918.md` |
 | Negative authorization tested | **IMPLEMENTED + TESTED** | `test_viewer_cannot_*` |
 | Frontend not treated as a control | **IMPLEMENTED + TESTED** | direct-call bypass test |
 | Unique IDs / no shared accounts | **DOCUMENTED, runtime inventory NOT_REVERIFIED** | §2 |
@@ -189,6 +192,12 @@ proving the gap was under 24 hours.
 control documented but not operating, with current user inventory not independently reverified.
 
 ## 6. EXTERNAL USER ACTION REQUIRED
+
+**2026-09-18: deferred by the operator MFA freeze.** This list is a future
+production checklist, not authorization to create identities, enroll MFA or
+activate authentication. Current recovery: `HUMAN_BLOCKED`, aggregate RF-04
+`PARTIAL`. Existing synthetic enforcement is reused; no new permissions needed.
+The API admin role does not itself grant FusionAuth Admin or infrastructure access.
 
 | # | Action |
 |---|---|

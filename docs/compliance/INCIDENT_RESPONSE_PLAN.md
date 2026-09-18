@@ -429,8 +429,11 @@ breakdown.
 `RF-05 = PARTIAL` — plan approved, roles named, first exercise run and
 filed, and the automation (pip-audit, GitHub secret scanning) now runs
 recurringly via CI (`.github/workflows/ci.yml`, on every push and weekly),
-not just once by hand. But: GitHub Dependabot security updates remain
-`disabled`; the exercise itself surfaced two open corrective actions
-(CA-01, CA-02 — see `SP_API_REGISTRATION_REMEDIATION.md` §26); and no CVE
-remediation cycle has ever actually been exercised, because pip-audit has
-always come back clean.
+not just once by hand. The exercise itself surfaced two open corrective actions
+(CA-01, CA-02 — see `SP_API_REGISTRATION_REMEDIATION.md` §26); recurring
+exercise evidence remains incomplete. Dependabot security updates
+were enabled and verified on 2026-08-18 (remediation ledger §27); current
+GitHub alert reconciliation remains external, not freshly verified here. Later
+dependency fixes are recorded in `DEPENDENCY_THIRD_WAVE_RECONCILIATION.md`;
+they do not close the human tabletop actions. See `RF_RECOVERY_20260918.md`
+for the current boundary. No new approval or participant action is inferred.

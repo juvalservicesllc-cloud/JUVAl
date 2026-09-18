@@ -5,7 +5,24 @@ workspace: `/home/juval/JUVAl/APP`. This ledger supersedes dated implementation
 snapshots in project plans, contracts and research; historical experiments are
 not reclassified as production evidence. Git commits identify the exact changes.
 
-## Authorized real MFA preparation — 2026-09-18 (current)
+## Reboot recovery — 2026-09-18 (current operator instruction)
+
+**MFA FROZEN.** This instruction supersedes every earlier authorization and
+operational next step below: no identity creation, real login/MFA, redirect or
+policy changes. REAL_MFA_PREFLIGHT = PASS is historical technical evidence;
+REAL_MFA_EXECUTED = NO. Marcus absent / tenant baseline 0 remain prior human
+readback, not a fresh machine observation. Callback containment stays CLOSED
+in its documented synthetic HTTP/OAuth-material scope; do not repeat it.
+
+Recovery found HEAD `59bc3a1`, clean worktree, no commits after the supplied
+checkpoint and no interrupted tracked/untracked work. RF-01/02/04/05 remain
+PARTIAL; independent review and documentation reconciliation are complete.
+All remaining control closure requires human/external evidence. See
+[recovery record](compliance/RF_RECOVERY_20260918.md) for classifications,
+post-reboot network observations, validation and the next human checkpoint.
+No push, deployment or production authentication activation is authorized.
+
+## Authorized real MFA preparation — 2026-09-18 (historical; superseded by freeze)
 
 **REAL_MFA_PREFLIGHT = PASS; experiment awaiting human identity creation/readback.**
 Explicit operator authorization covers one new Marcus identity, two controlled real

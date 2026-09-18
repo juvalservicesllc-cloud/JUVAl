@@ -1515,3 +1515,16 @@ marker WARN / 0 FAIL, 513 files without pattern findings. Private ports free,
 Diff-check and frozen frontend comparison passed. SSH fetch failed (publickey);
 origin/master f03574b remains cached, remote state NOT_VERIFIED. No push; publication
 awaits authenticated fetch and remote-only=0. No network dependency audit repeated.
+
+## Reboot recovery of RF loop — 2026-09-18
+
+Recovered `59bc3a1`, clean worktree, no later commits or interrupted untracked
+work. MFA remains explicitly frozen; prior preparation is superseded, callback
+containment not repeated. RF-01/04/05 HUMAN_BLOCKED, RF-02 EXTERNAL_BLOCKED;
+all remain PARTIAL. Existing implementation/evidence reused, stale IRP/network/
+access documentation corrected without policy changes. Fresh read-only listeners
+include all-interface 631/9011/9012; effective firewall/external denial not verified.
+[Recovery record, scoped test results, human gates and ADR-040 metrics](compliance/RF_RECOVERY_20260918.md).
+127 scoped tests passed, one deprecation warning, no skips. No frontend, provider,
+production, domain or processing change; only auth.py module-description correction.
+Local commit authorized, no push. Ponytail unavailable; manual self-review performed.

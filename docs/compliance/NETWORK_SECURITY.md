@@ -1,5 +1,22 @@
 # JUVAl — Network Security Architecture and Control Audit (RF-02)
 
+## Current reconciliation — 2026-09-18
+
+**RF-02 = PARTIAL / EXTERNAL_BLOCKED.** The audit below is dated historical
+evidence, including statements that F-01 was the sole blocker or FusionAuth
+was not installed. They do not describe current readiness. FusionAuth is now
+installed; public identity ingress/TLS/logging and the effective host perimeter
+remain unverified for production. Workstation F-01 still lacks closure evidence.
+
+[Post-reboot read-only observations and exact remaining evidence](RF_RECOVERY_20260918.md)
+record all-interface listeners on 631/9011/9012 as well as SSH. Active UFW and
+configured default DROP are not proof of effective rules or external denial.
+No network change or exposure test was performed. Existing reproduction commands
+below remain procedures, not fresh measurements. See
+[the current readiness ledger](../IDENTITY_SECURITY_READINESS.md) for authority.
+
+## Historical audit — 2026-08-18 through 2026-08-26
+
 | Field | Value |
 |---|---|
 | Status | **PARTIAL.** Workstation controls measured and evidenced; both cloud services are now deployed and their TLS/segmentation/RLS controls are measured with real evidence (§3). The sole remaining blocking gap is workstation finding **F-01** (§2), unchanged and re-confirmed. |
