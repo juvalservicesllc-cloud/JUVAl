@@ -9,21 +9,20 @@ SUSPECTED/notification-drafting branch is TABLETOP_EXERCISED; draft approved
 14m31s after human-reported detection, never sent. This is not operational
 notification or production compliance evidence.
 
-- CA-01 (§28.1): OPEN / PARTIALLY_EXERCISED. Additional demonstration
-  15:47:13Z–15:48:59Z (106s, HUMAN_REPORTED) establishes TABLETOP_VERIFIED
-  parallel response, superseding the missing-parallelism residual. Line A
-  prepares rotation/revocation; initiation of the applicable §4.3 credential
-  action is still not established. Exact criterion comparison is in the
-  [existing record](TABLETOP_RECORD_JUVAL-TT-20260921.md#additional-ca-01-demonstration--2026-09-21).
-  Technical actions NOT_EXECUTED; results NOT_VERIFIED.
+- CA-01 (§28.1): CLOSED / TABLETOP_VERIFIED / HUMAN_REPORTED. The specific
+  simulated §4.3 revocation/rotation start at 16:00:52Z, without waiting for
+  confirmation, completes the residual after the documented parallel exercise.
+  Elapsed from original detection: 47m56s, within one hour. No completion time
+  invented. [Literal evaluation and exact human evidence](TABLETOP_RECORD_JUVAL-TT-20260921.md#ca-01-applicable-action-started--2026-09-21).
+  Real credential actions NOT_EXECUTED; technical results NOT_VERIFIED.
 - CA-02 (§28.2): CLOSED / TABLETOP_VERIFIED for manifest production only.
   [Completed manifest](EVIDENCE_MANIFEST_JUVAL-TT-20260921.md) contains two
   human-source rows with both timestamps, collector and custody; hashes N/A.
   Human report is an allowed template source; no provider exports claimed.
 - RF-05 has a second dated exercise, not proof of mature recurring governance.
   Daniel contact/availability is now OPERATIVE / HUMAN_REPORTED; Deputy
-  availability remains NOT_VERIFIED. Formal review, CA-01 credential-action
-  initiation and external alert evidence remain incomplete. Daniel explicitly
+  availability remains NOT_VERIFIED. Formal review and external alert evidence
+  remain incomplete; closing CA-01's tabletop component does not close RF-05. Daniel explicitly
   retained the review date 2027-02-18; no completed review inferred. ADR-040 `rf-01` / `rf-05`
   remain PARTIAL / NOT_VERIFIED at whole-criterion level; all five metrics
   unchanged. No other RF, architecture, policy or production status changed.

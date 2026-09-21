@@ -1,7 +1,8 @@
 # Tabletop Exercise Record — `JUVAL-TT-20260921`
 
 **TABLETOP-002 = COMPLETED_WITH_FINDINGS.** Human exercise completed;
-CA-01 remains OPEN. This is not technical incident remediation or Amazon compliance.
+CA-01 is now CLOSED / TABLETOP_VERIFIED following the supplemental action-start
+evidence below. This is not technical incident remediation or Amazon compliance.
 Uses [the prepared scenario](TABLETOP_002_PREPARED_SCENARIO.md) and existing
 `templates/TABLETOP_RECORD_TEMPLATE.md`; notification draft is embedded below.
 
@@ -177,7 +178,8 @@ No real incident or credential was used. Isolation, revocation/rotation, log
 queries, provider/infrastructure changes, deployment and configuration changes
 were NOT_EXECUTED; technical results remain NOT_VERIFIED. Nothing was sent.
 
-Literal CA-01 evaluation against remediation §28.1 and IRP §4.3:
+Historical evaluation after the 15:47 demonstration, before the 16:00 action-start
+supplement below, against remediation §28.1 and IRP §4.3:
 
 | Criterion | Evaluation |
 |---|---|
@@ -186,11 +188,41 @@ Literal CA-01 evaluation against remediation §28.1 and IRP §4.3:
 | Initiate the applicable §4.3 action | NOT_ESTABLISHED: the Supabase row requires rotation/revocation initiation; Line A says prepare it. Simulated isolation is containment under §4.2, but does not itself evidence starting the credential action of §4.3 |
 | Conclusion / parallelism evidence | Real human start/end timestamps plus reported parallel simulated lines support procedural parallelism. No actual log/authenticity conclusion is inferred; two timestamps alone do not close the whole criterion |
 
-**CA-01 remains OPEN / PARTIALLY_EXERCISED.** Residual narrowed to a recorded
+**At that checkpoint CA-01 was OPEN / PARTIALLY_EXERCISED.** Residual was a recorded
 start of the applicable credential action **within a simulation**, without
 waiting for confirmation; no real credential action is required or authorized.
 Do not repeat the already supplied parallelism decision or demand invented
 retrospective timestamps. No observed technical failure is asserted.
+
+### CA-01 applicable action started — 2026-09-21
+
+Integration baseline: `6151c958415ff54fee6c115f0039b59d9c4a2ea2`, clean.
+At **`2026-09-21T16:00:52Z`**, Daniel E. Liendo approved:
+“Apruebo iniciar la revocación/rotación simulada.”
+
+Exact approved semantics:
+
+> A las 2026-09-21T16:00:52Z, ante el escenario simulado de una credencial Supabase service-role potencialmente comprometida, ordeno iniciar inmediatamente la revocación/rotación SIMULADA de esa credencial conforme a la acción aplicable de §4.3, sin esperar a que concluya la confirmación o investigación. Esta es exclusivamente una decisión y acción de tabletop. No se revoca, rota ni modifica ninguna credencial real y no se realiza ningún cambio técnico.
+
+**CA-01 = CLOSED / TABLETOP_VERIFIED / HUMAN_REPORTED**, based on the combined
+parallel-response demonstration and this specific action-start event:
+
+- Applicable §4.3 action: initiation of simulated revocation/rotation of the
+  potentially compromised Supabase service-role credential is now explicit.
+- One-hour target (§28.1/§4.2): 16:00:52Z minus the original detection at
+  15:12:56Z is **47m56s / 2876 seconds**, within one hour; the clock is not reset
+  to the supplemental demonstration start.
+- No waiting for confirmation: explicit in the new action-start instruction,
+  complementing the documented parallel-response component. This satisfies the
+  existing pass-condition alternative of parallel containment/confirmation;
+  no confirmation-completion time or technical conclusion is fabricated.
+- The residual was initiation, not completion. No rotation-completion timestamp,
+  successful rotation, redeployment or credential verification is inferred.
+
+Human decision REAL / HUMAN_REPORTED; §4.3 action start SIMULATED; real credential
+revocation/rotation NOT_EXECUTED; technical result NOT_VERIFIED; technical changes
+NONE; external notification NONE. No real secret used. CA-01 tabletop residual
+NONE. Earlier observations remain historical; no further CA-01 iteration needed.
 
 ### Contact and governance follow-through
 
@@ -207,7 +239,7 @@ for these confirmations; none are invented.
 
 | Item | Result / exact evidence | Residual / next evidence |
 |---|---|---|
-| CA-01 | OPEN / PARTIALLY_EXERCISED; original decision retained; additional parallel-response component TABLETOP_VERIFIED / HUMAN_REPORTED | Parallelism residual resolved by the additional demonstration above. Initiation of the applicable §4.3 credential action still not established by preparing it; no actual technical result claimed. |
+| CA-01 | CLOSED / TABLETOP_VERIFIED / HUMAN_REPORTED; parallel-response evidence plus specific simulated §4.3 start at 16:00:52Z | No tabletop residual. Real credential actions NOT_EXECUTED; technical results NOT_VERIFIED. |
 | CA-02 | CLOSED / TABLETOP_VERIFIED in the manifest-production scope of remediation §28.2 | Two completed rows from an allowed real human source, with event/retrieval times, collector, custody and N/A hash. Provider log collection, integrity verification and long-term retention are not verified by this closure. |
 | Governance | PARTIALLY_EXERCISED; Daniel contact/availability OPERATIVE / HUMAN_REPORTED; next review 2027-02-18 explicitly retained | Deputy availability and handoff NOT_VERIFIED; formal review not performed. No independent contact test or extra deadline inferred. |
 
@@ -223,13 +255,15 @@ updates; they do not amend the containment order to match the exercised answer.
 
 - RF-01: PARTIAL before and after. The previously unexercised §5 branch now has
   human tabletop evidence: SUSPECTED determination, notification decision and
-  an approved six-category draft in 14m31s. Operational notification evidence, Deputy availability
-  and the CA-01 credential-action residual remain incomplete; no Amazon compliance claim.
+  an approved six-category draft in 14m31s. CA-01 is closed only in tabletop
+  scope; operational notification evidence and Deputy availability remain
+  incomplete. No Amazon compliance claim.
 - RF-05: PARTIAL before and after. A second dated exercise and real manifest
   production now exist (2026-08-18 and 2026-09-21). This supports repeated exercise
   evidence, not proof of a mature program, formal six-month review or technical
-  remediation. The CA-01 credential-action residual, Deputy behavior and external
-  alert reconciliation remain incomplete; Daniel contact availability is now
+  remediation. CA-01 and CA-02 are closed only in their tabletop scopes; Deputy
+  behavior, formal review and external alert reconciliation remain incomplete.
+  Daniel contact availability is now
   HUMAN_REPORTED operative. No GitHub queries or provider changes performed.
 - ADR-040 model 1.2: `rf-01` (24-hour incident reporting, weight 2) and `rf-05`
   (security program/response roles, weight 2) stay PARTIAL / NOT_VERIFIED at the

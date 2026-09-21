@@ -11,10 +11,10 @@ not reclassified as production evidence. Git commits identify the exact changes.
 participated, 15:12:56Z–15:28:57Z (human-reported UTC). SUSPECTED determination
 and approved unsent notification draft at 15:27:27Z now exercise §5 in 14m31s.
 CA-02 CLOSED / TABLETOP_VERIFIED: two completed real human-artifact manifest
-rows. CA-01 remains OPEN: additional 15:47:13Z–15:48:59Z demonstration
-(106s, HUMAN_REPORTED) verifies simulated parallel response. Initiation of the
-applicable §4.3 credential action remains unestablished: preparation is reported,
-not initiation. Technical actions NOT_EXECUTED; technical results NOT_VERIFIED.
+rows. CA-01 CLOSED / TABLETOP_VERIFIED / HUMAN_REPORTED: documented parallel
+response plus explicit simulated §4.3 revocation/rotation start at 16:00:52Z,
+47m56s after original detection, without waiting for confirmation. No completion
+timestamp inferred. Real technical actions NOT_EXECUTED; results NOT_VERIFIED.
 [Actual decisions, draft, manifest, residuals and ADR-040 assessment](compliance/TABLETOP_RECORD_JUVAL-TT-20260921.md).
 
 This supersedes earlier requests to run TABLETOP-002 or statements that both
@@ -22,9 +22,9 @@ corrective actions remain open. Daniel contact/availability is OPERATIVE /
 HUMAN_REPORTED; Deputy availability remains NOT_VERIFIED. Jocsimar did not participate.
 Daniel explicitly retained formal review date 2027-02-18; review execution and
 operational technical response remain unverified. ADR-040 unchanged in all five
-dimensions. Next human evidence: applicable CA-01 credential-action initiation
-within simulation and Deputy availability; do not repeat approved parallelism,
-Daniel contact confirmation, review scheduling, CA-02 or notification draft.
+dimensions. Next human/external evidence: Deputy availability and operational
+governance/alert evidence; no further CA-01 iteration. Do not repeat Daniel
+contact confirmation, review scheduling, CA-02 or notification draft.
 No external communication, real rotation or technical changes reported. MFA and
 frontend FROZEN; RF-02/RF-04 untouched; no production/Amazon approval or push.
 
