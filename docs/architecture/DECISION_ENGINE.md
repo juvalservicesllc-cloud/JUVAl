@@ -6,7 +6,8 @@ El motor de reglas implementado (`processing/decision_engine.py`) es un
 **modelo extensible de reglas**, no el conjunto de reglas definitivo del
 negocio (requisito explícito §12: "no implementar reglas definitivas").
 Los umbrales y las reglas exactas deben revisarse con el negocio antes de
-usarse para decisiones reales.
+usarse para decisiones reales. La política puntual de igualdad de severidad
+está APPROVED por el usuario (ADR-043); no aprueba el conjunto comercial restante.
 
 ## 2. Estructura
 
@@ -49,6 +50,7 @@ disparó ya PASS):
 | `rule_review_profit_below_target` | `profit` usable pero `< Thresholds.target_profit` |
 | `rule_review_roi_unknown_or_below_target` | `roi` no usable, o usable pero `< Thresholds.target_roi` |
 | `rule_review_demand_unknown_or_below_minimum` | `estimated_monthly_sales` ausente/no usable, o `< Thresholds.minimum_estimated_monthly_sales` |
+| `rule_review_risk_at_maximum` | Algún `RiskFlag` PRESENT con severidad exactamente igual al máximo configurado; razón `RISK_AT_MAXIMUM` (ADR-043, APPROVED) |
 | `rule_review_unknown_risk` | `risk_profile.has_unknown_risk` y `allow_unknown_risk=False` |
 | `rule_review_approval_required` | `APPROVAL_REQUIRED` PRESENT y `allow_approval_required=False` |
 
@@ -59,6 +61,25 @@ REVIEW: el sistema no sabe lo suficiente o el caso es limítrofe, así que
 un humano decide. Esto respeta "nunca asumir que un ASIN/peso/hazmat es
 correcto sin evidencia" extendido a "nunca convertir incertidumbre en
 rechazo automático ni en aprobación automática".
+
+### Límite de riesgo — política aprobada (ADR-043)
+
+Para riesgos PRESENT: severidad inferior deja continuar las demás reglas;
+igual produce REVIEW si no hay un PASS independiente; superior conserva PASS
+por `RISK_ABOVE_MAXIMUM`. `RISK_AT_MAXIMUM` identifica el tipo, la severidad,
+su estado de verificación y el máximo configurado. Se usa la primera igualdad
+según el orden del perfil; no cambia la política de agregación de riesgos.
+
+HazMat y Bulky usan el mismo contrato. Las severidades provisionales derivadas
+de ADR-010 siguen INFERRED (ADR-020); compararlas no las convierte en VERIFIED.
+UNKNOWN/NOT_FOUND/INVALID nunca se reinterpretan como ausencia verificada, ni
+se inventa una severidad; la nueva regla solo trata PRESENT. ABSENT no dispara
+REVIEW por coincidencia con NONE. Las opciones existentes de riesgo desconocido
+y el reemplazo explícito de `review_rules` conservan su comportamiento.
+
+REVIEW mantiene el producto como oportunidad sujeta a evaluación final humana;
+no es autorización de compra, elegibilidad para vender en Amazon ni ausencia
+de riesgos. La clasificación automática es distinta de la compra final.
 
 ## 4. Thresholds — configurables, nunca hardcodeados
 
@@ -109,8 +130,9 @@ misma — puede, como mucho, **explicar** una decisión ya tomada (ver
 3. Política de score parcial: ¿se permitirá alguna vez calcular un score
    con componentes faltantes (reponderando), o se mantiene la regla
    estricta actual de "falta uno ⇒ NOT_FOUND"?
-4. Si `severity == maximum_risk_severity` exactamente (el límite, no por
-   encima) debe ser BUY, REVIEW o PASS — hoy solo ">" dispara PASS.
+4. **RESUELTA 2026-09-21 (ADR-043):** para PRESENT, igualdad con
+   `maximum_risk_severity` produce REVIEW salvo PASS independiente. Implementada
+   y probada; no cierra las demás decisiones de esta sección.
 5. Cómo interactúan múltiples riesgos simultáneos con distinta severidad
    más allá de `highest_severity` (¿el conteo de riesgos importa, no solo
    el máximo?).

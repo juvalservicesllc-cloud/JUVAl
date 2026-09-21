@@ -119,6 +119,19 @@ def rule_review_demand_unknown_or_below_minimum(
     return None
 
 
+def rule_review_risk_at_maximum(inputs: DecisionInputs, thresholds: Thresholds) -> Optional[DecisionReason]:
+    """An existing PRESENT severity at the configured limit needs review (ADR-043)."""
+    for flag in inputs.risk_profile.flags:
+        if flag.status == RiskStatus.PRESENT and flag.severity.value == thresholds.maximum_risk_severity:
+            return DecisionReason(
+                "RISK_AT_MAXIMUM",
+                f"{flag.risk_type.value} is PRESENT with severity {flag.severity.value.value} "
+                f"({flag.severity.status.value}), at the configured maximum "
+                f"{thresholds.maximum_risk_severity.value}; human review is required.",
+            )
+    return None
+
+
 def rule_review_unknown_risk(inputs: DecisionInputs, thresholds: Thresholds) -> Optional[DecisionReason]:
     if thresholds.allow_unknown_risk:
         return None
@@ -143,6 +156,7 @@ DEFAULT_REVIEW_RULES: tuple[Rule, ...] = (
     rule_review_roi_unknown_or_below_target,
     rule_review_demand_unknown_or_below_minimum,
     rule_review_unknown_risk,
+    rule_review_risk_at_maximum,
     rule_review_approval_required,
 )
 

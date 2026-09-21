@@ -100,3 +100,30 @@ def test_fatal_import_yields_failed_execution_run(tmp_path):
     assert run.status == ExecutionStatus.FAILED
     assert run.records_total == 0
     assert records == ()
+
+
+@pytest.mark.parametrize("risk_column,maximum", [("hazmat", Severity.HIGH), ("bulky", Severity.MEDIUM)])
+@pytest.mark.parametrize("cost,expected", [("3", Decision.REVIEW), ("30", Decision.PASS)])
+def test_supplier_risk_at_limit_preserves_inferred_severity(tmp_path, risk_column, maximum, cost, expected):
+    from juval.domain.provenance import VerificationStatus
+    from juval.domain.risk import RiskType
+
+    path = tmp_path / "risk-limit.csv"
+    path.write_text(f"marketplace,asin,cost,selling_price,{risk_column}\nUS,B000000001,{cost},20,true\n")
+    _, records = run_pipeline(path, _thresholds(maximum_risk_severity=maximum), fees=_fees(),
+                              application_version=juval.__version__, execution_id="risk-limit", now=NOW)
+    record = records[0]
+    flag = record.risk.flag_for(RiskType(risk_column.upper()))
+    assert flag.verification_status == VerificationStatus.VERIFIED
+    assert flag.severity.status == VerificationStatus.INFERRED
+    assert flag.severity.value == maximum
+    assert flag.severity.provenance.source == "DEFAULT_RISK_SEVERITY"
+    assert "ADR-010" in flag.severity.provenance.method
+    assert record.product.identification.asin.status == VerificationStatus.VERIFIED
+    assert record.decision.decision == expected
+    codes = {reason.code for reason in record.decision.reasons}
+    if expected == Decision.REVIEW:
+        assert "RISK_AT_MAXIMUM" in codes
+    else:
+        assert "NEGATIVE_PROFIT" in codes
+        assert "RISK_AT_MAXIMUM" not in codes

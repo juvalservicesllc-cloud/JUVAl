@@ -1,8 +1,10 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 
+import pytest
+
 from juval.domain.decision import Decision, DecisionInputs, Thresholds
-from juval.domain.provenance import FieldValue, VerificationStatus
+from juval.domain.provenance import FieldValue, SourceType, VerificationStatus
 from juval.domain.risk import RiskFlag, RiskProfile, RiskStatus, RiskType, Severity
 from juval.processing.decision_engine import evaluate_decision
 
@@ -158,3 +160,77 @@ def test_result_requires_reasons_unless_buy():
     result = evaluate_decision(inputs, _thresholds(), now=NOW)
     assert result.decision == Decision.BUY
     assert result.reasons == ()
+
+
+@pytest.mark.parametrize("risk_type", [RiskType.HAZMAT, RiskType.BULKY])
+@pytest.mark.parametrize("verification", [VerificationStatus.VERIFIED, VerificationStatus.INFERRED])
+@pytest.mark.parametrize("severity,expected,code", [
+    (Severity.LOW, Decision.BUY, None),
+    (Severity.MEDIUM, Decision.REVIEW, "RISK_AT_MAXIMUM"),
+    (Severity.HIGH, Decision.PASS, "RISK_ABOVE_MAXIMUM"),
+])
+def test_risk_limit_policy(risk_type, verification, severity, expected, code):
+    build = FieldValue.verified if verification == VerificationStatus.VERIFIED else FieldValue.inferred
+    severity_field = build(severity, source="risk-test", method="explicit test classification", retrieved_at=NOW)
+    flag = RiskFlag(risk_type, RiskStatus.PRESENT, verification, severity_field, "risk-test", NOW)
+    profile = RiskProfile(flags=(flag,))
+    inputs = _inputs(_fv(Decimal("10")), _fv(Decimal("0.5")), _fv(100), profile)
+    result = evaluate_decision(inputs, _thresholds(maximum_risk_severity=Severity.MEDIUM), now=NOW)
+    assert result.decision == expected
+    assert [r.code for r in result.reasons] == ([code] if code else [])
+    if code == "RISK_AT_MAXIMUM":
+        assert risk_type.value in result.reasons[0].message
+        assert "MEDIUM" in result.reasons[0].message
+        assert verification.value in result.reasons[0].message
+    assert inputs.risk_profile is profile
+    assert flag.severity is severity_field
+    assert flag.severity.status == verification
+    assert flag.verification_status == verification
+    assert result == evaluate_decision(inputs, _thresholds(maximum_risk_severity=Severity.MEDIUM), now=NOW)
+
+
+@pytest.mark.parametrize("risk_type", [RiskType.HAZMAT, RiskType.BULKY])
+def test_equal_risk_keeps_independent_pass_precedence(risk_type):
+    flag = RiskFlag(risk_type, RiskStatus.PRESENT, VerificationStatus.VERIFIED, _severity(Severity.LOW), "s", NOW)
+    inputs = _inputs(_fv(Decimal("-1")), _fv(Decimal("0.5")), _fv(100), RiskProfile(flags=(flag,)))
+    result = evaluate_decision(inputs, _thresholds(), now=NOW)
+    assert result.decision == Decision.PASS
+    assert [r.code for r in result.reasons] == ["NEGATIVE_PROFIT"]
+
+
+@pytest.mark.parametrize("risk_type", [RiskType.HAZMAT, RiskType.BULKY])
+def test_below_limit_continues_other_review_rules(risk_type):
+    flag = RiskFlag(risk_type, RiskStatus.PRESENT, VerificationStatus.VERIFIED, _severity(Severity.LOW), "s", NOW)
+    inputs = _inputs(_fv(Decimal("1")), _fv(Decimal("0.5")), _fv(100), RiskProfile(flags=(flag,)))
+    result = evaluate_decision(inputs, _thresholds(maximum_risk_severity=Severity.MEDIUM), now=NOW)
+    assert result.decision == Decision.REVIEW
+    assert [r.code for r in result.reasons] == ["PROFIT_BELOW_TARGET"]
+
+
+@pytest.mark.parametrize("risk_type", [RiskType.HAZMAT, RiskType.BULKY])
+@pytest.mark.parametrize("verification", [VerificationStatus.NOT_FOUND, VerificationStatus.INVALID])
+def test_unknown_severity_is_not_compared_to_limit_or_promoted(risk_type, verification):
+    severity = (FieldValue.not_found(source="s", method="missing", retrieved_at=NOW)
+                if verification == VerificationStatus.NOT_FOUND else
+                FieldValue.invalid("bad", source="s", method="invalid", retrieved_at=NOW, source_type=SourceType.SUPPLIER_FILE))
+    flag = RiskFlag(risk_type, RiskStatus.UNKNOWN, verification, severity, "s", NOW)
+    inputs = _inputs(_fv(Decimal("10")), _fv(Decimal("0.5")), _fv(100), RiskProfile(flags=(flag,)))
+    result = evaluate_decision(inputs, _thresholds(maximum_risk_severity=Severity.NONE), now=NOW)
+    assert result.decision == Decision.REVIEW
+    assert [r.code for r in result.reasons] == ["RISK_UNKNOWN"]
+    assert flag.severity is severity
+    assert flag.verification_status == verification
+
+
+@pytest.mark.parametrize("risk_type", [RiskType.HAZMAT, RiskType.BULKY])
+def test_absent_risk_at_none_limit_does_not_trigger_review(risk_type):
+    flag = RiskFlag(risk_type, RiskStatus.ABSENT, VerificationStatus.VERIFIED, _severity(Severity.NONE), "s", NOW)
+    inputs = _inputs(_fv(Decimal("10")), _fv(Decimal("0.5")), _fv(100), RiskProfile(flags=(flag,)))
+    result = evaluate_decision(inputs, _thresholds(maximum_risk_severity=Severity.NONE), now=NOW)
+    assert result.decision == Decision.BUY
+
+
+def test_explicit_custom_review_rules_still_replace_defaults():
+    flag = RiskFlag(RiskType.HAZMAT, RiskStatus.PRESENT, VerificationStatus.VERIFIED, _severity(Severity.LOW), "s", NOW)
+    inputs = _inputs(_fv(Decimal("10")), _fv(Decimal("0.5")), _fv(100), RiskProfile(flags=(flag,)))
+    assert evaluate_decision(inputs, _thresholds(), now=NOW, review_rules=()).decision == Decision.BUY

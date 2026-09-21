@@ -560,7 +560,8 @@ interfaz previa, ADR-005, sin relación con PWA).
 
 ## FASE 5 — Decision Intelligence
 
-**Estado: NOT STARTED — BLOCKED**
+**Estado: BLOCKED** — subcriterio de igualdad de riesgo implementado (ADR-043);
+scoring comercial pendiente.
 
 ⚠️ Bloqueada: fórmulas de subscore y thresholds comerciales reales no
 aprobados por negocio (`DECISION_ENGINE.md` §7).
@@ -571,8 +572,8 @@ aprobados por negocio (`DECISION_ENGINE.md` §7).
   determinístico.
 - **Alcance**: `processing/decision_score.py` (fórmulas de subscore),
   refinamiento de reglas (ej. caso límite
-  `severity == maximum_risk_severity`, abierto en `DECISION_ENGINE.md`
-  §7.4).
+  `severity == maximum_risk_severity`, implementado como REVIEW salvo PASS
+  independiente; ADR-043 / `DECISION_ENGINE.md` §7.4).
 - **Fuera de alcance**: scoring basado en IA (prohibido, ADR-006/
   ADR-008); cambios de UI (Fase 4).
 - **Dependencias**: Fase 1 (el motor ya existe). Requiere decisión de

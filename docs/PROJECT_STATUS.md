@@ -1,5 +1,30 @@
 # Juval — Project Status
 
+## 2026-09-21 — Risk severity equality policy
+
+**IMPLEMENTED, APPROVED by explicit user decision (ADR-043).** Starting HEAD
+`28a8fef0a72b02cd7ca5c68f77e59b0f9e3a3fa7`, clean. A PRESENT risk at the
+configured maximum now triggers REVIEW / `RISK_AT_MAXIMUM`, unless an independent
+PASS rule fires first. Below/above behavior, explicit custom rule replacement,
+financial formulas and provenance remain unchanged. HazMat/Bulky supplier presence
+stays VERIFIED and provisional severity INFERRED; REVIEW is not purchase approval.
+
+Before implementation: 6 policy regressions reproduced the missing behavior;
+2 additional failures were new INVALID fixtures missing required source_type
+(corrected without product changes), 37 tests passed. After implementation:
+**76 passed**, no skips, in decision/risk/provenance/pipeline unit tests and
+`test_pipeline_end_to_end.py` / `test_reproducibility.py`. No unrelated backend,
+frontend, export, callback, MFA or network suites repeated.
+
+Only the Phase 5 risk-equality subcriterion is PASS. ADR-040 `scoring` remains
+BLOCKED / NOT_VERIFIED: commercial subscore formulas and thresholds are still
+unapproved. All metrics unchanged: implementation 44/68, verification 17/68,
+production 0/12, security 5/16, Amazon 0/18. No whole criterion completed.
+Frontend/MFA frozen; SP-API NOT_APPROVED; no infrastructure or identity change,
+no dependency added, no push. Next gate requires business approval of scoring
+formulas/thresholds; no further autonomous policy is inferred from this decision.
+
+
 ## 2026-09-21 — Finite supplier numbers and invalid shipping
 
 **IMPLEMENTED.** After `a4e34b4`, a second bounded input-correctness defect was

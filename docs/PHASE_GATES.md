@@ -104,7 +104,7 @@ and `IDENTITY_SECURITY_READINESS.md` for the current activation gate.
 **Estado del gate: BLOCKED**
 - Gate previo bloqueante: cada fórmula de subscore tiene una aprobación de negocio documentada.
 - `DECISION_ENGINE.md` deja de marcar el Decision Score como experimental, actualizado en el mismo cambio que el código.
-- Caso límite `severity == maximum_risk_severity` con comportamiento definido y probado.
+- Caso límite `severity == maximum_risk_severity` — **PASS, 2026-09-21**: PRESENT → REVIEW salvo PASS independiente; ADR-043, tests de decisión/pipeline. Este subcriterio no cierra el gate ni aprueba las fórmulas de score.
 
 ### Fase 6 — Authorized External Data Sources
 **Estado del gate: BLOCKED**
