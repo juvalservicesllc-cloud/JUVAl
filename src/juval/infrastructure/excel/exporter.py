@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import Any, Optional, Sequence
 
 import openpyxl
+from openpyxl.cell import Cell
+from openpyxl.worksheet.worksheet import Worksheet
 
 from juval.domain.provenance import FieldValue
 from juval.domain.risk import RiskFlag, RiskType
@@ -170,11 +172,26 @@ def _row_for_record(record: SourcingRecord) -> tuple[Any, ...]:
     )
 
 
+def append_literal_row(sheet: Worksheet, values: Sequence[Any]) -> None:
+    """Write supplied strings as XLSX text, never formulas or error cells.
+
+    Keep the text unchanged (no apostrophe prefix) and retain numeric/blank
+    cell types. JUVAl exports calculated values, not executable formulas.
+    """
+    cells = []
+    for value in values:
+        cell = Cell(sheet, value=value)
+        if isinstance(value, str):
+            cell.data_type = "s"
+        cells.append(cell)
+    sheet.append(cells)
+
+
 def export_excel(records: Sequence[SourcingRecord], path: Path) -> None:
     workbook = openpyxl.Workbook()
     sheet = workbook.active
     sheet.title = "juval_sourcing_results"
-    sheet.append(list(HEADERS))
+    append_literal_row(sheet, HEADERS)
     for record in records:
-        sheet.append(list(_row_for_record(record)))
+        append_literal_row(sheet, _row_for_record(record))
     workbook.save(Path(path))

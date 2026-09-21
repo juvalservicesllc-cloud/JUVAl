@@ -29,6 +29,15 @@ Diferencias reales entre los dos lectores, y solo estas:
 
 La **salida** sigue siendo `.xlsx` únicamente; no existe export CSV.
 
+La exportación completa y la filtrada escriben todas las cadenas como **texto
+XLSX explícito**, incluidas las que empiezan por `=` o coinciden con errores
+como `#N/A`. `exporter.py::append_literal_row` conserva el contenido sin prefijos
+ni fórmulas ejecutables; los números y celdas vacías mantienen sus tipos. También
+se aplica a los metadatos de exportación. No altera `FieldValue`, estados de
+verificación, snapshots ni cálculos. Este control protege la serialización de
+salida, no certifica cualquier comportamiento de un cliente Excel externo.
+
+
 ```
 Input (.xlsx | .csv)
    │  openpyxl.load_workbook  |  csv.reader (utf-8-sig)

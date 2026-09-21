@@ -1,5 +1,31 @@
 # Juval — Project Status
 
+## 2026-09-21 — XLSX literal text export correction
+
+**IMPLEMENTED.** From baseline `8ed13cd73530d07a75555ddba2f8ee958d1def58`,
+CSV supplier text beginning with `=` was reproducibly exported as an XLSX
+formula by both normal download and filtered export; `#N/A` became an error
+cell. Shared `append_literal_row` now emits strings explicitly as text without
+changing their values, numeric cells, missing values or provenance. Filtered
+query metadata uses the same writer. No dependency or architecture change;
+APPROVED scope: existing data-as-data rule and operator-authorized technical
+security corrections. This resolves a concrete export finding relevant to
+PHASE_GATES universal item 5 / Phase 10, not the whole production gate.
+
+Regression before fix: 4 failures / 3 passes (new literal-text cases). After
+fix and correction of a new test's mistaken UNKNOWN expectation for absent risk
+columns: **15 passed, 52 deselected**, 1 existing Starlette/httpx deprecation,
+using `pytest -q tests/integration/test_excel_exporter.py tests/integration/test_api.py tests/integration/test_record_snapshot_pagination.py -k 'export or download'`.
+No full backend/frontend/E2E rerun. No external spreadsheet client executed;
+evidence is serialized XLSX round-trip with formula and data-only reads.
+
+ADR-040 unchanged: implementation 44/68, verification 17/68, production 0/12,
+security 5/16, Amazon 0/18. No new whole criterion completed; no portal mutation.
+MFA/frontend frozen, SP-API NOT_APPROVED, identity/network/provider configuration
+unchanged. No push. Session/public activation, business scoring, external sources
+and AI provider work retain their human/external/decision gates.
+
+
 Fotografía oficial del estado real del proyecto. Producida a partir de
 `docs/RECONCILIATION_REPORT.md` (reconciliación código/tests/ADRs/docs,
 2026-08-16) — ese documento contiene la evidencia línea por línea; este

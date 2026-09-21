@@ -49,7 +49,7 @@ from juval.domain.batch import Batch, BatchFile, BatchFileStatus, aggregate_batc
 from juval.domain.execution_run import ExecutionRun, hash_file
 from juval.application.execution_run_store import ExecutionRunStore
 from juval.application.record_snapshot_store import RecordSnapshotQuery
-from juval.infrastructure.excel.exporter import export_excel
+from juval.infrastructure.excel.exporter import append_literal_row, export_excel
 from juval.infrastructure.excel.importer import SUPPORTED_INPUT_SUFFIXES, UnsupportedInputFormat
 from juval.infrastructure.logging.sqlite_execution_run_store import SqliteExecutionRunStore
 from juval.infrastructure.persistence.supabase_execution_run_store import SupabaseExecutionRunStore
@@ -589,21 +589,21 @@ async def export_filtered_records(
     sheet = workbook.active
     sheet.title = "catalog_export"
     headers = ("record_ref", "supplier_sku", "asin", "asin_status", "title", "brand", "selling_price", "selling_price_status", "cog", "profit", "profit_status", "roi", "roi_status", "margin", "margin_status", "hazmat_status", "hazmat_severity", "bulky_status", "bulky_severity", "decision", "issue_count", "issues")
-    sheet.append(list(headers))
+    append_literal_row(sheet, list(headers))
     for record in page.items:
         def value(field): return record.get(field, {}).get("value") if isinstance(record.get(field), dict) else record.get(field)
         def status(field): return record.get(field, {}).get("status") if isinstance(record.get(field), dict) else None
-        sheet.append([record.get("record_ref"), record.get("supplier_sku"), value("asin"), status("asin"), value("title"), value("brand"), value("selling_price"), status("selling_price"), record.get("cog"), value("profit"), status("profit"), value("roi"), status("roi"), value("margin"), status("margin"), record.get("hazmat_status"), record.get("hazmat_severity"), record.get("bulky_status"), record.get("bulky_severity"), record.get("decision"), record.get("issue_count", 0), " ; ".join(record.get("issues", []))])
+        append_literal_row(sheet, [record.get("record_ref"), record.get("supplier_sku"), value("asin"), status("asin"), value("title"), value("brand"), value("selling_price"), status("selling_price"), record.get("cog"), value("profit"), status("profit"), value("roi"), status("roi"), value("margin"), status("margin"), record.get("hazmat_status"), record.get("hazmat_severity"), record.get("bulky_status"), record.get("bulky_severity"), record.get("decision"), record.get("issue_count", 0), " ; ".join(record.get("issues", []))])
     metadata = workbook.create_sheet("query_metadata")
-    metadata.append(["execution_id", execution_id])
-    metadata.append(["generated_at", datetime.now(timezone.utc).isoformat()])
-    metadata.append(["filters", json.dumps({"search": search, "decision": decision, "min_roi": str(min_roi) if min_roi is not None else None, "min_profit": str(min_profit) if min_profit is not None else None, "min_margin": str(min_margin) if min_margin is not None else None, "confidence": confidence, "hazmat": hazmat, "bulky": bulky, "provenance_field": provenance_field, "provenance_status": provenance_status}, sort_keys=True)])
-    metadata.append(["sort", sort])
-    metadata.append(["direction", direction])
+    append_literal_row(metadata, ["execution_id", execution_id])
+    append_literal_row(metadata, ["generated_at", datetime.now(timezone.utc).isoformat()])
+    append_literal_row(metadata, ["filters", json.dumps({"search": search, "decision": decision, "min_roi": str(min_roi) if min_roi is not None else None, "min_profit": str(min_profit) if min_profit is not None else None, "min_margin": str(min_margin) if min_margin is not None else None, "confidence": confidence, "hazmat": hazmat, "bulky": bulky, "provenance_field": provenance_field, "provenance_status": provenance_status}, sort_keys=True)])
+    append_literal_row(metadata, ["sort", sort])
+    append_literal_row(metadata, ["direction", direction])
     # State the unit explicitly: min_roi/min_margin are canonical ratios, so
     # 0.3 in this sheet is the 30% the operator typed. Without this line a
     # reader could take 0.3 for 0.3% and misjudge a sourcing threshold.
-    metadata.append(["units", "min_roi and min_margin are ratios (0.30 = 30%); min_profit and prices are absolute currency amounts"])
+    append_literal_row(metadata, ["units", "min_roi and min_margin are ratios (0.30 = 30%); min_profit and prices are absolute currency amounts"])
     workbook.save(path)
     return FileResponse(path, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename=f"{execution_id}-filtered.xlsx")
 

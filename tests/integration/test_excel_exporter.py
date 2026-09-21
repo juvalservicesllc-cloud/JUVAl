@@ -3,6 +3,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import openpyxl
+import pytest
 
 from juval.domain.costs import CostInputs, FeeInputs
 from juval.domain.product import Identification, Product
@@ -99,3 +100,27 @@ def test_export_empty_records_still_writes_headers(tmp_path):
     ws = wb.active
     rows = list(ws.iter_rows(values_only=True))
     assert rows == [HEADERS]
+
+
+@pytest.mark.parametrize("text", ["=1+1", "#N/A", "+1", "-1", "@name"])
+def test_export_strings_are_treated_as_literal_text(tmp_path, text):
+    from dataclasses import replace
+
+    record = _record()
+    record = replace(record, product=replace(record.product, identification=replace(
+        record.product.identification, supplier_sku=text,
+    )))
+    path = tmp_path / "literal.xlsx"
+    export_excel([record], path)
+
+    for data_only in (False, True):
+        workbook = openpyxl.load_workbook(path, data_only=data_only)
+        try:
+            cells = dict(zip(HEADERS, next(workbook.active.iter_rows(min_row=2))))
+            assert cells["supplier_sku"].value == text
+            assert cells["supplier_sku"].data_type == "s"
+            assert cells["cog"].value == 3
+            assert cells["cog"].data_type == "n"
+            assert cells["asin_status"].value == "VERIFIED"
+        finally:
+            workbook.close()

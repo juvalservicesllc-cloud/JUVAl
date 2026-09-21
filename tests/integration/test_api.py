@@ -583,3 +583,31 @@ def test_get_runs_list_requires_a_configured_store(monkeypatch, tmp_path):
     resp = unconfigured_client.get("/api/v1/runs")
 
     assert resp.status_code == 500
+
+
+@pytest.mark.parametrize("endpoint", ["download", "records/export"])
+def test_exported_supplier_strings_are_treated_as_literal_text(client, endpoint):
+    import io
+    import openpyxl
+
+    content = b"marketplace,asin,cost,supplier_sku,title,brand\nUS,B0TESTAAAA,3,=2+2,=1+1,#N/A\n"
+    response = _upload(client, filename="literal.csv", content=content, persist="true")
+    assert response.status_code == 200
+    body = response.json()
+    download = client.get(f"/api/v1/runs/{body['execution_id']}/{endpoint}")
+    assert download.status_code == 200
+    for data_only in (False, True):
+        workbook = openpyxl.load_workbook(io.BytesIO(download.content), data_only=data_only)
+        try:
+            header, row = list(workbook.active.iter_rows())[:2]
+            cells = {name.value: cell for name, cell in zip(header, row)}
+            for field, text in {"supplier_sku": "=2+2", "title": "=1+1", "brand": "#N/A"}.items():
+                assert cells[field].value == text
+                assert cells[field].data_type == "s"
+            assert cells["asin"].value == "B0TESTAAAA"
+            assert cells["asin_status"].value == "VERIFIED"
+            # Missing source columns remain absent; never invent risk absence.
+            assert cells["hazmat_status"].value is None
+            assert cells["bulky_status"].value is None
+        finally:
+            workbook.close()
