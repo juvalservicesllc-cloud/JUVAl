@@ -1,5 +1,30 @@
 # Juval — Project Status
 
+## 2026-09-21 — Finite supplier numbers and invalid shipping
+
+**IMPLEMENTED.** After `a4e34b4`, a second bounded input-correctness defect was
+confirmed: nonfinite Decimal text could abort an import or enter verified fields;
+invalid/negative shipping silently became zero. The shared CSV/XLSX importer
+now rejects nonfinite decimals through existing invalid-value paths and returns
+no CostInputs for invalid shipping. Blank optional shipping keeps its documented
+zero default. Weight INVALID retains raw text/source/row; unaffected rows proceed.
+No Domain/Processing formula, business threshold, dependency or boundary change.
+APPROVED scope: existing invalid-data/no-fabricated-cost rules and operator task.
+
+New input regressions before fix: 32 failed / 2 passed. After fix:
+**73 passed, 45 deselected**, one existing Starlette/httpx deprecation, using
+`pytest -q tests/integration/test_csv_importer.py tests/integration/test_excel_importer.py tests/integration/test_api.py -k 'importer or nonfinite'`.
+CSV/XLSX parity, row survival, weight provenance and API missing profitability
+were exercised. Existing green export tests were not repeated. Scope is supplier
+file ingestion, not all possible direct Python construction of domain objects.
+
+Gates affected: input validation/provenance (Phase 2 and universal correctness /
+security criteria); global production readiness remains blocked. ADR-040 unchanged
+at 44/68 implementation, 17/68 verification, 0/12 production, 5/16 security,
+0/18 Amazon: no whole roadmap criterion newly completed. No frozen-directory,
+MFA, RF-02, infrastructure or external-provider work. No push.
+
+
 ## 2026-09-21 — XLSX literal text export correction
 
 **IMPLEMENTED.** From baseline `8ed13cd73530d07a75555ddba2f8ee958d1def58`,

@@ -611,3 +611,25 @@ def test_exported_supplier_strings_are_treated_as_literal_text(client, endpoint)
             assert cells["bulky_status"].value is None
         finally:
             workbook.close()
+
+
+@pytest.mark.parametrize("field", ["cost", "shipping_per_unit", "selling_price", "weight"])
+@pytest.mark.parametrize("raw", ["NaN", "Infinity"])
+def test_nonfinite_upload_keeps_valid_rows_and_reports_invalid_input(client, field, raw):
+    import csv
+    import io
+
+    headers = ["marketplace", "asin", "cost", "shipping_per_unit", "selling_price", "weight", "weight_unit"]
+    row = ["US", "B000000001", "3", "1", "20", "2", "lb"]
+    row[headers.index(field)] = raw
+    stream = io.StringIO(newline="")
+    csv.writer(stream).writerows([headers, row, ["US", "B000000002", "3", "1", "20", "2", "lb"]])
+    response = _upload(client, filename="numbers.csv", content=stream.getvalue().encode())
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "PARTIAL_SUCCESS"
+    assert body["records_processed"] == 2
+    assert any(raw in issue for issue in body["records"][0]["issues"])
+    if field in ("cost", "shipping_per_unit", "selling_price"):
+        assert body["records"][0]["profit"]["value"] is None
+    assert body["records"][1]["profit"]["value"] is not None

@@ -108,3 +108,49 @@ def test_import_file_dispatches_by_suffix_and_refuses_anything_else(tmp_path):
     assert SUPPORTED_INPUT_SUFFIXES == {".xlsx", ".csv"}
     with pytest.raises(UnsupportedInputFormat):
         import_file(tmp_path / "notes.txt", now=NOW)
+
+
+@pytest.mark.parametrize("suffix", [".csv", ".xlsx"])
+@pytest.mark.parametrize("field", ["cost", "shipping_per_unit", "selling_price", "weight"])
+@pytest.mark.parametrize("raw", ["NaN", "sNaN", "Infinity", "-Infinity"])
+def test_nonfinite_supplier_numbers_are_invalid_without_aborting_other_rows(tmp_path, suffix, field, raw):
+    headers = ["marketplace", "asin", "cost", "shipping_per_unit", "selling_price", "weight", "weight_unit"]
+    bad = ["US", "B000000001", "3", "1", "20", "2", "lb"]
+    bad[headers.index(field)] = raw
+    good = ["US", "B000000002", "3", "1", "20", "2", "lb"]
+    path = tmp_path / ("numbers" + suffix)
+    if suffix == ".csv":
+        with path.open("w", newline="") as stream:
+            csv.writer(stream).writerows([headers, bad, good])
+    else:
+        workbook = openpyxl.Workbook()
+        for row in (headers, bad, good):
+            workbook.active.append(row)
+        workbook.save(path)
+        workbook.close()
+
+    result = import_file(path, now=NOW)
+    assert not result.fatal
+    assert len(result.records) == 2
+    record, valid = result.records
+    assert valid.costs.cog == 3
+    assert valid.product.dimensions.weight.status == VerificationStatus.VERIFIED
+    assert any(issue.field == field and raw in issue.message for issue in result.issues)
+    if field in ("cost", "shipping_per_unit"):
+        assert record.costs is None  # invalid cost is never a free/default cost
+    elif field == "selling_price":
+        assert record.product.price.selling_price_used is None
+    else:
+        weight = record.product.dimensions.weight
+        assert weight.status == VerificationStatus.INVALID
+        assert weight.raw_value == raw
+        assert weight.provenance.source == path.name
+        assert weight.provenance.source_reference == "row=2"
+
+
+@pytest.mark.parametrize("raw", ["not-a-number", "-1"])
+def test_invalid_shipping_is_not_silently_a_zero_cost(tmp_path, raw):
+    path = _write(tmp_path, "shipping.csv", f"marketplace,asin,cost,shipping_per_unit\nUS,B000000001,3,{raw}\n")
+    result = import_csv(path, now=NOW)
+    assert result.records[0].costs is None
+    assert any(issue.field == "shipping_per_unit" for issue in result.issues)

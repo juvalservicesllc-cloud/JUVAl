@@ -117,6 +117,16 @@ columna presente es un caso normal (`NOT_FOUND`), excepto:
   en `None` (no se fabrica un `CostInputs(cog=0)`) — la fila sí se
   construye, pero sin poder calcular rentabilidad.
 
+Los decimales de entrada deben ser finitos: `NaN`, `sNaN`, `Infinity` y
+`-Infinity` se tratan como números inválidos, no como valores VERIFIED. Se
+conservan los mecanismos existentes de diagnóstico: `INVALID_NUMBER`/`INVALID_PRICE`
+y valor original en el mensaje; para peso/dimensiones, `FieldValue.INVALID`
+con `raw_value` y referencia de fila. El import continúa con las demás filas.
+Si `shipping_per_unit` está presente pero es inválido o negativo, `costs=None`:
+no se calcula rentabilidad a partir de un shipping ficticio de cero. El cero
+por celda opcional vacía/columna ausente se mantiene según §4. No cambian las
+fórmulas ni los estados de ASIN/HazMat/Bulky.
+
 ## 3. `selling_price`: qué representa realmente
 
 **No hay integración con Amazon en esta fase.** La columna `selling_price`

@@ -139,7 +139,8 @@ def _parse_cell(raw: Any, value_type: str) -> tuple[Optional[Any], bool]:
         return candidate, validator(candidate)
     if value_type == "decimal":
         try:
-            return Decimal(text), True
+            value = Decimal(text)
+            return (value, True) if value.is_finite() else (text, False)
         except InvalidOperation:
             return text, False
     if value_type == "int":
@@ -403,6 +404,7 @@ def _build_costs(
                     field="shipping_per_unit", record_ref=row_ref,
                 )
             )
+            return None
         elif parsed < 0:
             issues.append(
                 ProcessingIssue(
@@ -411,6 +413,7 @@ def _build_costs(
                     field="shipping_per_unit", record_ref=row_ref,
                 )
             )
+            return None
         else:
             shipping_value = parsed
 
