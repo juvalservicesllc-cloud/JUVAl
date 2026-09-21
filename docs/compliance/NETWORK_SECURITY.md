@@ -1,19 +1,135 @@
 # JUVAl — Network Security Architecture and Control Audit (RF-02)
 
-## Current reconciliation — 2026-09-18
+## Current reconciliation — 2026-09-21
 
-**RF-02 = PARTIAL / EXTERNAL_BLOCKED.** The audit below is dated historical
-evidence, including statements that F-01 was the sole blocker or FusionAuth
-was not installed. They do not describe current readiness. FusionAuth is now
-installed; public identity ingress/TLS/logging and the effective host perimeter
-remain unverified for production. Workstation F-01 still lacks closure evidence.
+**RF-02 = PARTIAL / PARTIALLY IMPLEMENTED. Remaining work:
+HUMAN_REQUIRED + EXTERNAL_REQUIRED; not CLOSED.** This supersedes the network
+checkpoint in [the recovery record](RF_RECOVERY_20260918.md), not its historical
+observations. The audit below is historical, including claims that F-01 was the
+sole blocker or FusionAuth was not installed. See [current readiness](../IDENTITY_SECURITY_READINESS.md).
 
-[Post-reboot read-only observations and exact remaining evidence](RF_RECOVERY_20260918.md)
-record all-interface listeners on 631/9011/9012 as well as SSH. Active UFW and
-configured default DROP are not proof of effective rules or external denial.
-No network change or exposure test was performed. Existing reproduction commands
-below remain procedures, not fresh measurements. See
-[the current readiness ledger](../IDENTITY_SECURITY_READINESS.md) for authority.
+### Evidence source and boundaries
+
+Source: operator's 2026-09-21 read-only checkpoint supplied in this session.
+Starting HEAD `c03c3abd2710bdacd28f17504f1d8862ada1e1a6`, clean worktree.
+Linux privileged observation: `2026-09-21T14:43:19Z`. Windows used
+`Test-NetConnection` to `192.168.0.26` from another LAN host. Windows timestamps
+and source IP were not supplied; do not assign the Linux timestamp or a historical
+source IP to those tests. Evidence is HUMAN_REPORTED, not agent-executed or
+independently repeated. Listener absence during 5173/8000 testing was explicitly
+reported by the operator.
+
+UFW: **active**, logging **on (low)**; defaults **deny incoming**, **allow
+outgoing**, **disabled routed**. Observed ALLOW IN: OpenSSH `22/tcp` Anywhere
+and Anywhere (v6); `5173/tcp` and `8000/tcp` from `192.168.0.0/24` only.
+No ALLOW observed for 631/9011/9012/5432. This effective status enumeration is
+stronger than service-active/config-file evidence, but is not a packet trace
+proving which component dropped a connection.
+
+| Port | LOCAL_LISTENER_STATUS / process | HOST_FIREWALL_STATUS (observed) | Windows IPv4 TCP / LAN_EXPOSURE_STATUS |
+|---|---|---|---|
+| 22 | LISTENER_PRESENT; BIND_ALL_INTERFACES `0.0.0.0:22`, `[::]:22`; sshd/systemd | ALLOW Anywhere IPv4 and IPv6 | True; LAN_REACHABILITY_BEHAVIORALLY_VERIFIED_FROM_OBSERVED_WORKSTATION_IPV4; consistent with allow |
+| 631 | LISTENER_PRESENT; BIND_ALL_INTERFACES `0.0.0.0:631`, `[::]:631`; cupsd | No ALLOW observed; default deny incoming | False; LAN_DENIAL_BEHAVIORALLY_VERIFIED_FROM_OBSERVED_WORKSTATION_IPV4 |
+| 5173 | LISTENER_ABSENT_DURING_TEST | ALLOW `192.168.0.0/24` retained | False; LISTENER_ABSENT_DURING_TEST; **not firewall-denial evidence** |
+| 8000 | LISTENER_ABSENT_DURING_TEST | ALLOW `192.168.0.0/24` retained | False; LISTENER_ABSENT_DURING_TEST; **not firewall-denial evidence** |
+| 9011 | LISTENER_PRESENT; BIND_ALL_INTERFACES `*:9011`; java / FusionAuth | No ALLOW observed; default deny incoming | False; LAN_DENIAL_BEHAVIORALLY_VERIFIED_FROM_OBSERVED_WORKSTATION_IPV4 |
+| 9012 | LISTENER_PRESENT; BIND_ALL_INTERFACES `*:9012`; java / FusionAuth | No ALLOW observed; default deny incoming | False; LAN_DENIAL_BEHAVIORALLY_VERIFIED_FROM_OBSERVED_WORKSTATION_IPV4 |
+| 5432 | LISTENER_PRESENT; BIND_LOOPBACK `127.0.0.1:5432` only; postgres | No ALLOW observed; default deny incoming | False; LAN_UNREACHABILITY_BEHAVIORALLY_VERIFIED_FROM_OBSERVED_WORKSTATION_IPV4; loopback independently preserved, no sole-firewall attribution |
+
+**HOST_FIREWALL_STATUS = VERIFIED_CONFIGURATION (HUMAN_REPORTED).**
+**LAN_EXPOSURE_STATUS = SCOPED_BEHAVIORALLY_VERIFIED**, exactly per matrix for
+this workstation's IPv4 path, not all-host LAN denial.
+**PUBLIC_PERIMETER_STATUS = NOT_VERIFIED** for the current boundary: no public
+Internet denial, cloud/provider firewall, TLS or ingress logging evidence supplied.
+**IPV6_STATUS = CONFIGURATION_PARTIALLY_OBSERVED / DENIAL_NOT_VERIFIED**:
+SSH IPv6 allow and SSH/CUPS IPv6 binds are explicit; wildcard Java output alone
+does not establish address-family behavior. No IPv6 connectivity tests supplied.
+
+### RF-02 promotion, defects and debt
+
+The previously EXTERNAL_BLOCKED local checkpoint is satisfied for effective UFW
+enumeration, privileged process attribution (including 631), and the specified
+workstation IPv4 LAN results. This progress does not satisfy RF-02's whole
+layered-control requirement: firewall, IDS/IPS, anti-malware and segmentation
+(historical §4; SP_API_REGISTRATION_REMEDIATION §9.3). No new IDS/IPS,
+anti-malware, patching, public or production evidence was supplied.
+
+**REAL_SECURITY_DEFECTS:** no new active LAN exposure demonstrated. Existing
+workstation F-01 remains OPEN pending remediation or formal boundary exclusion;
+August's patch finding is historical, not a fresh September patch measurement.
+These TCP tests close neither F-01 nor the separate F-02 encryption uncertainty.
+SSH reachability matches recorded policy and proves neither a new defect nor
+public exposure. Absent dev listeners do not revoke their LAN allow rules.
+
+**ARCHITECTURAL_DEBT:** FusionAuth 9011/9012 still bind broadly; observed LAN
+containment materially relies on host firewall enforcement. This is defense-in-
+depth debt, not demonstrated active LAN exposure. CUPS 631 also adds a broad
+listener on the identity host, relevant to RF-02 minimization. Attribution is
+resolved; operational need is not. Later necessity review is justified: retain
+with an explicit need or propose targeted minimization if unneeded. No disable
+or rebind approved/performed here. H-3 is not promoted to VERIFIED by firewall-
+only containment or temporary absence of development listeners.
+
+**REMEDIATION_REQUIRED:** no immediate configuration change established by this
+evidence. Existing F-01 still needs supported/updated workstation evidence or
+formal exclusion. Host minimization is PENDING a separate decision. APPROVED:
+evidence reconciliation and one local commit. No policy/architecture change,
+service restart, package change, network mutation, auth experiment, callback
+test, deployment or push. MFA and frontend remain FROZEN.
+
+### Remaining blockers and smallest checkpoints
+
+1. **HUMAN_REQUIRED:** dated F-01 supported OS/security-update evidence or formal
+   exclusion from the Amazon Information boundary; confirm CUPS necessity.
+   F-02 remains a separate unverified encryption finding. Remaining RF-02 work
+   is therefore **not only public/IPv6 evidence**.
+2. **EXTERNAL_REQUIRED:** identify the applicable public IPv4/IPv6 boundary and
+   provide read-only effective router/NAT/provider ACL/ingress evidence, including
+   whether globally routed IPv6 exists. Correlate authorized off-LAN TCP checks
+   with listener state, source, destination/family and UTC time. Test only already
+   authorized owned endpoints; open no ports. If IPv6 is excluded, document that
+   scope with evidence rather than claiming denial. This is the smallest next
+   perimeter checkpoint, not a deployment request. Selected public identity
+   ingress/TLS/logging and production authorization remain separate gates.
+   Consistent evidence supplied here requires no repeated LAN test.
+3. **NEXT_HIGHEST_VALUE_CHECKPOINT:** combine RF-01 + RF-05 using existing
+   [TABLETOP-002](TABLETOP_002_PREPARED_SCENARIO.md): real participant decisions
+   and timing, CA-01 initiation-before/in-parallel-with-investigation evidence,
+   completed CA-02 manifest (at least two rows), and six-element notification
+   draft with elapsed time, **never sent**. Preserve simulated assumptions and
+   distinguish actual versus described actions. This recommendation authorizes
+   no real credential rotation/deployment. Existing owners/approval stand;
+   review due remains 2027-02-18. RF-04 human duties/access review/removal drill
+   remains pending separately. Do not resume MFA. No tabletop executed here.
+
+### ADR-040 and validation
+
+Model 1.2 unchanged, before = after: Implementation **44/68 = 65%**;
+Verification **17/68 = 25%**; Production **0/12 = 0%**; Security **5/16 = 31%**;
+Amazon **0/18 = 0%**. **EXACT_CRITERIA_CHANGED = NONE.** Reviewed against
+`project-portal/data/project-config.json` and `project-portal/scripts/sync.mjs`:
+`rf-02` (weight 2) remains PARTIAL / NOT_VERIFIED at whole-criterion level,
+retaining partial implementation credit; no COMPLETE plus PRODUCTION_VERIFIED
+Amazon credit. It is not an ID in the security readiness scope. `issuer` remains
+BLOCKED / NOT_VERIFIED; no other criterion is satisfied here. Scoped human LAN
+behavior is not a promotion of the whole RF-02 criterion. No model, denominator,
+config change, regeneration or aggregate score.
+
+Validation on 2026-09-21, executed once:
+
+- `.venv/bin/python -m pytest -q tests/compliance/test_compliance_check.py`:
+  **42 passed in 6.96s**, no skips.
+- Existing offline `check_incident_response_plan`, `check_auth_posture` and
+  `scan_for_secrets`: **8 PASS / 1 WARN / 0 FAIL**. Warning: the preserved IRP
+  historical role-placeholder entry, not revoked current role approval.
+  Static auth checks are not runtime authentication or operational compliance.
+- Secret pattern scan: **526 files, no findings**; current scannable tree only,
+  not Git history or excluded runtime secrets. No dependency network audit or
+  provider alert query; no repeat LAN, MFA or callback validation.
+
+Self-review preserves listener/firewall separation, IPv4 LAN versus public/IPv6
+scope, absent-listener caveats and PostgreSQL loopback; no configuration changes
+or compliance closure inferred.
 
 ## Historical audit — 2026-08-18 through 2026-08-26
 

@@ -1,11 +1,30 @@
 # JUVAl identity/security — current readiness and operator runbook
 
-**Current reconciliation: 2026-09-18. Status: PARTIALLY IMPLEMENTED.** Authoritative
+**Current reconciliation: 2026-09-21. Status: PARTIALLY IMPLEMENTED.** Authoritative
 workspace: `/home/juval/JUVAl/APP`. This ledger supersedes dated implementation
 snapshots in project plans, contracts and research; historical experiments are
 not reclassified as production evidence. Git commits identify the exact changes.
 
-## Reboot recovery — 2026-09-18 (current operator instruction)
+## RF-02 effective network evidence — 2026-09-21
+
+**RF-02 remains PARTIAL; remaining work HUMAN_REQUIRED + EXTERNAL_REQUIRED.**
+Operator-reported privileged Linux observation at `2026-09-21T14:43:19Z` and
+Windows LAN IPv4 tests now verify UFW configuration and bounded LAN behavior.
+631 is attributed to cupsd. 631/9011/9012 had broad listeners, no observed UFW
+allow and failed TCP tests from that workstation; 5432 retains loopback binding
+and failed LAN evidence. 22 was reachable. 5173/8000 had no listeners during
+testing: failures prove no firewall denial and their LAN allow rules remain.
+Public/IPv6 denial is NOT_VERIFIED. [Exact matrix, criteria, debt and checkpoints](compliance/NETWORK_SECURITY.md#current-reconciliation--2026-09-21).
+
+F-01 workstation remediation/exclusion evidence and CUPS necessity remain human
+gates; public ingress/TLS/logging and applicable external/IPv6 evidence remain
+external gates. No new active LAN exposure established. ADR-040 unchanged:
+44/68 implementation, 17/68 verification, 0/12 production, 5/16 security,
+0/18 Amazon. Next highest-value human checkpoint: combined RF-01/RF-05
+TABLETOP-002 with actual decisions/timing, CA-01, CA-02 and unsent notification
+draft; not executed here. **MFA and frontend remain FROZEN. No push.**
+
+## Reboot recovery — 2026-09-18 (freeze retained; network checkpoint superseded)
 
 **MFA FROZEN.** This instruction supersedes every earlier authorization and
 operational next step below: no identity creation, real login/MFA, redirect or
