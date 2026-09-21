@@ -5,6 +5,25 @@ workspace: `/home/juval/JUVAl/APP`. This ledger supersedes dated implementation
 snapshots in project plans, contracts and research; historical experiments are
 not reclassified as production evidence. Git commits identify the exact changes.
 
+## TABLETOP-002 RF-01 / RF-05 — 2026-09-21
+
+**COMPLETED_WITH_FINDINGS; RF-01 and RF-05 remain PARTIAL.** Daniel alone
+participated, 15:12:56Z–15:28:57Z (human-reported UTC). SUSPECTED determination
+and approved unsent notification draft at 15:27:27Z now exercise §5 in 14m31s.
+CA-02 CLOSED / TABLETOP_VERIFIED: two completed real human-artifact manifest
+rows. CA-01 OPEN: prioritization decision is recorded but required initiation /
+confirmation timestamps and compliant sequencing are not established.
+[Actual decisions, draft, manifest, residuals and ADR-040 assessment](compliance/TABLETOP_RECORD_JUVAL-TT-20260921.md).
+
+This supersedes earlier requests to run TABLETOP-002 or statements that both
+corrective actions remain open. Deputy participation, current contact availability,
+formal review and operational technical response remain unverified; existing
+review deadline 2027-02-18 retained. ADR-040 unchanged in all five dimensions.
+Next human checkpoint: bounded CA-01 sequencing exercise plus contact/deputy and
+review/scheduling gaps; do not repeat completed CA-02 or draft validation.
+No external communication, real rotation or technical changes reported. MFA and
+frontend FROZEN; RF-02/RF-04 untouched; no production/Amazon approval or push.
+
 ## RF-02 effective network evidence — 2026-09-21
 
 **RF-02 remains PARTIAL; remaining work HUMAN_REQUIRED + EXTERNAL_REQUIRED.**

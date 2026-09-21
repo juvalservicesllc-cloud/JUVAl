@@ -1,5 +1,30 @@
 # JUVAl — SP-API Registration Remediation Plan
 
+## Current RF-01 / RF-05 exercise reconciliation — 2026-09-21
+
+[TABLETOP-002 human record](TABLETOP_RECORD_JUVAL-TT-20260921.md) supersedes
+historical statements below that TABLETOP-002 is unexecuted, no notification
+draft exists, or CA-02 remains open. RF-01 and RF-05 remain PARTIAL. §5's
+SUSPECTED/notification-drafting branch is TABLETOP_EXERCISED; draft approved
+14m31s after human-reported detection, never sent. This is not operational
+notification or production compliance evidence.
+
+- CA-01 (§28.1): OPEN / PARTIALLY_EXERCISED. The real human prioritization
+  decision at 15:21:45Z is not a measured initiation of the applicable containment
+  action. Confirmation-concluded time/parallel behavior is absent; rotation is
+  described as a later controlled action. Literal pass criterion not met;
+  no technical execution or demonstrated operational failure claimed.
+- CA-02 (§28.2): CLOSED / TABLETOP_VERIFIED for manifest production only.
+  [Completed manifest](EVIDENCE_MANIFEST_JUVAL-TT-20260921.md) contains two
+  human-source rows with both timestamps, collector and custody; hashes N/A.
+  Human report is an allowed template source; no provider exports claimed.
+- RF-05 has a second dated exercise, not proof of mature recurring governance.
+  Deputy/contact behavior, formal review, CA-01 and external alert evidence
+  remain incomplete. Due date 2027-02-18 unchanged. ADR-040 `rf-01` / `rf-05`
+  remain PARTIAL / NOT_VERIFIED at whole-criterion level; all five metrics
+  unchanged. No other RF, architecture, policy or production status changed.
+
+
 **Status:** DRAFT / NOT COMMITTED / NOT PUSHED. Documentation and audit only.
 No control, integration, credential, queue or infrastructure change is made
 by this plan.

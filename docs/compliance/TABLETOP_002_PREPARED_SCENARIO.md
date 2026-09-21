@@ -1,8 +1,8 @@
-# TABLETOP-002 — Prepared Scenario (NOT YET EXECUTED)
+# TABLETOP-002 — Prepared Scenario (exercise recorded 2026-09-21)
 
 | Field | Value |
 |---|---|
-| Status | **PREPARED — not run.** This document contains facilitator material, injects and a blank acceptance matrix only; it contains **no actual results**. Not to be executed by this pass — preparation only. |
+| Status | **Historical facilitator material.** TABLETOP-002 completed with findings on 2026-09-21; [actual human record and results](TABLETOP_RECORD_JUVAL-TT-20260921.md). CA-01 OPEN; CA-02 CLOSED in tabletop manifest scope. Blank fields below remain preparation, not actual results. |
 | Prepared | 2026-08-18 |
 | Scenario source | `INCIDENT_RESPONSE_PLAN.md` §10, candidate (b) — "Supabase service-role key found in a frontend bundle" (rotated from TABLETOP-001's candidate (a), per §10's own "do not rehearse the same one twice" rule) |
 | Plan version to exercise | `0.1.1-DRAFT` (§4.2/§4.5 amended 2026-08-18 — see `INCIDENT_RESPONSE_PLAN.md` §8 review log) |
