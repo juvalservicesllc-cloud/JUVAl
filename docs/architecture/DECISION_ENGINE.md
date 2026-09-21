@@ -70,8 +70,8 @@ por `RISK_ABOVE_MAXIMUM`. `RISK_AT_MAXIMUM` identifica el tipo, la severidad,
 su estado de verificación y el máximo configurado. Se usa la primera igualdad
 según el orden del perfil; no cambia la política de agregación de riesgos.
 
-HazMat y Bulky usan el mismo contrato. Las severidades provisionales derivadas
-de ADR-010 siguen INFERRED (ADR-020); compararlas no las convierte en VERIFIED.
+HazMat y Bulky usan el mismo contrato. Las severidades derivadas del mapping aprobado
+por ADR-044 D5 siguen INFERRED (ADR-020); compararlas no las convierte en VERIFIED.
 UNKNOWN/NOT_FOUND/INVALID nunca se reinterpretan como ausencia verificada, ni
 se inventa una severidad; la nueva regla solo trata PRESENT. ABSENT no dispara
 REVIEW por coincidencia con NONE. Las opciones existentes de riesgo desconocido
@@ -127,12 +127,20 @@ misma — puede, como mucho, **explicar** una decisión ya tomada (ver
    ilustrativos).
 2. Fórmula de cada subscore individual de `ScoreComponents` (ej. cómo
    mapear ROI a un 0-100).
-3. Política de score parcial: ¿se permitirá alguna vez calcular un score
-   con componentes faltantes (reponderando), o se mantiene la regla
-   estricta actual de "falta uno ⇒ NOT_FOUND"?
+3. **RESUELTA (D4, ADR-044):** los seis componentes deben ser utilizables,
+   incluso con peso cero. Ausente/NOT_FOUND/INVALID ⇒ score NOT_FOUND;
+   sin reponderación, sustitución por cero ni score parcial. Un componente
+   INFERRED utilizable participa conservando su provenance/status.
 4. **RESUELTA 2026-09-21 (ADR-043):** para PRESENT, igualdad con
    `maximum_risk_severity` produce REVIEW salvo PASS independiente. Implementada
    y probada; no cierra las demás decisiones de esta sección.
-5. Cómo interactúan múltiples riesgos simultáneos con distinta severidad
-   más allá de `highest_severity` (¿el conteo de riesgos importa, no solo
-   el máximo?).
+5. **RESUELTA para el motor (D6, ADR-044):** no hay gate adicional por
+   cantidad/combinación de riesgos ni severidad combinada. Cada PRESENT
+   conserva sus reglas individuales y la precedencia existente.
+   Su posible efecto en el subscore risk espera D2, evitando doble
+   penalización accidental entre riesgo, complejidad y rentabilidad.
+6. **RESUELTA (D5, ADR-044):** HAZMAT → HIGH y BULKY → MEDIUM son
+   mapping interno aprobado; severidad derivada permanece INFERRED.
+
+D1 (thresholds), D2 (fórmulas) y D3 (pesos comerciales) siguen pendientes.
+El score sigue experimental y Fase 5 continúa BLOCKED.

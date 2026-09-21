@@ -10,10 +10,10 @@ complexity), and combined here with configurable weights. Using FieldValue
 structurally impossible for a component's value and its verification
 status to drift apart.
 
-v1 scope: if any component is missing or unusable, the overall score is
-NOT_FOUND rather than guessed from a partial set — silently reweighting
-around a gap is a policy decision (see docs/architecture/DECISION_ENGINE.md,
-"pending decisions") that has not been made yet.
+Approved full-score policy (ADR-044 D4): all six components must be usable,
+even with zero weight. Otherwise the score is NOT_FOUND, without
+reweighting or zero substitution. Usable INFERRED components retain
+their provenance/status. No partial score is introduced.
 """
 
 from __future__ import annotations

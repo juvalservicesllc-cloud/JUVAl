@@ -234,3 +234,40 @@ def test_explicit_custom_review_rules_still_replace_defaults():
     flag = RiskFlag(RiskType.HAZMAT, RiskStatus.PRESENT, VerificationStatus.VERIFIED, _severity(Severity.LOW), "s", NOW)
     inputs = _inputs(_fv(Decimal("10")), _fv(Decimal("0.5")), _fv(100), RiskProfile(flags=(flag,)))
     assert evaluate_decision(inputs, _thresholds(), now=NOW, review_rules=()).decision == Decision.BUY
+
+
+@pytest.mark.parametrize("hazmat,bulky,profit,expected,codes", [
+    (Severity.LOW, Severity.LOW, "10", Decision.BUY, []),
+    (Severity.MEDIUM, Severity.LOW, "10",
+     Decision.REVIEW, ["RISK_AT_MAXIMUM"]),
+    (Severity.LOW, Severity.MEDIUM, "10",
+     Decision.REVIEW, ["RISK_AT_MAXIMUM"]),
+    (Severity.HIGH, Severity.MEDIUM, "10",
+     Decision.PASS, ["RISK_ABOVE_MAXIMUM"]),
+    (Severity.MEDIUM, Severity.HIGH, "10",
+     Decision.PASS, ["RISK_ABOVE_MAXIMUM"]),
+    (Severity.MEDIUM, Severity.MEDIUM, "-1",
+     Decision.PASS, ["NEGATIVE_PROFIT"]),
+])
+def test_multiple_risks_keep_individual_rules_without_count_gate(
+    hazmat, bulky, profit, expected, codes,
+):
+    profile = RiskProfile(flags=tuple(
+        RiskFlag(
+            kind, RiskStatus.PRESENT, VerificationStatus.VERIFIED,
+            _severity(level), "s", NOW,
+        )
+        for kind, level in [
+            (RiskType.HAZMAT, hazmat), (RiskType.BULKY, bulky),
+        ]
+    ))
+    inputs = _inputs(
+        _fv(Decimal(profit)), _fv(Decimal("0.5")), _fv(100), profile,
+    )
+    result = evaluate_decision(
+        inputs, _thresholds(maximum_risk_severity=Severity.MEDIUM),
+        now=NOW,
+    )
+    assert result.decision == expected
+    assert [reason.code for reason in result.reasons] == codes
+    assert inputs.risk_profile is profile

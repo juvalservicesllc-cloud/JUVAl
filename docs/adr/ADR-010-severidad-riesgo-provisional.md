@@ -1,5 +1,11 @@
 # ADR-010: Severidad por defecto para riesgos declarados por el proveedor es provisional
 
+> Nota posterior — 2026-09-21: [ADR-044](ADR-044-score-coverage-risk-policy.md)
+> aprueba comercialmente HAZMAT → HIGH y BULKY → MEDIUM, sustituyendo
+> exclusivamente la provisionalidad comercial de ADR-010. La separación
+> presence/severity de ADR-020 sigue vigente; la severidad derivada permanece
+> INFERRED. El texto histórico siguiente se conserva sin cambios.
+
 - Estado: Aceptada (marcada explícitamente como provisional)
 - Fecha: 2026-08-16
 

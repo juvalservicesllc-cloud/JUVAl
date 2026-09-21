@@ -41,10 +41,10 @@ from juval.domain.units import CANONICAL_LENGTH_UNIT, CANONICAL_WEIGHT_UNIT, Uns
 
 from .column_mapping import ALIAS_TO_CANONICAL, COLUMN_SPECS
 
-# Provisional: a supplier declaring a risk PRESENT does not tell us its
-# severity, so the importer must assign one to build a valid RiskFlag.
-# This mapping is a placeholder classification, not a commercial threshold —
-# it has NOT been reviewed/approved by the business. See ADR-010.
+# Business-approved internal mapping (ADR-044).
+# Supersedes ADR-010 commercial provisionality, not its mapping values.
+# Supplier presence and derived severity retain separate provenance;
+# derived severity remains INFERRED (ADR-020).
 #
 # Only RiskTypes listed here may be looked up by _build_risk_flag() — a
 # RiskType with no entry raises KeyError (fail-closed) instead of falling
@@ -316,11 +316,11 @@ def _build_risk_flag(
             # This severity is INFERRED, never VERIFIED (ADR-020): the
             # supplier verified that the risk is PRESENT, not that Juval's
             # internal HIGH/MEDIUM classification for it is correct --
-            # DEFAULT_RISK_SEVERITY is a provisional, business-unapproved
-            # policy table (ADR-010), not data read from the file.
+            # DEFAULT_RISK_SEVERITY is a business-approved internal
+            # policy table (ADR-044), not data read from the file.
             severity=FieldValue.inferred(
                 DEFAULT_RISK_SEVERITY[risk_type], source="DEFAULT_RISK_SEVERITY",
-                method="ADR-010 provisional internal severity classification (not business-approved)",
+                method="ADR-044 business-approved internal severity classification (derived, not product-verified)",
                 retrieved_at=now, source_type=SourceType.CALCULATED,
             ),
             source=source, timestamp=now, evidence="declared by supplier",

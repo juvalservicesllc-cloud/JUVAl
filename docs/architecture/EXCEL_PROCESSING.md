@@ -155,8 +155,9 @@ esto pasará a `source_type=AUTHORIZED_EXTERNAL_SOURCE`.
 Cuando `hazmat`/`bulky` = `TRUE`, el importador debe asignarle una
 severidad para poder construir un `RiskFlag` válido (`RiskFlag` exige
 severidad siempre). `DEFAULT_RISK_SEVERITY` en `importer.py` fija
-`HAZMAT -> HIGH`, `BULKY -> MEDIUM` como clasificación **provisional**, no
-aprobada por negocio — ver ADR-010 y la decisión pendiente correspondiente.
+`HAZMAT -> HIGH`, `BULKY -> MEDIUM` como mapping interno **aprobado**
+por ADR-044 D5, que sustituye la provisionalidad comercial de ADR-010.
+La severidad derivada sigue INFERRED; no verifica el producto.
 
 **Fallback fail-closed (ADR-015, `Estado: Aceptada`, 2026-08-17)**: un
 `RiskType` sin entrada en `DEFAULT_RISK_SEVERITY` (hoy, cualquiera de
@@ -164,15 +165,14 @@ los 12 distintos de HAZMAT/BULKY, ver §8) hace que `_build_risk_flag()`
 levante `KeyError` en vez de asignar una severidad asumida — nunca se
 inventa un valor por defecto para un tipo de riesgo sin política
 explícita. Esto es una decisión técnica (cómo debe fallar el sistema),
-distinta de la aprobación de negocio de HAZMAT/BULKY en sí, que sigue
-pendiente.
+distinta de la aprobación comercial de HAZMAT/BULKY registrada en ADR-044.
 
 **Provenance de severidad separada de presence (ADR-020, `Estado:
 Aceptada`, 2026-08-17)**: `RiskFlag.severity` es un
 `FieldValue[Severity]` propio, no un `Severity` pelado. Que el
 proveedor haya verificado `hazmat=TRUE` (presence, `VERIFIED`) no
 verifica la clasificación `HIGH` de Juval (severity,
-**`INFERRED`** — regla/heurística interna, ADR-010). Un `RiskFlag`
+**`INFERRED`** — política interna aprobada, ADR-044; provenance ADR-020). Un `RiskFlag`
 `ABSENT` sí tiene `severity.status=VERIFIED` (consecuencia lógica
 cierta de una ausencia verificada, no una política). El contrato de
 `RecordOut`/columnas Excel (`hazmat_severity`/`bulky_severity` como

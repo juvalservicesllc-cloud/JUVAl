@@ -1,5 +1,11 @@
 # ADR-020: Provenance independiente para severidad de riesgo (presence vs severity)
 
+> Nota posterior — 2026-09-21: [ADR-044](ADR-044-score-coverage-risk-policy.md)
+> aprueba comercialmente HAZMAT → HIGH y BULKY → MEDIUM, sustituyendo
+> exclusivamente la provisionalidad comercial de ADR-010. La separación
+> presence/severity de ADR-020 sigue vigente; la severidad derivada permanece
+> INFERRED. El texto histórico siguiente se conserva sin cambios.
+
 - Estado: Aceptada — cierra el ítem que ADR-015 dejó explícitamente
   diferido ("No implementa provenance independiente para `severity`
   ... queda explícitamente diferida como mejora futura separada, sin

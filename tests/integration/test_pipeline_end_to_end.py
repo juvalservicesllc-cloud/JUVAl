@@ -118,7 +118,7 @@ def test_supplier_risk_at_limit_preserves_inferred_severity(tmp_path, risk_colum
     assert flag.severity.status == VerificationStatus.INFERRED
     assert flag.severity.value == maximum
     assert flag.severity.provenance.source == "DEFAULT_RISK_SEVERITY"
-    assert "ADR-010" in flag.severity.provenance.method
+    assert "ADR-044" in flag.severity.provenance.method
     assert record.product.identification.asin.status == VerificationStatus.VERIFIED
     assert record.decision.decision == expected
     codes = {reason.code for reason in record.decision.reasons}

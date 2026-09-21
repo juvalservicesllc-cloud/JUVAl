@@ -181,16 +181,24 @@ def test_default_risk_severity_bulky_still_medium():
     assert flag.severity.value == Severity.MEDIUM
 
 
-def test_present_risk_presence_is_verified_but_severity_is_only_inferred():
+@pytest.mark.parametrize("column,kind", [
+    ("hazmat", RiskType.HAZMAT), ("bulky", RiskType.BULKY),
+])
+def test_present_risk_presence_is_verified_but_severity_is_only_inferred(column, kind):
     # ADR-020: a supplier verifying hazmat=TRUE does not verify Juval's
     # internal HIGH/MEDIUM classification for it -- presence and severity
     # provenance must never be conflated into a single VERIFIED status.
     flag = _build_risk_flag(
-        {"hazmat": True}, "hazmat", RiskType.HAZMAT, source="s", now=NOW, row_ref="row_1", issues=[]
+        {column: True}, column, kind, source="s", now=NOW, row_ref="row_1", issues=[]
     )
     assert flag.verification_status == VerificationStatus.VERIFIED  # presence: supplier declared it
-    assert flag.severity.status == VerificationStatus.INFERRED  # severity: Juval's own provisional policy
+    assert flag.severity.status == VerificationStatus.INFERRED  # severity: Juval's approved internal policy
     assert flag.severity.status != flag.verification_status
+    assert flag.severity.provenance.source == "DEFAULT_RISK_SEVERITY"
+    assert flag.severity.provenance.method == (
+        "ADR-044 business-approved internal severity classification "
+        "(derived, not product-verified)"
+    )
 
 
 def test_absent_risk_severity_none_is_verified_not_inferred():
