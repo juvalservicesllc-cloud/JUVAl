@@ -152,16 +152,67 @@ These are HUMAN_REPORTED confirmations. The last statement is not strengthened
 into proof that no accidental exposure anywhere occurred. This filing contains
 no credential values or private contact details; pattern scan has its own limits.
 
+## Additional CA-01 demonstration — 2026-09-21
+
+Integration baseline: `aaed44e81cca4792683038ae6ea9ac7038a118e5`, clean.
+Provenance: HUMAN_REPORTED by Daniel E. Liendo. This additional demonstration
+is separate from the original 16m01s exercise; neither its times nor the original
+E-001/E-002 manifest collection times are overwritten.
+
+- Start: `2026-09-21T15:47:13Z`.
+- Conclusion approved by Daniel: `2026-09-21T15:48:59Z`.
+- Duration: **106 seconds / 1m46s**, calculated from those human timestamps.
+- Exact REAL human decision: “Apruebo iniciar contención y confirmación en paralelo.”
+- Line A, SIMULATED containment: aislar la exposición pública y preparar la
+  revocación/rotación controlada de la credencial potencialmente comprometida.
+- Line B, SIMULATED confirmation: preservar evidencia y comprobar autenticidad,
+  posible utilización y alcance mediante los logs disponibles.
+
+Daniel reported that the two simulated response lines ran in parallel from the
+start and approved the procedural conclusion that investigation must not delay
+containment. This is **TABLETOP_VERIFIED / HUMAN_REPORTED for the parallel-response
+component**, not independently observed provider behavior. The end timestamp is
+exercise/procedural conclusion, not completion of actual authenticity checking.
+No real incident or credential was used. Isolation, revocation/rotation, log
+queries, provider/infrastructure changes, deployment and configuration changes
+were NOT_EXECUTED; technical results remain NOT_VERIFIED. Nothing was sent.
+
+Literal CA-01 evaluation against remediation §28.1 and IRP §4.3:
+
+| Criterion | Evaluation |
+|---|---|
+| Start of containment without waiting for confirmation | Supported for the reported simulated containment line from demonstration start, with documented parallelism; original blanket “parallel behavior missing” residual superseded |
+| Within one hour | Supported for that simulated line at demonstration start; demonstration duration 106s. These are not credential-action timestamps |
+| Initiate the applicable §4.3 action | NOT_ESTABLISHED: the Supabase row requires rotation/revocation initiation; Line A says prepare it. Simulated isolation is containment under §4.2, but does not itself evidence starting the credential action of §4.3 |
+| Conclusion / parallelism evidence | Real human start/end timestamps plus reported parallel simulated lines support procedural parallelism. No actual log/authenticity conclusion is inferred; two timestamps alone do not close the whole criterion |
+
+**CA-01 remains OPEN / PARTIALLY_EXERCISED.** Residual narrowed to a recorded
+start of the applicable credential action **within a simulation**, without
+waiting for confirmation; no real credential action is required or authorized.
+Do not repeat the already supplied parallelism decision or demand invented
+retrospective timestamps. No observed technical failure is asserted.
+
+### Contact and governance follow-through
+
+Daniel confirmed his private contact mechanism and availability **OPERATIVE /
+HUMAN_REPORTED**. No private contact information recorded and no independent
+contact test claimed. Jocsimar remains the defined Deputy, did not participate,
+and current operational availability is **NOT_VERIFIED**. Daniel approved
+retaining **2027-02-18** for the next formal governance review; this is a schedule
+confirmation, not a completed formal review. Existing earlier-response duties
+for critical findings remain applicable. No distinct timestamps were supplied
+for these confirmations; none are invented.
+
 ## Gaps found and corrective-action results
 
 | Item | Result / exact evidence | Residual / next evidence |
 |---|---|---|
-| CA-01 | OPEN / PARTIALLY_EXERCISED; decision recorded at 8m49s, within one hour, but this is not the initiation evidence required by remediation §28.1 | Both containment-initiated and confirmation-concluded events/times (or visible parallelism) missing. Wording makes rotation a later action and preservation precede confirmation without bounding preservation to the minimal §4.1 capture. Cannot certify §4.2/§4.3 sequencing; also cannot assert observed failure of an execution that never occurred. A separate bounded simulated walkthrough must demonstrate the sequence, with real exercise timestamps; no real rotation required. |
+| CA-01 | OPEN / PARTIALLY_EXERCISED; original decision retained; additional parallel-response component TABLETOP_VERIFIED / HUMAN_REPORTED | Parallelism residual resolved by the additional demonstration above. Initiation of the applicable §4.3 credential action still not established by preparing it; no actual technical result claimed. |
 | CA-02 | CLOSED / TABLETOP_VERIFIED in the manifest-production scope of remediation §28.2 | Two completed rows from an allowed real human source, with event/retrieval times, collector, custody and N/A hash. Provider log collection, integrity verification and long-term retention are not verified by this closure. |
-| Governance | PARTIALLY_EXERCISED | Deputy handoff and fresh out-of-hours/contact availability not exercised; no formal six-month review result or new review date supplied. Existing review due 2027-02-18 retained. No new due dates or human commitments invented. |
+| Governance | PARTIALLY_EXERCISED; Daniel contact/availability OPERATIVE / HUMAN_REPORTED; next review 2027-02-18 explicitly retained | Deputy availability and handoff NOT_VERIFIED; formal review not performed. No independent contact test or extra deadline inferred. |
 
-Existing Security Owner: Daniel. Additional corrective-action scheduling remains
-HUMAN_REQUIRED, not silently assigned a deadline by the agent.
+Existing Security Owner: Daniel. Next formal review explicitly retained at
+2027-02-18; no additional corrective-action deadline invented.
 
 ## Plan changes resulting
 
@@ -172,13 +223,14 @@ updates; they do not amend the containment order to match the exercised answer.
 
 - RF-01: PARTIAL before and after. The previously unexercised §5 branch now has
   human tabletop evidence: SUSPECTED determination, notification decision and
-  an approved six-category draft in 14m31s. Operational notification/contact
-  evidence and CA-01 sequencing remain incomplete; no Amazon compliance claim.
+  an approved six-category draft in 14m31s. Operational notification evidence, Deputy availability
+  and the CA-01 credential-action residual remain incomplete; no Amazon compliance claim.
 - RF-05: PARTIAL before and after. A second dated exercise and real manifest
   production now exist (2026-08-18 and 2026-09-21). This supports repeated exercise
   evidence, not proof of a mature program, formal six-month review or technical
-  remediation. CA-01, contact/deputy behavior and external alert reconciliation
-  remain incomplete. No GitHub queries or provider changes performed.
+  remediation. The CA-01 credential-action residual, Deputy behavior and external
+  alert reconciliation remain incomplete; Daniel contact availability is now
+  HUMAN_REPORTED operative. No GitHub queries or provider changes performed.
 - ADR-040 model 1.2: `rf-01` (24-hour incident reporting, weight 2) and `rf-05`
   (security program/response roles, weight 2) stay PARTIAL / NOT_VERIFIED at the
   whole roadmap-criterion level. Their scoped tabletop evidence does not satisfy
