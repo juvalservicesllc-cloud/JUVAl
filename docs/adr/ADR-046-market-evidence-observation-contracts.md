@@ -3,7 +3,7 @@
 - Estado: Accepted.
 - Fecha: 2026-09-21
 - Autoridad: Daniel aprobó explícitamente ADR-046 el 2026-09-21.
-- Estado de implementación: no implementada.
+- Estado de implementación: IMPLEMENTED. Evidencia: commit `afa267af8d7ff6da2ea9e235d3e12e1a4ff80325`.
 
 ## 1. Contexto y problema
 
