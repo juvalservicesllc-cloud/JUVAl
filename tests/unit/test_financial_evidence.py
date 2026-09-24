@@ -234,6 +234,24 @@ def test_allocated_terms_require_an_explicit_allocation_method(kind):
     assert term(kind, None).allocation_method is None
 
 
+def test_a_pack_sourced_amount_can_declare_its_allocation_to_one_sellable_unit():
+    """ADR-047 §10: a per-pack amount is not automatically a per-sellable-unit amount."""
+    per_pack = term(FinancialTerm.COG, fv(Decimal("1.50"), "USD"),
+                    allocation_method="supplier pack price divided by declared units per pack",
+                    depends_on=(FinancialDependency("supplier-file:units_per_pack",
+                                                    "declared pack size used to allocate"),))
+    assert per_pack.allocation_method and per_pack.depends_on[0].term is None
+    assert evidence_set((per_pack,)).evidence_for(FinancialTerm.COG).has_usable_amount
+
+
+def test_effective_context_does_not_impose_an_order_against_acquisition_time():
+    """An announced amount may be acquired before or after it takes effect (§8)."""
+    announced = replace(CONTEXT, effective_at=NOW + timedelta(days=30))
+    for context in (CONTEXT, announced):
+        evidence = term(FinancialTerm.REFERRAL_FEE, fv(Decimal("6.30"), "USD"), context=context)
+        assert evidence.context.effective_at != evidence.amount.provenance.retrieved_at
+
+
 def test_non_allocated_terms_do_not_require_an_allocation_method():
     assert not FinancialTerm.COG.requires_allocation_method
     assert term(FinancialTerm.COG).allocation_method is None

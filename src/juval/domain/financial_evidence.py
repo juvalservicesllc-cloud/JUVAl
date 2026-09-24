@@ -180,6 +180,12 @@ class EffectiveContext:
     instant carried by Provenance.retrieved_at: retrieved_at never substitutes
     for an unknown effective context (ADR-047 §8). Declaring a time does not by
     itself accredit currency or sufficiency.
+
+    Deliberately, no ordering is imposed between effective_at and retrieved_at.
+    Unlike a market observation (ADR-046), a financial term can legitimately be
+    acquired before it takes effect — an announced schedule — or long after.
+    Whether an effective context is current enough is a per-scenario requirement
+    to be resolved, not an invariant of this contract.
     """
 
     effective_at: datetime
