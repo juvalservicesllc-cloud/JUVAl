@@ -18,8 +18,10 @@
   del importer: columnas nativas opcionales `fin_*` producen, por registro, un
   `NativeFinancialCapture` en `ImportResult.financial_captures` cuyo
   `bind(execution_id)` devuelve el `FinancialEvidenceSet` (contrato en
-  `docs/architecture/EXCEL_PROCESSING.md` §9); `run_pipeline` aún no lo invoca ni
-  lo transporta. Los pasos 4-9 siguen
+  `docs/architecture/EXCEL_PROCESSING.md` §9). Avance fuera de la numeración de
+  §22 (no completa el paso 4): `run_pipeline_with_financial_evidence` transporta
+  esa evidencia, ya vinculada al `execution_id` real y al `record_ref` de cada
+  registro, junto al resultado intacto de `run_pipeline`. Los pasos 4-9 siguen
   PENDING: no hay cálculo, proyección a CostInputs/FeeInputs,
   resolución de dependencias, snapshot, persistencia, API, consumo por Decision
   Score ni activación de pipeline.
@@ -103,8 +105,21 @@ o de origen `pack` sin asignación no se captura y su motivo queda en `problems`
 Provenance `SUPPLIER_FILE` por celda; VERIFIED es declaración del archivo, no
 verificación de Amazon. Sin `PriceObservation`. Registros, issues, profitability y
 decisiones legacy quedan idénticos (probado), y un archivo sin columnas `fin_*` no
-produce capturas. La evidencia no se persiste ni se expone; la vinculación a la
-ejecución real dentro de `run_pipeline` queda para pasos posteriores.
+produce capturas. Una celda vacía produce NOT_FOUND con fuente `SUPPLIER_FILE` y
+evidencia de celda en blanco: la celda se leyó y no declaró nada; no es una
+consulta a Amazon ni prueba de inexistencia del término.
+
+Transporte por ejecución (sin paso propio en §22): `application/run_pipeline.py`
+añade `run_pipeline_with_financial_evidence`, que comparte la ruta de ejecución de
+`run_pipeline` (cuya firma y tupla no cambian) y devuelve por registro procesado
+un `RecordFinancialEvidence` con `execution_id`, `record_ref`, la captura, sus
+`problems` y el `FinancialEvidenceSet` vinculado cuando la fila declaró un
+escenario completo. La identidad es `record_ref`, que incluye el número de fila:
+una fila descartada no desplaza capturas y un ASIN/UPC duplicado es irrelevante;
+un desajuste de cardinalidad u orden falla explícitamente. Los problemas de
+captura no se convierten en issues legacy. No hay cálculo acreditado, fees
+efectivos, snapshot reproducible, persistencia ni API: esto no satisface el paso 4
+ni la reproducibilidad financiera de §19.
 
 Pendiente y explícitamente no implementado aquí: proyección determinística de
 operandos (§7), resolución de dependencias por resultado y propagación de estados

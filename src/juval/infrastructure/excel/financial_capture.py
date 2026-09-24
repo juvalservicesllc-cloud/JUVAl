@@ -8,7 +8,8 @@ decisions or persistence.
 
 Nothing is inferred (ADR-047 §8, §11-§14):
   * column absent            -> structural absence (term omitted, amount None);
-  * blank cell, column there -> NOT_FOUND, the importer's existing convention;
+  * blank cell, column there -> NOT_FOUND from SUPPLIER_FILE: the cell was
+                                read and declared nothing (never an Amazon lookup);
   * unparseable/non-finite, negative or out-of-range value -> INVALID with raw;
   * an explicit 0            -> a supplier-declared zero, whose applicability
                                 is still its own separate declaration;
@@ -54,6 +55,9 @@ NATIVE_FINANCIAL_COLUMNS: frozenset[str] = frozenset(spec.canonical for spec in 
 SOURCE_BASES = frozenset({"sellable_unit", "pack"})
 
 _METHOD = "direct_read"
+
+#: Evidence text of a NOT_FOUND produced by a blank cell in a present column.
+BLANK_CELL_EVIDENCE = "blank cell in a present supplier-file column; no value declared"
 
 
 @dataclass(frozen=True)
@@ -122,7 +126,11 @@ class _Row:
                     source_reference=f"row={self.row_number};column={column}")
 
     def _not_found(self, column: str) -> FieldValue:
-        return FieldValue.not_found(source_type=SourceType.NOT_FOUND, **self._provenance(column))
+        # The supplier cell *was* read and declared nothing: SUPPLIER_FILE +
+        # NOT_FOUND, not SourceType.NOT_FOUND ("no source attempted"). It is
+        # not a marketplace lookup, not proof the term does not exist.
+        return FieldValue.not_found(source_type=SourceType.SUPPLIER_FILE, evidence=BLANK_CELL_EVIDENCE,
+                                    **self._provenance(column))
 
     def scenario(self) -> Optional[FinancialScenario]:
         declared = {target: self._text(header) for header, target in FINANCIAL_SCENARIO_COLUMNS.items()}

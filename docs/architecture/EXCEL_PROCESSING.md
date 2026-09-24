@@ -266,7 +266,11 @@ Reglas (sin inferencias):
 
 - Un término sin ninguna celda no vacía en la fila no se representa (ausencia estructural).
 - Columna `amount` ausente → `amount=None` (ausencia estructural). Celda vacía en
-  columna presente → `NOT_FOUND`. Cero explícito → cero declarado `VERIFIED`, con
+  columna presente → `NOT_FOUND` con `source_type=SUPPLIER_FILE`, `evidence`
+  "blank cell in a present supplier-file column; no value declared" y fila/columna:
+  la celda se leyó y no declaró nada. No es una consulta a Amazon ni prueba de que
+  el término no exista (a diferencia de `SourceType.NOT_FOUND`, "ninguna fuente
+  consultada", que la convención legacy del importer sigue usando para sus columnas). Cero explícito → cero declarado `VERIFIED`, con
   su aplicabilidad como declaración aparte. Texto no numérico, `NaN`, `Infinity`,
   negativo o ratio fuera de [0, 1) → `INVALID` conservando el valor original.
 - Aplicabilidad: columna `applies` ausente → el término no se captura (nunca se
@@ -297,5 +301,12 @@ capturados y `problems` (motivos deterministas de lo no capturado).
 `capture.bind(execution_id)` devuelve el `FinancialEvidenceSet` del registro; el
 `execution_id` lo aporta quien llama, como `now`. Los problemas no se añaden a
 `issues` ni a los registros, para no cambiar conteos, estados ni decisiones legacy.
-`run_pipeline` todavía no invoca `bind` ni transporta la evidencia: conectarlo
-pertenece a pasos posteriores de ADR-047 §22.
+`run_pipeline` no cambia. `application/run_pipeline.py::run_pipeline_with_financial_evidence`
+comparte su misma ruta de ejecución y devuelve además, por registro procesado,
+un `RecordFinancialEvidence` (`execution_id`, `record_ref`, `capture`, `evidence`
+= `bind(execution_id)` o `None` sin escenario completo, `problems`). La
+vinculación es por `record_ref` (incluye el número de fila), nunca por posición
+ni por ASIN/UPC; cualquier desajuste de cardinalidad u orden entre registros
+importados, capturas y registros procesados falla explícitamente. La evidencia
+no alimenta cálculos, riesgo, score ni decisiones, y no se persiste ni se expone
+por API.
