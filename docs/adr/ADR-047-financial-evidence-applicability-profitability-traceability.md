@@ -21,9 +21,11 @@
   `docs/architecture/EXCEL_PROCESSING.md` §9). Avance fuera de la numeración de
   §22 (no completa el paso 4): `run_pipeline_with_financial_evidence` transporta
   esa evidencia, ya vinculada al `execution_id` real y al `record_ref` de cada
-  registro, junto al resultado intacto de `run_pipeline`. Los pasos 4-9 siguen
-  PENDING: no hay cálculo, proyección a CostInputs/FeeInputs,
-  resolución de dependencias, snapshot, persistencia, API, consumo por Decision
+  registro, junto al resultado intacto de `run_pipeline`. El paso 5 es PARTIAL:
+  `domain/financial_dependencies.py` resuelve por resultado las dependencias de
+  evidencia de §16 sin calcular. Faltan las precondiciones matemáticas y el cálculo
+  acreditado. El paso 4 (construcción acreditada de fees) y los pasos 6-9 siguen
+  PENDING: no hay cálculo, proyección a CostInputs/FeeInputs, snapshot, persistencia, API, consumo por Decision
   Score ni activación de pipeline.
 
 ### 1.1 Contratos implementados y pendientes
@@ -42,6 +44,7 @@ Implementado como contrato de dominio, sin acreditar dato alguno por sí mismo:
 | `LegacyGap` / `LegacyTermGap` / `LegacyFinancialCompatibility` / `assess_legacy_financial_operands` | Evaluación determinista de compatibilidad legacy (§20): informa qué le falta a cada ubicación legacy para satisfacer el contrato; nunca produce evidencia |
 | `LEGACY_COST_TERMS` / `LEGACY_FEE_TERMS` / `legacy_financial_operands` (application) | Correspondencia explícita campo legacy → término y proyección read-only de los valores tal como están almacenados; declara el slot, no acredita el valor |
 | `LEGACY_SNAPSHOT_TERMS` / `legacy_snapshot_financial_operands` (application) | Proyección read-only de un record snapshot persistido: solo los slots que el snapshot conserva; el resto queda en ausencia estructural |
+| `FinancialResult` / `DEPENDENCY_MATRIX` / `resolve_financial_dependencies` / `ResultResolution` (domain) | Resolución pura por resultado de §16: dependencias exigidas, operandos utilizables sin copiar, exclusiones, bloqueos con motivo (`ResolutionBlocker`, no un VerificationStatus) y estado de eslabón más débil solo con dependencias resueltas |
 | `FINANCIAL_EVIDENCE_COLUMN_SPECS` / `NativeFinancialCapture` / `capture_native_financial_evidence` (infrastructure/excel) | Captura nativa (§22 paso 3): lo que una fila declara explícitamente se convierte en `FinancialScenario`/`FinancialTermEvidence`; lo no representable se omite con motivo, nunca se completa con defaults |
 
 Invariantes verificadas en tests: ausencia estructural (`amount=None`) distinta de
@@ -120,6 +123,35 @@ un desajuste de cardinalidad u orden falla explícitamente. Los problemas de
 captura no se convierten en issues legacy. No hay cálculo acreditado, fees
 efectivos, snapshot reproducible, persistencia ni API: esto no satisface el paso 4
 ni la reproducibilidad financiera de §19.
+
+Resolución de dependencias (§16, §17; avance PARTIAL del paso 5; el paso 4 de §22
+es la construcción acreditada de fees y sigue PENDING):
+`resolve_financial_dependencies(evidence_set, selling_price=, weight=, target_profit=, target_roi=)`
+es una función pura de dominio que aplica literalmente la matriz de §16 a cada
+uno de los seis resultados existentes. P y los objetivos no son `FinancialTerm`
+(§9, §10) y entran como `FieldValue` explícitos. Un término de la fórmula es
+dependencia si el escenario lo requiere o el set lo representa; un requerido no
+representado bloquea (§8), y uno ni requerido ni representado queda fuera del
+universo declarado. Cada dependencia informa el `FieldValue` original como
+operando, la aserción de aplicabilidad y si fue excluida, o bien un bloqueo:
+ausencia estructural, aplicabilidad no resuelta, NOT_FOUND, INVALID, moneda no
+declarada o incompatible, o unidad incompatible (peso distinto de `lb`, objetivo
+ROI sin `ratio`). Nada se convierte a cero y nada se convierte de unidad o moneda.
+Una exclusión acreditada no tiene operando, pero su aplicabilidad sigue siendo
+dependencia, de modo que una exclusión INFERRED deja el resultado INFERRED.
+`dependency_status` aplica `combine_verification_status` solo cuando todas las
+precondiciones de evidencia se cumplen.
+
+Límites documentados:
+- Los `context_requirements` del escenario bloquean todos los resultados, porque
+  no existe método aprobado para resolverlos (§28).
+- Las precondiciones matemáticas (C > 0, P > 0, 1 + tr > 0) se listan, no se
+  evalúan, porque exigen el cálculo.
+- El precio legacy importado no declara moneda, así que profit, ROI, margin y
+  max-COG quedan bloqueados por `CURRENCY_UNDECLARED` hasta que exista una
+  declaración de moneda del precio (vínculo con ADR-046). Break-even no depende
+  de P y sí puede resolverse.
+- La profitability y las decisiones legacy no cambian, y nada se persiste.
 
 Pendiente y explícitamente no implementado aquí: proyección determinística de
 operandos (§7), resolución de dependencias por resultado y propagación de estados

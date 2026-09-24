@@ -173,3 +173,22 @@ def test_no_persistence_or_api_dependency():
     modules = {node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)}
     assert not {m for m in modules if m and ("persistence" in m or "interfaces" in m or "logging" in m
                                               or "record_snapshot" in m or "profitability" in m)}
+
+
+def test_transported_evidence_resolves_per_result_without_touching_legacy_results(tmp_path):
+    from juval.domain.financial_dependencies import FinancialResult, ResolutionBlocker, resolve_financial_dependencies
+
+    row = {**FULL, **declared(FinancialTerm.FULFILLMENT_FEE, "3.20")}
+    row["fin_required_terms"] = "COG;REFERRAL_FEE;FULFILLMENT_FEE;REFERRAL_FEE_RATE"
+    result = run(xlsx(tmp_path, row))
+    [record], [item] = result.records, result.financial_evidence
+    before = (record.profitability, record.decision)
+    # The legacy selling price carries no currency unit: price-based results stay
+    # blocked instead of borrowing the scenario currency.
+    resolution = resolve_financial_dependencies(item.evidence, selling_price=record.product.price.selling_price_used)
+    profit_blockers = resolution.for_result(FinancialResult.PROFIT).blockers
+    assert [(b.dependency, b.blocker) for b in profit_blockers] == [
+        ("SELLING_PRICE", ResolutionBlocker.CURRENCY_UNDECLARED)]
+    break_even = resolution.for_result(FinancialResult.BREAK_EVEN_PRICE)
+    assert break_even.dependencies_resolved and break_even.dependency_status is VerificationStatus.VERIFIED
+    assert (record.profitability, record.decision) == before
