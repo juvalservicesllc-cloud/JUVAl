@@ -1,0 +1,402 @@
+"""Financial evidence contracts (ADR-047).
+
+Additive domain contracts that make a financial term's *applicability* and its
+*value* two separately accredited facts, each carrying its own FieldValue /
+Provenance / VerificationStatus (ADR-003, ADR-004, ADR-047 §6).
+
+These objects validate declarations, not their truth, coverage or commercial
+sufficiency. Deliberately absent at this stage (ADR-047 §4, §22 steps 3-9):
+arithmetic, currency conversion, projection to or from CostInputs/FeeInputs,
+importer capture, persistence, API and pipeline integration. Nothing here
+accredits legacy data: there is no constructor that turns a bare Decimal or a
+legacy record into evidence, and no import of the numeric cost/fee contracts.
+
+Distinctions preserved end to end (ADR-047 §12, §13, §14):
+
+  * amount is None          -> structural absence: no evidence is represented
+                               at that location; not zero, not an exclusion,
+                               not an attempted lookup.
+  * amount NOT_FOUND        -> an authentic attempt produced no usable value.
+  * amount INVALID          -> a raw source value failed validation; raw_value
+                               is preserved and never exposed as an operand.
+  * amount VERIFIED/INFERRED with 0 -> an accredited zero.
+  * applies usable and False -> an accredited exclusion, which carries no
+                               monetary observation at all.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from decimal import Decimal
+from enum import Enum
+
+from .provenance import FieldValue, VerificationStatus
+from .units import CANONICAL_WEIGHT_UNIT
+
+#: Unit of a dimensionless ratio. A ratio never carries a currency and is never
+#: expressed as a percentage (ADR-047 §10, §11).
+RATIO_UNIT = "ratio"
+
+#: Exclusive upper bound of a referral rate, consistent with the existing
+#: FeeInputs contract and with the break-even denominator (1 - r) of
+#: processing/profitability.py. This is a domain-validity bound, not a new
+#: commercial policy: an out-of-range source value stays representable as
+#: INVALID evidence preserving its raw_value.
+MAX_EXCLUSIVE_RATE = Decimal("1")
+
+
+def _instant(value: datetime, name: str) -> datetime:
+    if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError(f"{name} requires an effective timezone offset")
+    return value.astimezone(timezone.utc)
+
+
+def _text(value: str, name: str) -> None:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{name} must be explicit nonempty text")
+
+
+def _currency(value: str, name: str) -> None:
+    if (not isinstance(value, str) or len(value) != 3 or not value.isascii()
+            or not value.isalpha() or not value.isupper()):
+        raise ValueError(f"{name} requires three uppercase ASCII letters")
+
+
+class TermNature(str, Enum):
+    """Economic nature of a term: what its number means and how it is denominated.
+
+    Separating these natures is what keeps arithmetic between incompatible
+    magnitudes out of reach (ADR-047 §10).
+    """
+
+    MONETARY_PER_SELLABLE_UNIT = "MONETARY_PER_SELLABLE_UNIT"
+    MONETARY_PER_POUND = "MONETARY_PER_POUND"
+    DIMENSIONLESS_RATIO = "DIMENSIONLESS_RATIO"
+
+
+class FinancialTerm(str, Enum):
+    """The existing financial terms of ADR-047 §9.
+
+    Membership does not assert that a term applies to any given scenario, and
+    the list is not extended with new charges.
+    """
+
+    COG = "COG"
+    VAT = "VAT"
+    INBOUND_SHIPPING = "INBOUND_SHIPPING"
+    SHIPPING_PER_UNIT = "SHIPPING_PER_UNIT"
+    SHIPPING_PER_POUND = "SHIPPING_PER_POUND"
+    PREP = "PREP"
+    LABELING = "LABELING"
+    FRAGILE_PREP = "FRAGILE_PREP"
+    STORAGE = "STORAGE"
+    INBOUND_PLACEMENT = "INBOUND_PLACEMENT"
+    TAXES = "TAXES"
+    OTHER_COSTS = "OTHER_COSTS"
+    REFERRAL_FEE = "REFERRAL_FEE"
+    FULFILLMENT_FEE = "FULFILLMENT_FEE"
+    OTHER_SELLING_FEES = "OTHER_SELLING_FEES"
+    REFERRAL_FEE_RATE = "REFERRAL_FEE_RATE"
+
+    @property
+    def nature(self) -> TermNature:
+        return _TERM_NATURES[self]
+
+    @property
+    def requires_allocation_method(self) -> bool:
+        """True for the terms ADR-047 §9 describes as *allocated* per unit.
+
+        Their name alone accredits neither the period nor the split that
+        produced a per-unit amount, so a usable amount must declare its method.
+        """
+        return self in _ALLOCATED_TERMS
+
+
+_TERM_NATURES: dict[FinancialTerm, TermNature] = {
+    FinancialTerm.SHIPPING_PER_POUND: TermNature.MONETARY_PER_POUND,
+    FinancialTerm.REFERRAL_FEE_RATE: TermNature.DIMENSIONLESS_RATIO,
+    **{
+        term: TermNature.MONETARY_PER_SELLABLE_UNIT
+        for term in FinancialTerm
+        if term not in (FinancialTerm.SHIPPING_PER_POUND, FinancialTerm.REFERRAL_FEE_RATE)
+    },
+}
+
+_ALLOCATED_TERMS = frozenset({
+    FinancialTerm.INBOUND_SHIPPING,
+    FinancialTerm.SHIPPING_PER_UNIT,
+    FinancialTerm.INBOUND_PLACEMENT,
+    FinancialTerm.STORAGE,
+})
+
+
+def _declared_currency(unit: str, nature: TermNature) -> str:
+    """Currency a monetary unit is denominated in; raises if the unit is malformed."""
+    if not isinstance(unit, str) or not unit:
+        raise ValueError("A usable monetary amount requires an explicit currency unit")
+    if nature is TermNature.MONETARY_PER_POUND:
+        suffix = f"/{CANONICAL_WEIGHT_UNIT}"
+        if not unit.endswith(suffix):
+            raise ValueError(f"A per-weight rate requires a '<CURRENCY>{suffix}' unit, got {unit!r}")
+        unit = unit[: -len(suffix)]
+    _currency(unit, "Monetary unit")
+    return unit
+
+
+def _validate_amount(term: FinancialTerm, amount: FieldValue) -> None:
+    if not isinstance(amount, FieldValue) or not isinstance(amount.status, VerificationStatus):
+        raise ValueError("A financial amount requires a FieldValue with an explicit verification status")
+    if not amount.is_usable:
+        # NOT_FOUND/INVALID keep their cause and raw diagnostics, and never a
+        # usable operand, a substituted zero or a fabricated unit.
+        if amount.value is not None:
+            raise ValueError("NOT_FOUND/INVALID financial evidence must not carry a usable value")
+        return
+    value = amount.value
+    if not isinstance(value, Decimal) or not value.is_finite():
+        raise ValueError("A usable financial amount requires a finite Decimal")
+    if term.nature is TermNature.DIMENSIONLESS_RATIO:
+        if amount.unit != RATIO_UNIT:
+            raise ValueError(
+                f"{term.value} is a dimensionless ratio and requires unit {RATIO_UNIT!r}, "
+                "never a currency or a percentage"
+            )
+        if not (Decimal("0") <= value < MAX_EXCLUSIVE_RATE):
+            raise ValueError(
+                f"A usable {term.value} must be a ratio within [0, {MAX_EXCLUSIVE_RATE}), got {value}"
+            )
+        return
+    _declared_currency(amount.unit, term.nature)
+    if value < Decimal("0"):
+        raise ValueError(f"A usable {term.value} amount must not be negative, got {value}")
+
+
+@dataclass(frozen=True)
+class EffectiveContext:
+    """When and on what basis a term's evidence is effective.
+
+    effective_at is the *effective* instant, kept separate from the acquisition
+    instant carried by Provenance.retrieved_at: retrieved_at never substitutes
+    for an unknown effective context (ADR-047 §8). Declaring a time does not by
+    itself accredit currency or sufficiency.
+    """
+
+    effective_at: datetime
+    basis_definition: str
+    effective_until: datetime | None = None
+
+    def __post_init__(self) -> None:
+        start = _instant(self.effective_at, "effective_at")
+        # Names what the amount covers, so a concept already included in another
+        # amount stays visible instead of being double counted (ADR-047 §8).
+        _text(self.basis_definition, "basis_definition")
+        if self.effective_until is not None and _instant(self.effective_until, "effective_until") <= start:
+            raise ValueError("effective_until must follow effective_at")
+
+
+@dataclass(frozen=True)
+class Applicability:
+    """Whether a term applies, as evidence in its own right (ADR-047 §12).
+
+    An unusable assertion leaves applicability *unresolved*; it is not an
+    exclusion, and it blocks any result that needs it resolved.
+    """
+
+    applies: FieldValue[bool]
+    justification: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.applies, FieldValue) or not isinstance(self.applies.status, VerificationStatus):
+            raise ValueError("Applicability requires a FieldValue with an explicit verification status")
+        if self.applies.is_usable:
+            if type(self.applies.value) is not bool:
+                raise ValueError("A usable applicability assertion requires a boolean value")
+        elif self.applies.value is not None:
+            raise ValueError("An unresolved applicability assertion must not carry a usable value")
+        _text(self.justification, "justification")
+
+    @property
+    def is_resolved(self) -> bool:
+        return self.applies.is_usable
+
+    @property
+    def excludes(self) -> bool:
+        """True only for an accredited exclusion, never for an unresolved assertion."""
+        return self.applies.is_usable and self.applies.value is False
+
+
+@dataclass(frozen=True)
+class FinancialDependency:
+    """Resolvable link to evidence a term actually depended on (ADR-047 §15, §18).
+
+    `term` is set when the dependency is another term of the same scenario, so
+    the link can be resolved instead of being asserted in free text.
+    """
+
+    reference: str
+    role: str
+    term: FinancialTerm | None = None
+
+    def __post_init__(self) -> None:
+        _text(self.reference, "reference")
+        _text(self.role, "role")
+        if self.term is not None and not isinstance(self.term, FinancialTerm):
+            raise ValueError("A term dependency must reference a FinancialTerm")
+
+
+@dataclass(frozen=True)
+class FinancialTermEvidence:
+    """Applicability and (optionally) value of one financial term.
+
+    amount=None is structural absence, not an exclusion and not a failed
+    lookup. An accredited exclusion carries no amount at all, because an
+    exclusion is not a monetary observation of zero (ADR-047 §12, §13).
+    """
+
+    term: FinancialTerm
+    applicability: Applicability
+    context: EffectiveContext
+    amount: FieldValue[Decimal] | None = None
+    allocation_method: str | None = None
+    depends_on: tuple[FinancialDependency, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.term, FinancialTerm):
+            raise ValueError("Explicit FinancialTerm required")
+        if not isinstance(self.applicability, Applicability):
+            raise ValueError("Explicit Applicability required")
+        if not isinstance(self.context, EffectiveContext):
+            raise ValueError("Explicit EffectiveContext required")
+        if self.amount is not None:
+            _validate_amount(self.term, self.amount)
+        if self.applicability.excludes and self.amount is not None:
+            raise ValueError(
+                f"An accredited exclusion of {self.term.value} carries no monetary observation"
+            )
+        if self.allocation_method is not None:
+            _text(self.allocation_method, "allocation_method")
+        elif self.term.requires_allocation_method and self.has_usable_amount:
+            raise ValueError(
+                f"A usable {self.term.value} amount is allocated per sellable unit and must "
+                "declare its allocation_method"
+            )
+        if not isinstance(self.depends_on, tuple):
+            raise ValueError("depends_on must be an immutable tuple")
+        seen: set[tuple[str, str, FinancialTerm | None]] = set()
+        for dependency in self.depends_on:
+            if not isinstance(dependency, FinancialDependency):
+                raise ValueError("depends_on elements must be FinancialDependency")
+            if dependency.term == self.term:
+                raise ValueError(f"{self.term.value} cannot depend on itself")
+            key = (dependency.reference, dependency.role, dependency.term)
+            if key in seen:
+                raise ValueError("depends_on must not repeat the same dependency")
+            seen.add(key)
+
+    @property
+    def has_usable_amount(self) -> bool:
+        return self.amount is not None and self.amount.is_usable
+
+
+@dataclass(frozen=True)
+class FinancialScenario:
+    """Identity and versioned frame a financial evaluation is computed in (ADR-047 §8).
+
+    The term universe is declared, never deduced from the terms that happen to
+    be present: a required concept with no representation stays unresolved
+    instead of silently dropping out of the scenario.
+    """
+
+    scenario_id: str
+    scenario_version: str
+    currency: str
+    sellable_unit_definition: str
+    policy_identity: str
+    required_terms: frozenset[FinancialTerm]
+    context_requirements: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        _text(self.scenario_id, "scenario_id")
+        _text(self.scenario_version, "scenario_version")
+        _currency(self.currency, "currency")
+        _text(self.sellable_unit_definition, "sellable_unit_definition")
+        # Identity of the formula/policy needed to reproduce the evaluation;
+        # recording it accredits no commercial approval (ADR-047 §10).
+        _text(self.policy_identity, "policy_identity")
+        if not isinstance(self.required_terms, frozenset) or not self.required_terms:
+            raise ValueError("required_terms must be a nonempty frozenset of FinancialTerm")
+        if any(not isinstance(term, FinancialTerm) for term in self.required_terms):
+            raise ValueError("required_terms elements must be FinancialTerm")
+        if not isinstance(self.context_requirements, tuple):
+            raise ValueError("context_requirements must be an immutable tuple")
+        for requirement in self.context_requirements:
+            _text(requirement, "context requirement")
+        if len(set(self.context_requirements)) != len(self.context_requirements):
+            raise ValueError("context_requirements must not repeat a requirement")
+
+
+@dataclass(frozen=True)
+class FinancialEvidenceSet:
+    """Scenario-bound financial evidence for one evaluated record within one run.
+
+    Binding is what makes the currency link unambiguous: every usable monetary
+    amount is denominated in the scenario currency, and mixed-currency evidence
+    is rejected rather than normalized implicitly (ADR-047 §11).
+    """
+
+    scenario: FinancialScenario
+    execution_id: str
+    record_reference: str
+    terms: tuple[FinancialTermEvidence, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.scenario, FinancialScenario):
+            raise ValueError("Explicit FinancialScenario required")
+        _text(self.execution_id, "execution_id")
+        _text(self.record_reference, "record_reference")
+        if not isinstance(self.terms, tuple):
+            raise ValueError("terms must be an immutable tuple")
+        present: dict[FinancialTerm, FinancialTermEvidence] = {}
+        for evidence in self.terms:
+            if not isinstance(evidence, FinancialTermEvidence):
+                raise ValueError("terms elements must be FinancialTermEvidence")
+            if evidence.term in present:
+                raise ValueError(f"{evidence.term.value} must not appear twice in one evidence set")
+            present[evidence.term] = evidence
+            if evidence.has_usable_amount and evidence.term.nature is not TermNature.DIMENSIONLESS_RATIO:
+                declared = _declared_currency(evidence.amount.unit, evidence.term.nature)
+                if declared != self.scenario.currency:
+                    raise ValueError(
+                        f"{evidence.term.value} is denominated in {declared}, "
+                        f"incompatible with scenario currency {self.scenario.currency}"
+                    )
+        for evidence in self.terms:
+            for dependency in evidence.depends_on:
+                if dependency.term is not None and dependency.term not in present:
+                    raise ValueError(
+                        f"{evidence.term.value} depends on {dependency.term.value}, "
+                        "which is not represented in this evidence set"
+                    )
+
+    def evidence_for(self, term: FinancialTerm) -> FinancialTermEvidence | None:
+        """Evidence declared for `term`, or None when it is structurally absent."""
+        for evidence in self.terms:
+            if evidence.term == term:
+                return evidence
+        return None
+
+    @property
+    def unresolved_required_terms(self) -> tuple[FinancialTerm, ...]:
+        """Required terms whose applicability this set does not resolve.
+
+        Covers both structural absence and an unusable applicability assertion:
+        neither excludes the term (ADR-047 §8, §12), so any result depending on
+        one of these stays blocked until it is resolved. Reporting a gap is not
+        resolving it — this performs no calculation and no status combination.
+        """
+        return tuple(
+            term
+            for term in sorted(self.scenario.required_terms, key=lambda item: item.value)
+            if (evidence := self.evidence_for(term)) is None or not evidence.applicability.is_resolved
+        )

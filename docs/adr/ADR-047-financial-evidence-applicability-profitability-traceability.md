@@ -6,8 +6,42 @@
 - Fecha: 2026-09-22.
 - Autoridad: aprobación explícita de Daniel de las decisiones del Financial
   Evidence Contract y de la dirección aditiva A+ el 2026-09-22.
-- Estado de implementación: PENDING; este ADR formaliza la decisión, no
-  implementa contratos, cálculos, persistencia, API ni activación.
+- Estado de implementación: PARTIALLY IMPLEMENTED. El paso 1 de §22
+  (contratos de dominio aditivos) existe en `src/juval/domain/financial_evidence.py`,
+  probado en `tests/unit/test_financial_evidence.py`. Los pasos 2-9 de §22 siguen
+  PENDING: no hay cálculo, proyección a CostInputs/FeeInputs, captura en importer,
+  resolución de dependencias, snapshot, persistencia, API, consumo por Decision
+  Score ni activación de pipeline.
+
+### 1.1 Contratos implementados y pendientes
+
+Implementado como contrato de dominio, sin acreditar dato alguno por sí mismo:
+
+| Contrato | Responsabilidad declarada |
+|---|---|
+| `FinancialTerm` / `TermNature` | Los 16 términos de §9 con naturaleza explícita: importe por unidad vendible, tarifa monetaria por lb y ratio adimensional |
+| `Applicability` | Aplicabilidad como evidencia separada del valor (§12); exclusión acreditada distinta de aplicabilidad no resuelta |
+| `EffectiveContext` | Tiempo efectivo separado de `retrieved_at` y base declarada del importe (§8, §10) |
+| `FinancialDependency` | Vínculo resoluble a la evidencia realmente utilizada (§15, §18) |
+| `FinancialTermEvidence` | Une término, aplicabilidad, contexto, importe opcional, método de asignación y dependencias |
+| `FinancialScenario` | Identidad, versión, moneda única, unidad vendible, identidad de política y universo de términos requeridos (§8, §11) |
+| `FinancialEvidenceSet` | Vinculación escenario/ejecución/registro y resolución inequívoca de moneda y dependencias |
+
+Invariantes verificadas en tests: ausencia estructural (`amount=None`) distinta de
+NOT_FOUND, INVALID, cero acreditado y exclusión; exclusión sin operando monetario;
+exclusión INFERRED que conserva su estado; `referral_fee_rate` como ratio con unidad
+`ratio` y límites [0, 1) coherentes con `FeeInputs` y con el denominador de
+break-even, quedando un valor fuera de rango representable como INVALID; rechazo de
+Decimal no finito y de `bool` como número; moneda incompatible con el escenario
+rechazada sin normalización implícita; términos asignados por unidad que exigen
+método de asignación explícito.
+
+Pendiente y explícitamente no implementado aquí: proyección determinística de
+operandos (§7), resolución de dependencias por resultado y propagación de estados
+(§16, §17), snapshot efectivo reproducible (§19), lectura legacy sin promoción
+(§20), persistencia/API aditivas (§21) y el consumo por el componente profitability
+(§23). Los criterios de §29 relativos a esos pasos no quedan satisfechos por esta
+implementación de contratos.
 
 ## 2. Contexto y problema
 
@@ -424,9 +458,10 @@ explicar dependencias por resultado y conservar reproducibilidad sin promover
 históricos. Exige más contexto de entrada y conservación; datos antes
 calculables numéricamente pueden no satisfacer el contrato acreditado.
 
-La formalización no implementa funcionalidad ni completa un criterio íntegro
-de ADR-040. Se mantienen Implementation 44/68, Verification 17/68,
-Production 0/12, Security 5/16 y Amazon 0/18, sin porcentaje agregado.
+Los contratos de dominio de §1.1 no completan por sí solos un criterio íntegro
+de ADR-040: no hay resolución, integración, persistencia ni activación. Se
+mantienen Implementation 44/68, Verification 17/68, Production 0/12,
+Security 5/16 y Amazon 0/18, sin porcentaje agregado.
 
 ## 27. Riesgos
 
