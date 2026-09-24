@@ -8,7 +8,10 @@
   Evidence Contract y de la dirección aditiva A+ el 2026-09-22.
 - Estado de implementación: PARTIALLY IMPLEMENTED. El paso 1 de §22
   (contratos de dominio aditivos) existe en `src/juval/domain/financial_evidence.py`,
-  probado en `tests/unit/test_financial_evidence.py`. Los pasos 2-9 de §22 siguen
+  probado en `tests/unit/test_financial_evidence.py`. El paso 2 de §22 es
+  PARTIAL: existe solo la frontera de dominio que evalúa operandos legacy como
+  gaps sin promoción (`assess_legacy_financial_operands`); la lectura de runs,
+  snapshots y persistencia históricos sigue PENDING. Los pasos 3-9 siguen
   PENDING: no hay cálculo, proyección a CostInputs/FeeInputs, captura en importer,
   resolución de dependencias, snapshot, persistencia, API, consumo por Decision
   Score ni activación de pipeline.
@@ -26,6 +29,7 @@ Implementado como contrato de dominio, sin acreditar dato alguno por sí mismo:
 | `FinancialTermEvidence` | Une término, aplicabilidad, contexto, importe opcional, método de asignación y dependencias |
 | `FinancialScenario` | Identidad, versión, moneda única, unidad vendible, identidad de política y universo de términos requeridos (§8, §11) |
 | `FinancialEvidenceSet` | Vinculación escenario/ejecución/registro y resolución inequívoca de moneda y dependencias |
+| `LegacyGap` / `LegacyTermGap` / `LegacyFinancialCompatibility` / `assess_legacy_financial_operands` | Evaluación determinista de compatibilidad legacy (§20): informa qué le falta a cada ubicación legacy para satisfacer el contrato; nunca produce evidencia |
 
 Invariantes verificadas en tests: ausencia estructural (`amount=None`) distinta de
 NOT_FOUND, INVALID, cero acreditado y exclusión; exclusión sin operando monetario;
@@ -36,10 +40,23 @@ Decimal no finito y de `bool` como número; moneda incompatible con el escenario
 rechazada sin normalización implícita; términos asignados por unidad que exigen
 método de asignación explícito.
 
+Frontera legacy (§5, §13, §20, §22 paso 2): la evaluación recorre los 16 términos
+en orden fijo, solo lee su entrada y devuelve un informe de gaps sin valores,
+`FieldValue`, `FinancialTermEvidence`, `FinancialEvidenceSet` ni `PriceObservation`.
+Un `None` o término ausente es `STRUCTURALLY_ABSENT` (no NOT_FOUND, cero ni
+exclusión); un Decimal desnudo carece de provenance y un cero desnudo es
+indistinguible del default de `CostInputs`/`FeeInputs`; todo operando legacy,
+incluido un `FieldValue` VERIFIED de proveedor, conserva aplicabilidad no resuelta,
+contexto efectivo no declarado y, si es monetario, moneda no vinculada al escenario
+(nunca para `referral_fee_rate`). La asignación se exige solo para los términos
+asignados de §9, nunca para COG. `LegacyGap` es un diagnóstico, no un
+VerificationStatus. La correspondencia campo legacy → término se prueba con
+fixtures sintéticos; su uso sobre datos reales pertenece a pasos posteriores.
+
 Pendiente y explícitamente no implementado aquí: proyección determinística de
 operandos (§7), resolución de dependencias por resultado y propagación de estados
-(§16, §17), snapshot efectivo reproducible (§19), lectura legacy sin promoción
-(§20), persistencia/API aditivas (§21) y el consumo por el componente profitability
+(§16, §17), snapshot efectivo reproducible (§19), lectura de runs/snapshots
+históricos sin promoción (§20), persistencia/API aditivas (§21) y el consumo por el componente profitability
 (§23). Los criterios de §29 relativos a esos pasos no quedan satisfechos por esta
 implementación de contratos.
 
@@ -458,7 +475,7 @@ explicar dependencias por resultado y conservar reproducibilidad sin promover
 históricos. Exige más contexto de entrada y conservación; datos antes
 calculables numéricamente pueden no satisfacer el contrato acreditado.
 
-Los contratos de dominio de §1.1 no completan por sí solos un criterio íntegro
+Los contratos de dominio y la frontera legacy de §1.1 no completan por sí solos un criterio íntegro
 de ADR-040: no hay resolución, integración, persistencia ni activación. Se
 mantienen Implementation 44/68, Verification 17/68, Production 0/12,
 Security 5/16 y Amazon 0/18, sin porcentaje agregado.

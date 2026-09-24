@@ -22,10 +22,16 @@ Distinctions preserved end to end (ADR-047 §12, §13, §14):
   * amount VERIFIED/INFERRED with 0 -> an accredited zero.
   * applies usable and False -> an accredited exclusion, which carries no
                                monetary observation at all.
+
+Legacy compatibility (ADR-047 §20, §22 step 2) is a *gap assessment* only:
+assess_legacy_financial_operands reports why legacy operands do not satisfy
+this contract and never produces FieldValue, FinancialTermEvidence, a
+FinancialEvidenceSet or a price observation from them.
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -406,3 +412,105 @@ class FinancialEvidenceSet:
             for term in sorted(self.scenario.required_terms, key=lambda item: item.value)
             if (evidence := self.evidence_for(term)) is None or not evidence.applicability.is_resolved
         )
+
+
+class LegacyGap(str, Enum):
+    """Why a legacy financial location does not satisfy this contract (ADR-047 §5, §20).
+
+    A diagnostic of the legacy representation, never a VerificationStatus:
+    it neither replaces nor accompanies a status on any value.
+    """
+
+    #: No legacy representation at that location. Not NOT_FOUND (no lookup is
+    #: accredited), not zero and not an exclusion (§13, §14).
+    STRUCTURALLY_ABSENT = "STRUCTURALLY_ABSENT"
+    #: A bare Decimal: no source, status, retrieval time or method (§5).
+    NO_PROVENANCE = "NO_PROVENANCE"
+    #: A bare legacy zero cannot be told apart from the numeric contract's
+    #: Decimal("0") default, so it is not an accredited zero (§13).
+    ZERO_INDISTINGUISHABLE_FROM_DEFAULT = "ZERO_INDISTINGUISHABLE_FROM_DEFAULT"
+    #: A number does not assert that the term applies to the record (§12).
+    APPLICABILITY_UNRESOLVED = "APPLICABILITY_UNRESOLVED"
+    #: A legacy amount is bound to no scenario currency; none is inferred (§11).
+    #: Never reported for the dimensionless referral rate.
+    CURRENCY_UNBOUND = "CURRENCY_UNBOUND"
+    #: No effective time or basis; retrieved_at does not substitute for it (§8).
+    EFFECTIVE_CONTEXT_UNDECLARED = "EFFECTIVE_CONTEXT_UNDECLARED"
+    #: An allocated term carries no allocation method (§10). Reported only for
+    #: terms that require one: COG is never assumed to come from a pack.
+    ALLOCATION_UNDECLARED = "ALLOCATION_UNDECLARED"
+
+
+@dataclass(frozen=True)
+class LegacyTermGap:
+    """Gap report for one term's legacy location; holds no value and no evidence."""
+
+    term: FinancialTerm
+    represented: bool
+    gaps: tuple[LegacyGap, ...]
+
+    @property
+    def satisfies_contract(self) -> bool:
+        return not self.gaps
+
+
+@dataclass(frozen=True)
+class LegacyFinancialCompatibility:
+    """Deterministic compatibility report over all FinancialTerm locations.
+
+    This is an assessment of what legacy operands *lack*, not financial
+    evidence: nothing here can be bound to a FinancialEvidenceSet, projected
+    to an operand, persisted as a backfill or read as accreditation.
+    """
+
+    terms: tuple[LegacyTermGap, ...]
+
+    @property
+    def satisfies_contract(self) -> bool:
+        return all(entry.satisfies_contract for entry in self.terms)
+
+    def gap_for(self, term: FinancialTerm) -> LegacyTermGap:
+        return next(entry for entry in self.terms if entry.term == term)
+
+
+def assess_legacy_financial_operands(
+    operands: Mapping[FinancialTerm, Decimal | FieldValue | None],
+) -> LegacyFinancialCompatibility:
+    """Report why legacy financial operands do not satisfy ADR-047 (§20).
+
+    `operands` maps a term to what its legacy location holds: a bare Decimal
+    (CostInputs/FeeInputs), an already provenanced FieldValue, or None. Terms
+    missing from the mapping are structurally absent. A FieldValue keeps its
+    own status untouched and is not promoted: even a source-VERIFIED value
+    lacks applicability, scenario currency and effective context, and a
+    supplier's VERIFIED is never read as independent Amazon verification.
+    The input is only read; nothing is inferred, defaulted or backfilled.
+    """
+    if not isinstance(operands, Mapping):
+        raise ValueError("Legacy operands must be a mapping keyed by FinancialTerm")
+    for key, value in operands.items():
+        if not isinstance(key, FinancialTerm):
+            raise ValueError("Legacy operands must be keyed by FinancialTerm")
+        if value is not None and not isinstance(value, (Decimal, FieldValue)):
+            raise ValueError(
+                f"Legacy {key.value} must be a Decimal, a FieldValue or None, got {type(value).__name__}"
+            )
+    entries = []
+    for term in sorted(FinancialTerm, key=lambda item: item.value):
+        value = operands.get(term)
+        if value is None:
+            entries.append(LegacyTermGap(term, False, (LegacyGap.STRUCTURALLY_ABSENT,)))
+            continue
+        gaps = []
+        if isinstance(value, Decimal):
+            gaps.append(LegacyGap.NO_PROVENANCE)
+            if value == 0:
+                gaps.append(LegacyGap.ZERO_INDISTINGUISHABLE_FROM_DEFAULT)
+        gaps.append(LegacyGap.APPLICABILITY_UNRESOLVED)
+        if term.nature is not TermNature.DIMENSIONLESS_RATIO:
+            gaps.append(LegacyGap.CURRENCY_UNBOUND)
+        gaps.append(LegacyGap.EFFECTIVE_CONTEXT_UNDECLARED)
+        if term.requires_allocation_method:
+            gaps.append(LegacyGap.ALLOCATION_UNDECLARED)
+        entries.append(LegacyTermGap(term, True, tuple(gaps)))
+    return LegacyFinancialCompatibility(tuple(entries))

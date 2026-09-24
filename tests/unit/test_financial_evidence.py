@@ -1,5 +1,6 @@
 """Synthetic fixtures only: no provider evidence, fee schedule or commercial calibration."""
 import ast
+import dataclasses
 import pathlib
 import sys
 from dataclasses import FrozenInstanceError, replace
@@ -8,9 +9,11 @@ from decimal import Decimal
 
 import pytest
 
+from juval.domain.costs import CostInputs, FeeInputs
 from juval.domain.financial_evidence import (
     MAX_EXCLUSIVE_RATE, RATIO_UNIT, Applicability, EffectiveContext, FinancialDependency,
-    FinancialEvidenceSet, FinancialScenario, FinancialTerm, FinancialTermEvidence, TermNature,
+    FinancialEvidenceSet, FinancialScenario, FinancialTerm, FinancialTermEvidence, LegacyGap,
+    LegacyTermGap, TermNature, assess_legacy_financial_operands,
 )
 from juval.domain.provenance import FieldValue, SourceType, VerificationStatus
 
@@ -389,5 +392,129 @@ def test_contracts_neither_calculate_nor_accredit_legacy_numeric_inputs():
     }
     # Evidence contracts stay upstream of the legacy numeric operands and of
     # every calculating/IO layer: no projection or accreditation can hide here.
-    assert imported == {"dataclasses", "datetime", "decimal", "enum", "provenance", "units",
-                        "__future__"}
+    assert imported == {"collections.abc", "dataclasses", "datetime", "decimal", "enum",
+                        "provenance", "units", "__future__"}
+
+
+# -- Legacy compatibility: gap assessment, never accreditation (§20) ------
+
+def legacy_operands(*legacy):
+    """Synthetic legacy CostInputs/FeeInputs read by field name, exactly as stored."""
+    return {FinancialTerm(f.name.upper()): getattr(obj, f.name)
+            for obj in legacy for f in dataclasses.fields(obj)}
+
+
+LEGACY_COSTS = CostInputs(cog=Decimal("4.50"), shipping_per_unit=Decimal("0.80"))
+LEGACY_FEES = FeeInputs(referral_fee=Decimal("1.50"), referral_fee_rate=Decimal("0.15"))
+
+
+def test_every_legacy_numeric_field_has_exactly_one_financial_term():
+    names = [f.name.upper() for obj in (LEGACY_COSTS, LEGACY_FEES) for f in dataclasses.fields(obj)]
+    assert sorted(names) == sorted(term.value for term in FinancialTerm)
+
+
+def test_legacy_absence_is_structural_not_not_found_zero_or_exclusion():
+    report = assess_legacy_financial_operands({FinancialTerm.VAT: None})
+    for kind in (FinancialTerm.VAT, FinancialTerm.STORAGE):
+        entry = report.gap_for(kind)
+        assert entry == LegacyTermGap(kind, False, (LegacyGap.STRUCTURALLY_ABSENT,))
+        assert not isinstance(entry.gaps[0], VerificationStatus)
+    assert {gap.value for gap in LegacyGap}.isdisjoint(status.value for status in VerificationStatus)
+
+
+def test_legacy_zero_and_default_fee_are_not_accredited_zeros():
+    report = assess_legacy_financial_operands(legacy_operands(LEGACY_COSTS, LEGACY_FEES))
+    explicit_zero = assess_legacy_financial_operands({FinancialTerm.FULFILLMENT_FEE: Decimal("0")})
+    for entry in (report.gap_for(FinancialTerm.FULFILLMENT_FEE),
+                  report.gap_for(FinancialTerm.VAT),
+                  explicit_zero.gap_for(FinancialTerm.FULFILLMENT_FEE)):
+        assert entry.represented and not entry.satisfies_contract
+        assert {LegacyGap.ZERO_INDISTINGUISHABLE_FROM_DEFAULT, LegacyGap.NO_PROVENANCE,
+                LegacyGap.APPLICABILITY_UNRESOLVED} <= set(entry.gaps)
+    assert LegacyGap.ZERO_INDISTINGUISHABLE_FROM_DEFAULT not in report.gap_for(FinancialTerm.COG).gaps
+
+
+def test_legacy_decimal_lacks_provenance_applicability_currency_and_context():
+    report = assess_legacy_financial_operands(legacy_operands(LEGACY_COSTS, LEGACY_FEES))
+    assert not report.satisfies_contract
+    assert report.gap_for(FinancialTerm.COG).gaps == (
+        LegacyGap.NO_PROVENANCE, LegacyGap.APPLICABILITY_UNRESOLVED,
+        LegacyGap.CURRENCY_UNBOUND, LegacyGap.EFFECTIVE_CONTEXT_UNDECLARED)
+    assert all(entry.represented and not entry.satisfies_contract for entry in report.terms)
+
+
+def test_ratio_is_never_given_a_currency_gap_and_keeps_other_gaps():
+    entry = assess_legacy_financial_operands(legacy_operands(LEGACY_FEES)).gap_for(
+        FinancialTerm.REFERRAL_FEE_RATE)
+    assert LegacyGap.CURRENCY_UNBOUND not in entry.gaps
+    assert {LegacyGap.APPLICABILITY_UNRESOLVED, LegacyGap.EFFECTIVE_CONTEXT_UNDECLARED} <= set(entry.gaps)
+
+
+def test_allocation_is_required_only_for_allocated_terms_never_inferred_for_cog():
+    report = assess_legacy_financial_operands(legacy_operands(LEGACY_COSTS))
+    allocated = {entry.term for entry in report.terms if LegacyGap.ALLOCATION_UNDECLARED in entry.gaps}
+    assert allocated == {FinancialTerm.INBOUND_SHIPPING, FinancialTerm.SHIPPING_PER_UNIT,
+                         FinancialTerm.INBOUND_PLACEMENT, FinancialTerm.STORAGE}
+
+
+def test_supplier_verified_field_value_is_neither_promoted_nor_amazon_verified():
+    supplier = FieldValue.verified(Decimal("4.50"), unit="USD", source="synthetic-supplier-file",
+                                   source_type=SourceType.SUPPLIER_FILE, retrieved_at=NOW,
+                                   method="synthetic supplier column")
+    operands = {FinancialTerm.COG: supplier}
+    entry = assess_legacy_financial_operands(operands).gap_for(FinancialTerm.COG)
+    # Provenance exists, but a source's VERIFIED accredits neither applicability,
+    # scenario currency (its "USD" unit is not bound) nor effective context.
+    assert entry.gaps == (LegacyGap.APPLICABILITY_UNRESOLVED, LegacyGap.CURRENCY_UNBOUND,
+                          LegacyGap.EFFECTIVE_CONTEXT_UNDECLARED)
+    assert operands[FinancialTerm.COG] is supplier
+    assert supplier.provenance.source_type is SourceType.SUPPLIER_FILE
+    assert supplier.status is VerificationStatus.VERIFIED
+
+
+def test_assessment_holds_no_value_evidence_or_price_observation():
+    selling_price = fv(Decimal("19.99"), "USD")
+    report = assess_legacy_financial_operands(legacy_operands(LEGACY_COSTS, LEGACY_FEES))
+    for entry in report.terms:
+        assert {f.name for f in dataclasses.fields(entry)} == {"term", "represented", "gaps"}
+        assert all(isinstance(gap, LegacyGap) for gap in entry.gaps)
+    assert [f.name for f in dataclasses.fields(report)] == ["terms"]
+    # A legacy selling price has no FinancialTerm location: it cannot even be
+    # submitted, so it is never turned into a PriceObservation here.
+    with pytest.raises(ValueError):
+        assess_legacy_financial_operands({"selling_price": selling_price})
+    module = sys.modules["juval.domain.financial_evidence"]
+    assert "PriceObservation" not in vars(module)
+
+
+def test_assessment_cannot_become_financial_evidence_or_an_evidence_set():
+    report = assess_legacy_financial_operands(legacy_operands(LEGACY_COSTS, LEGACY_FEES))
+    with pytest.raises(ValueError):
+        evidence_set(report.terms)
+    with pytest.raises(ValueError):
+        term(FinancialTerm.COG, LEGACY_COSTS.cog)  # a bare legacy Decimal is not evidence
+
+
+@pytest.mark.parametrize("operands", [
+    [(FinancialTerm.COG, Decimal("1"))], {"cog": Decimal("1")},
+    {FinancialTerm.COG: 1.5}, {FinancialTerm.COG: 1}, {FinancialTerm.COG: True},
+    {FinancialTerm.COG: "4.50"},
+])
+def test_assessment_rejects_untyped_legacy_input(operands):
+    with pytest.raises(ValueError):
+        assess_legacy_financial_operands(operands)
+
+
+def test_assessment_is_deterministic_and_neither_mutates_nor_backfills():
+    operands = legacy_operands(LEGACY_COSTS, LEGACY_FEES)
+    snapshot = dict(operands)
+    first = assess_legacy_financial_operands(operands)
+    reordered = assess_legacy_financial_operands(dict(reversed(list(operands.items()))))
+    assert first == reordered == assess_legacy_financial_operands(snapshot)
+    assert [entry.term.value for entry in first.terms] == sorted(term.value for term in FinancialTerm)
+    assert operands == snapshot
+    assert LEGACY_COSTS == CostInputs(cog=Decimal("4.50"), shipping_per_unit=Decimal("0.80"))
+    with pytest.raises(FrozenInstanceError):
+        first.terms = ()
+    with pytest.raises(FrozenInstanceError):
+        first.terms[0].gaps = ()
