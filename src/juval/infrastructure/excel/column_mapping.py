@@ -17,13 +17,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from juval.domain.financial_evidence import FinancialTerm, TermNature
+
 
 @dataclass(frozen=True)
 class ColumnSpec:
     canonical: str
     target: str
     required: bool
-    value_type: str  # "str" | "decimal" | "int" | "bool" | "asin" | "upc"
+    value_type: str  # "str" | "decimal" | "int" | "bool" | "asin" | "upc" | "datetime"
     aliases: tuple[str, ...] = ()
 
 
@@ -55,9 +57,65 @@ COLUMN_SPECS: tuple[ColumnSpec, ...] = (
 )
 
 
+# -- Native financial evidence (ADR-047 §22 step 3) ------------------------
+#
+# Optional, additive columns that let a file *declare* financial evidence.
+# They never feed CostInputs/FeeInputs, profitability or decisions; a file
+# without any of them imports exactly as before. See
+# docs/architecture/EXCEL_PROCESSING.md §9 for the column contract.
+
+#: Row-level declaration of the FinancialScenario the row's evidence binds to.
+FINANCIAL_SCENARIO_COLUMNS: dict[str, str] = {
+    "fin_scenario_id": "scenario_id",
+    "fin_scenario_version": "scenario_version",
+    "fin_currency": "currency",
+    "fin_sellable_unit": "sellable_unit_definition",
+    "fin_policy_identity": "policy_identity",
+    "fin_required_terms": "required_terms",
+    "fin_context_requirements": "context_requirements",
+}
+
+#: Per-term column suffix -> value type. `currency` exists only for monetary
+#: terms: a ratio never carries a currency (ADR-047 §10, §11).
+FINANCIAL_TERM_SUFFIXES: dict[str, str] = {
+    "amount": "decimal",
+    "currency": "str",
+    "applies": "bool",
+    "applies_method": "str",
+    "justification": "str",
+    "effective_at": "datetime",
+    "basis": "str",
+    "allocation": "str",
+    "source_basis": "str",
+}
+
+
+def financial_term_column(term: FinancialTerm, suffix: str) -> str:
+    """Header of one native evidence column, e.g. fin_referral_fee_amount."""
+    return f"fin_{term.value.lower()}_{suffix}"
+
+
+def _financial_term_specs() -> tuple[ColumnSpec, ...]:
+    specs = []
+    for term in FinancialTerm:
+        for suffix, value_type in FINANCIAL_TERM_SUFFIXES.items():
+            if suffix == "currency" and term.nature is TermNature.DIMENSIONLESS_RATIO:
+                continue
+            specs.append(ColumnSpec(financial_term_column(term, suffix),
+                                    f"financial_evidence[{term.value}].{suffix}", False, value_type))
+    return tuple(specs)
+
+
+FINANCIAL_EVIDENCE_COLUMN_SPECS: tuple[ColumnSpec, ...] = (
+    *(ColumnSpec(header, f"financial_scenario.{target}", False, "str")
+      for header, target in FINANCIAL_SCENARIO_COLUMNS.items()),
+    *_financial_term_specs(),
+)
+
+
 def _build_alias_index() -> dict[str, str]:
     index: dict[str, str] = {}
-    for spec in COLUMN_SPECS:
+    for spec in (*COLUMN_SPECS, *FINANCIAL_EVIDENCE_COLUMN_SPECS):
         index[spec.canonical] = spec.canonical
         for alias in spec.aliases:
             index[alias] = spec.canonical

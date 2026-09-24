@@ -14,8 +14,13 @@
   `application/legacy_financial_projection.py` proyecta read-only hacia ella las
   dos fuentes legacy existentes, `CostInputs`/`FeeInputs` en memoria y los record
   snapshots persistidos. Ningún consumidor (API, UI, exportación) la usa todavía;
-  exponerla es parte del paso 7. Los pasos 3-9 siguen
-  PENDING: no hay cálculo, proyección a CostInputs/FeeInputs, captura en importer,
+  exponerla es parte del paso 7. El paso 3 está IMPLEMENTED en la frontera
+  del importer: columnas nativas opcionales `fin_*` producen, por registro, un
+  `NativeFinancialCapture` en `ImportResult.financial_captures` cuyo
+  `bind(execution_id)` devuelve el `FinancialEvidenceSet` (contrato en
+  `docs/architecture/EXCEL_PROCESSING.md` §9); `run_pipeline` aún no lo invoca ni
+  lo transporta. Los pasos 4-9 siguen
+  PENDING: no hay cálculo, proyección a CostInputs/FeeInputs,
   resolución de dependencias, snapshot, persistencia, API, consumo por Decision
   Score ni activación de pipeline.
 
@@ -35,6 +40,7 @@ Implementado como contrato de dominio, sin acreditar dato alguno por sí mismo:
 | `LegacyGap` / `LegacyTermGap` / `LegacyFinancialCompatibility` / `assess_legacy_financial_operands` | Evaluación determinista de compatibilidad legacy (§20): informa qué le falta a cada ubicación legacy para satisfacer el contrato; nunca produce evidencia |
 | `LEGACY_COST_TERMS` / `LEGACY_FEE_TERMS` / `legacy_financial_operands` (application) | Correspondencia explícita campo legacy → término y proyección read-only de los valores tal como están almacenados; declara el slot, no acredita el valor |
 | `LEGACY_SNAPSHOT_TERMS` / `legacy_snapshot_financial_operands` (application) | Proyección read-only de un record snapshot persistido: solo los slots que el snapshot conserva; el resto queda en ausencia estructural |
+| `FINANCIAL_EVIDENCE_COLUMN_SPECS` / `NativeFinancialCapture` / `capture_native_financial_evidence` (infrastructure/excel) | Captura nativa (§22 paso 3): lo que una fila declara explícitamente se convierte en `FinancialScenario`/`FinancialTermEvidence`; lo no representable se omite con motivo, nunca se completa con defaults |
 
 Invariantes verificadas en tests: ausencia estructural (`amount=None`) distinta de
 NOT_FOUND, INVALID, cero acreditado y exclusión; exclusión sin operando monetario;
@@ -86,6 +92,19 @@ de leerse como cero, ausencia o NOT_FOUND. Probado con dicts de `record_to_snaps
 y con una lectura desde `SqliteExecutionRunStore`, que produce el mismo
 diagnóstico que el dict escrito. El store de Supabase devuelve el mismo formato de
 snapshot, pero no se probó contra una base real.
+
+Captura nativa (§22 paso 3, ruta NATIVA separada de la legacy): moneda,
+aplicabilidad, `effective_at`, base y asignación se toman solo de columnas
+declaradas; columna ausente es ausencia estructural, celda vacía NOT_FOUND,
+valor no finito/negativo/fuera de rango INVALID con raw, y cero explícito un cero
+declarado cuya aplicabilidad es una declaración aparte. Un importe sin moneda, con
+moneda distinta del escenario, sin aplicabilidad declarable, sin contexto efectivo
+o de origen `pack` sin asignación no se captura y su motivo queda en `problems`.
+Provenance `SUPPLIER_FILE` por celda; VERIFIED es declaración del archivo, no
+verificación de Amazon. Sin `PriceObservation`. Registros, issues, profitability y
+decisiones legacy quedan idénticos (probado), y un archivo sin columnas `fin_*` no
+produce capturas. La evidencia no se persiste ni se expone; la vinculación a la
+ejecución real dentro de `run_pipeline` queda para pasos posteriores.
 
 Pendiente y explícitamente no implementado aquí: proyección determinística de
 operandos (§7), resolución de dependencias por resultado y propagación de estados

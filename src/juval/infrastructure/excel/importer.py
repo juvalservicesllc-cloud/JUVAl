@@ -40,6 +40,11 @@ from juval.domain.sourcing_record import SourcingRecord
 from juval.domain.units import CANONICAL_LENGTH_UNIT, CANONICAL_WEIGHT_UNIT, UnsupportedUnitError, to_inches, to_pounds
 
 from .column_mapping import ALIAS_TO_CANONICAL, COLUMN_SPECS
+from .financial_capture import (
+    NativeFinancialCapture,
+    capture_native_financial_evidence,
+    has_native_financial_columns,
+)
 
 # Business-approved internal mapping (ADR-044).
 # Supersedes ADR-010 commercial provisionality, not its mapping values.
@@ -66,6 +71,10 @@ class ImportResult:
     fatal: bool
     rows_scanned: int
     rows_skipped_blank: int
+    # Native financial evidence (ADR-047 §22 step 3), one entry per built record
+    # in record order -- and only when the file has at least one `fin_*`
+    # column. Additive: records, issues and every legacy value are unaffected.
+    financial_captures: tuple[NativeFinancialCapture, ...] = ()
 
 
 def normalize_header(raw: Any) -> str:
@@ -601,6 +610,8 @@ def _import_rows(rows_iter, path: Path, *, now: datetime) -> ImportResult:
 
     issues: list[ProcessingIssue] = list(header_issues)
     records: list[SourcingRecord] = []
+    captures: list[NativeFinancialCapture] = []
+    native = has_native_financial_columns(column_index)
     rows_scanned = 0
     rows_skipped_blank = 0
 
@@ -617,8 +628,14 @@ def _import_rows(rows_iter, path: Path, *, now: datetime) -> ImportResult:
         issues.extend(row_issues)
         if record is not None:
             records.append(record)
+            if native:
+                captures.append(capture_native_financial_evidence(
+                    cells, record_ref=record.record_ref, row_number=row_number, source=path.name, now=now,
+                    parse_cell=_parse_cell,
+                ))
 
     return ImportResult(
         records=tuple(records), issues=tuple(issues), fatal=False,
         rows_scanned=rows_scanned, rows_skipped_blank=rows_skipped_blank,
+        financial_captures=tuple(captures),
     )

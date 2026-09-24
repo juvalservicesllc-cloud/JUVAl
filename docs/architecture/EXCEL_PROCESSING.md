@@ -220,3 +220,82 @@ APPROVAL_REQUIRED, NO_BUY_BOX, NO_FBA_FEES, ASIN_NOT_FOUND) no tienen
 columna de origen todavía — quedan simplemente ausentes de `RiskProfile`
 (no se fabrican como `UNKNOWN`), ya que esta fase no tiene una fuente de
 datos para ellos. Se conectarán cuando exista una fuente real y aprobada.
+
+## 9. Evidencia financiera nativa (ADR-047 §22 paso 3)
+
+Columnas **opcionales y aditivas** (`column_mapping.py::FINANCIAL_EVIDENCE_COLUMN_SPECS`,
+captura en `financial_capture.py`) con las que un archivo *declara* evidencia
+financiera. Es la ruta NATIVA: no lee ni escribe `CostInputs`/`FeeInputs`, no
+reutiliza la proyección legacy (`application/legacy_financial_projection.py`)
+y no alimenta profitability, Decision Engine, scoring, persistencia ni API. Un
+archivo sin ninguna columna `fin_*` se importa exactamente igual que antes y
+`ImportResult.financial_captures` queda vacío.
+
+### 9.1 Escenario (por fila)
+
+| Header | Destino | Obligatorio para el escenario |
+|---|---|---|
+| `fin_scenario_id` | `FinancialScenario.scenario_id` | sí |
+| `fin_scenario_version` | `scenario_version` | sí |
+| `fin_currency` | `currency` (3 letras mayúsculas ASCII) | sí |
+| `fin_sellable_unit` | `sellable_unit_definition` | sí |
+| `fin_policy_identity` | `policy_identity` | sí |
+| `fin_required_terms` | `required_terms`, nombres de `FinancialTerm` separados por `;` o `,` | sí |
+| `fin_context_requirements` | `context_requirements`, separados por `;` | no |
+
+Si falta cualquiera de los obligatorios, o uno es inválido, no se construye un
+escenario: `scenario=None` y el motivo queda en `problems`. Nunca se usa la fecha
+actual, la de importación, una moneda por defecto, la de otra ejecución ni la del
+precio.
+
+### 9.2 Términos (`fin_<term>_<sufijo>`, para cada uno de los 16 `FinancialTerm`)
+
+| Sufijo | Significado |
+|---|---|
+| `amount` | Importe **por unidad vendible** (por lb en `shipping_per_pound`; ratio en `referral_fee_rate`) |
+| `currency` | Moneda del importe; solo términos monetarios (no existe `fin_referral_fee_rate_currency`) |
+| `applies` | Aplicabilidad declarada (`yes`/`no`/…, mismo parser bool) |
+| `applies_method` | Si existe, el proveedor declara que *infirió* la aplicabilidad con ese método → `INFERRED` |
+| `justification` | Justificación obligatoria de una aplicabilidad declarada (sí o no) |
+| `effective_at` | Instante efectivo ISO 8601 **con offset**; una fecha Excel sin zona horaria se rechaza |
+| `basis` | Base económica del importe (`EffectiveContext.basis_definition`) |
+| `allocation` | Método de asignación hacia unidad vendible |
+| `source_basis` | Origen declarado del importe: `sellable_unit` o `pack` |
+
+Reglas (sin inferencias):
+
+- Un término sin ninguna celda no vacía en la fila no se representa (ausencia estructural).
+- Columna `amount` ausente → `amount=None` (ausencia estructural). Celda vacía en
+  columna presente → `NOT_FOUND`. Cero explícito → cero declarado `VERIFIED`, con
+  su aplicabilidad como declaración aparte. Texto no numérico, `NaN`, `Infinity`,
+  negativo o ratio fuera de [0, 1) → `INVALID` conservando el valor original.
+- Aplicabilidad: columna `applies` ausente → el término no se captura (nunca se
+  infiere de que exista un importe); celda vacía o inválida → aplicabilidad no
+  resuelta (`NOT_FOUND`/`INVALID`). `no` → exclusión sin importe; una exclusión con
+  importe, incluso 0, se rechaza.
+- Un importe monetario sin su `currency`, o con una moneda distinta de
+  `fin_currency`, no se captura; no hay conversión.
+- `effective_at` o `basis` ausentes, o `effective_at` sin offset, → el término no se
+  captura. `retrieved_at` es el instante de importación y nunca sustituye a `effective_at`.
+- COG por unidad vendible no exige `allocation`. `source_basis=pack` exige
+  `allocation`; el importer nunca divide ni inventa unidades por pack: el importe
+  declarado ya es por unidad vendible. `inbound_shipping`, `shipping_per_unit`,
+  `inbound_placement` y `storage` siempre exigen `allocation` (contrato de dominio).
+- Provenance por observación: `source`=nombre de archivo, `SUPPLIER_FILE`,
+  `method=direct_read` y `source_reference="row=N;column=<header>"`. `VERIFIED`
+  significa "declarado por este archivo", no verificación independiente de Amazon.
+- Las celdas numéricas XLSX son dobles binarios por formato; se leen por su
+  representación mínima (igual que toda columna decimal legacy), sin aritmética.
+  Para conservar exactamente escala y dígitos, declarar el importe como texto.
+
+### 9.3 Entrega del resultado
+
+`ImportResult.financial_captures` tiene un `NativeFinancialCapture` por registro
+construido, en el mismo orden que `records`, solo si el archivo contiene al menos
+una columna `fin_*`. Contiene `record_ref`, `scenario`, los `FinancialTermEvidence`
+capturados y `problems` (motivos deterministas de lo no capturado).
+`capture.bind(execution_id)` devuelve el `FinancialEvidenceSet` del registro; el
+`execution_id` lo aporta quien llama, como `now`. Los problemas no se añaden a
+`issues` ni a los registros, para no cambiar conteos, estados ni decisiones legacy.
+`run_pipeline` todavía no invoca `bind` ni transporta la evidencia: conectarlo
+pertenece a pasos posteriores de ADR-047 §22.
