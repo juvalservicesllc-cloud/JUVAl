@@ -35,8 +35,8 @@
   (`application/financial_serialization.py`) se persiste y recupera en SQLite
   (`application/financial_persistence.py` y la tabla
   `execution_run_financial_records`), en la misma transacción que el run y sus
-  snapshots. Falta el backend Supabase/PostgreSQL y que la API o la CLI persistan
-  documentos. Los pasos 7-9 siguen
+  snapshots. La CLI local lo persiste con el opt-in `--native-financial-evidence`.
+  Falta el backend Supabase/PostgreSQL, que la API no usa todavía. Los pasos 7-9 siguen
   PENDING: no hay cálculo, proyección a CostInputs/FeeInputs, snapshot, persistencia, API, consumo por Decision
   Score ni activación de pipeline.
 
@@ -299,6 +299,29 @@ Persistencia SQLite (paso 6, PARTIAL):
   - errores de SQLite sin alterar.
 - Los runs legacy se leen igual, sin documento y sin backfill, y los snapshots
   comerciales no cambian.
+
+Integración CLI (opt-in, paso 6 PARTIAL):
+- `--native-financial-evidence` (requiere `--persist-db`) usa
+  `run_pipeline_with_financial_evidence`, que es el mismo `_execute` que la ruta
+  legacy.
+- `application/native_financial_documents.py::build_financial_documents` construye
+  un `FinancialRecordDocument` por registro con escenario completo: evidencia,
+  precio declarado, resolución y los seis cálculos. `save_run_with_financial_records`
+  guarda run, snapshots y documentos en una transacción. Si falla, la CLI sale con
+  código 3 y no queda nada persistido.
+- Registros sin escenario completo o descartados por el importer no tienen
+  documento. Sus problemas de captura se imprimen, porque el formato v1 no tiene
+  dónde guardarlos.
+- Inputs explícitos, siempre `USER_INPUT` VERIFIED con su unidad:
+  - `--financial-target-profit` junto con `--financial-target-profit-currency`;
+  - `--financial-target-roi` como ratio.
+  - Nunca se reutilizan los umbrales comerciales `--target-*`.
+- No existe input de peso por registro, así que el peso legacy no se usa y los
+  resultados que dependen de un `SHIPPING_PER_POUND` aplicable quedan bloqueados.
+- Paridad probada: run, Excel de salida, snapshots, profitability, decisiones,
+  riesgos e issues son idénticos con y sin el flag.
+- Diferencia de persistencia: la ruta legacy de la CLI guarda solo el run; la
+  nativa guarda además los snapshots, necesarios para la FK de los documentos.
 
 Garantías y límites del documento persistido:
 - Recuperación: exacta del estado serializado. Está probada con igualdad semántica
