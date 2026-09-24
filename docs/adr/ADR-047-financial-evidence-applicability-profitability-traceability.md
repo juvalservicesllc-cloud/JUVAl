@@ -60,6 +60,7 @@ Implementado como contrato de dominio, sin acreditar dato alguno por sí mismo:
 | `calculate_financial_results` / `FinancialCalculation` (application) | Cálculo acreditado por resultado: precondiciones matemáticas evaluadas, valor `CALCULATED` VERIFIED/INFERRED o NOT_FOUND con diagnóstico, operandos y evidencia originales enlazados, exactitud Decimal informada |
 | `FinancialRecordDocument` / `serialize_financial_record` / `deserialize_financial_record` (application) | Formato `juval.adr047.financial-record` v1: serialización pura, JSON-compatible, determinista y reversible de evidencia, precio declarado, resolución y cálculos; sin I/O ni persistencia |
 | `save_run_with_financial_records` / `load_financial_record` (application) + `execution_run_financial_records` (SQLite) | Persistencia aditiva del payload v1 por `(execution_id, record_ref)`, atómica con run y snapshots; lectura que distingue ausencia, payload corrupto o versión desconocida, e identidad incoherente |
+| `FinancialRecordDocumentV2` / `serialize_financial_record_v2` / `deserialize_financial_record_v2` / `read_financial_record` / `assess_reproducibility` (application) | Formato v2 puro: núcleo v1 idéntico más inputs suministrados, problemas de captura e identidad de implementación; lectura v1/v2 discriminada por versión; evaluación separada de las garantías A/B/C de §19; sin I/O ni consumidores |
 | `FeeEvidenceState` / `accredited_fee_evidence` (domain) | Vista acreditada por registro de los cuatro términos de fee: DECLARED/OBSERVED/INFERRED/DERIVED frente a ausente, NOT_FOUND, INVALID, excluido o aplicabilidad no resuelta; sin derivación ni defaults |
 | `DeclaredSellingPrice` (domain) | Precio declarado por registro con moneda propia en `amount.unit` y `EffectiveContext`; no es `PriceObservation` |
 | `FINANCIAL_EVIDENCE_COLUMN_SPECS` / `NativeFinancialCapture` / `capture_native_financial_evidence` (infrastructure/excel) | Captura nativa (§22 paso 3): lo que una fila declara explícitamente se convierte en `FinancialScenario`/`FinancialTermEvidence`; lo no representable se omite con motivo, nunca se completa con defaults |
@@ -343,6 +344,48 @@ Garantías y límites del documento persistido:
     digest de la implementación, `application_version` del run y los inputs
     explícitos tal como se suministraron, incluidos los inutilizables.
   - §19 sigue PENDING.
+
+Formato v2 (§19; serialización pura, sin persistencia ni consumidores):
+- Misma identidad de formato, `VERSION=2`, en `application/financial_serialization_v2.py`.
+- El núcleo (`evidence`, `selling_price`, `resolution`, `calculations`) es
+  byte-idéntico a v1 (probado). v2 añade tres bloques:
+  - `supplied_inputs`: precio, peso, `target_profit` y `target_roi` tal como se
+    entregaron al resolvedor, incluidos NOT_FOUND, INVALID con su valor original,
+    y moneda o unidad incompatibles. `null` significa no suministrado. Debe
+    coincidir exactamente con lo que vio la resolución guardada; en caso
+    contrario, se rechaza.
+  - `capture_problems`: los diagnósticos del capturador tal cual. El capturador
+    actual solo produce texto `"<subject>: <message>"`, sin código, fila ni
+    columna. v2 conserva el texto y admite `subject`, `row`, `column` y
+    `raw_value` estructurados, que quedan `null` mientras el capturador no los
+    emita; no se obtienen analizando el texto.
+  - `implementation`: `calculator`, un SHA-256 de la tabla de expresiones y otro
+    de la matriz de dependencias que contiene el código, y `application_version`,
+    `code_revision` y `configuration` opcionales. Estos últimos son `null` si se
+    desconocen; nunca se inventan ni se calcula un digest ficticio.
+    `derivation_methods` está vacío, porque §15 no aprueba ninguno.
+- v1 no cambia:
+  - `deserialize_financial_record` sigue aceptando solo v1 y rechaza v2;
+  - `deserialize_financial_record_v2` rechaza v1 sin convertirlo;
+  - `read_financial_record` elige lector según la versión y rechaza cualquier
+    otra;
+  - los lectores comprueban formato y versión antes que la estructura.
+- `assess_reproducibility` informa por separado los criterios no cumplidos de:
+  - A, recuperación exacta del estado serializado: se cumple para cualquier
+    documento válido;
+  - B, reconstrucción de las entradas: se cumple en v2 y no en v1;
+  - C, reproducción histórica: nunca se afirma. Enumera lo que falta (versión o
+    revisión desconocidas, tablas distintas de las del código actual, requisitos
+    de contexto sin método, ausencia de cálculo) y siempre incluye que el código
+    y el runtime nombrados no son verificables desde el documento.
+- Pendiente para conectar v2, sin implementarlo aquí:
+  - que `build_financial_documents` construya `FinancialRecordDocumentV2` con los
+    `target_*` y los `problems` que ya tiene, más `application_version` y
+    `code_revision` suministrados por el llamador;
+  - persistir `format_version=2` en SQLite;
+  - que el capturador emita problemas estructurados (código, columna, valor
+    original).
+- §19 sigue PENDING.
 
 Precio declarado: `DeclaredSellingPrice(amount, context)` conserva la moneda en
 `amount.unit`, validada como código de 3 letras. No la toma del escenario, del

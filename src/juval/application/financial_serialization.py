@@ -93,11 +93,17 @@ class FinancialRecordDocument:
 def serialize_financial_record(document: FinancialRecordDocument) -> dict[str, Any]:
     if not isinstance(document, FinancialRecordDocument):
         raise FinancialSerializationError("Explicit FinancialRecordDocument required")
+    return {"format": FORMAT, "version": VERSION, **_core_payload(document)}
+
+
+#: Keys every version carries for the record itself (v2 adds its own blocks).
+CORE_KEYS = frozenset({"evidence", "selling_price", "resolution", "calculations"})
+
+
+def _core_payload(document: FinancialRecordDocument) -> dict[str, Any]:
     evidence = document.evidence
     _check_belongs(document)
     return {
-        "format": FORMAT,
-        "version": VERSION,
         "evidence": _evidence_set(evidence),
         "selling_price": None if document.selling_price is None else {
             "amount": _field(document.selling_price.amount),
@@ -242,8 +248,13 @@ def _calculations(calculations: FinancialCalculationSet) -> dict[str, Any]:
 # -- deserialize ---------------------------------------------------------------
 
 def deserialize_financial_record(payload: Any) -> FinancialRecordDocument:
+    """Version 1 only; any other version (including 2) is rejected here."""
+    return _uniform_errors(_document, payload)
+
+
+def _uniform_errors(parse, payload: Any):
     try:
-        return _document(payload)
+        return parse(payload)
     except FinancialSerializationError:
         raise
     except (ValueError, TypeError, KeyError) as error:
@@ -502,12 +513,27 @@ def _parse_calculations(data: Any, resolution: FinancialDependencyResolution) ->
         decimal_rounding=_str(data["decimal_rounding"], "calculations.decimal_rounding"))
 
 
-def _document(payload: Any) -> FinancialRecordDocument:
-    data = _obj(payload, "payload", {"format", "version", "evidence", "selling_price", "resolution", "calculations"})
+def _check_version(data: dict[str, Any], version: int) -> None:
     if data["format"] != FORMAT:
         raise FinancialSerializationError(f"unknown format {data['format']!r}")
-    if type(data["version"]) is not int or data["version"] != VERSION:
+    if type(data["version"]) is not int or data["version"] != version:
         raise FinancialSerializationError(f"unsupported {FORMAT} version {data['version']!r}")
+
+
+def _versioned(payload: Any, keys: set[str], version: int) -> dict[str, Any]:
+    """Identity first, so another version is reported as such, then the exact key set."""
+    if isinstance(payload, dict) and "format" in payload and "version" in payload:
+        _check_version(payload, version)
+    data = _obj(payload, "payload", keys)
+    _check_version(data, version)
+    return data
+
+
+def _document(payload: Any) -> FinancialRecordDocument:
+    return _parse_core(_versioned(payload, {"format", "version", *CORE_KEYS}, VERSION))
+
+
+def _parse_core(data: dict[str, Any]) -> FinancialRecordDocument:
     evidence = _parse_evidence(data["evidence"])
     price = None
     if data["selling_price"] is not None:
