@@ -17,7 +17,14 @@ Nothing is inferred (ADR-047 §8, §11-§14):
 
 A declaration the contract cannot represent (e.g. an amount without its
 currency, a naive effective_at, a pack amount without allocation) drops that
-term and records why in `problems`; it is never repaired with a default.
+term and records why; it is never repaired with a default. Each diagnostic is
+emitted where it is detected as a CaptureDiagnostic (subject, code, message,
+row, and the column and raw cell value when the failing cell is known);
+`problems` keeps the same diagnostics as the legacy "<subject>: <message>" text.
+
+`fin_weight_*` declares the record's weight for the per-pound shipping operand,
+as supplied: its unit is never converted or assumed, and the legacy `weight`
+column is never read.
 VERIFIED here means "declared by this supplier file", never independent
 Amazon verification.
 """
@@ -28,6 +35,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
+from enum import Enum
 from typing import Any, Callable, Optional
 
 from juval.domain.financial_evidence import (
@@ -48,6 +56,7 @@ from juval.domain.units import CANONICAL_WEIGHT_UNIT
 from .column_mapping import (
     FINANCIAL_EVIDENCE_COLUMN_SPECS,
     FINANCIAL_PRICE_COLUMNS,
+    FINANCIAL_WEIGHT_COLUMNS,
     FINANCIAL_SCENARIO_COLUMNS,
     financial_term_column,
 )
@@ -66,6 +75,53 @@ _METHOD = "direct_read"
 BLANK_CELL_EVIDENCE = "blank cell in a present supplier-file column; no value declared"
 
 
+class CaptureCode(str, Enum):
+    """Why a declaration was not captured. A diagnostic, not a VerificationStatus."""
+
+    SCENARIO_UNDECLARED = "SCENARIO_UNDECLARED"
+    SCENARIO_INVALID = "SCENARIO_INVALID"
+    AMOUNT_COLUMN_ABSENT = "AMOUNT_COLUMN_ABSENT"
+    CURRENCY_UNDECLARED = "CURRENCY_UNDECLARED"
+    CURRENCY_INCOMPATIBLE = "CURRENCY_INCOMPATIBLE"
+    APPLICABILITY_COLUMN_ABSENT = "APPLICABILITY_COLUMN_ABSENT"
+    JUSTIFICATION_UNDECLARED = "JUSTIFICATION_UNDECLARED"
+    EFFECTIVE_AT_UNDECLARED = "EFFECTIVE_AT_UNDECLARED"
+    EFFECTIVE_AT_INVALID = "EFFECTIVE_AT_INVALID"
+    BASIS_UNDECLARED = "BASIS_UNDECLARED"
+    EXCLUSION_WITH_AMOUNT = "EXCLUSION_WITH_AMOUNT"
+    SOURCE_BASIS_INVALID = "SOURCE_BASIS_INVALID"
+    ALLOCATION_UNDECLARED = "ALLOCATION_UNDECLARED"
+    UNIT_UNDECLARED = "UNIT_UNDECLARED"
+    #: A domain contract rejected the declaration; the message is the contract's.
+    CONTRACT_REJECTED = "CONTRACT_REJECTED"
+
+
+@dataclass(frozen=True)
+class CaptureDiagnostic:
+    """One diagnostic as detected. `column`/`raw_value` are set only when a
+    specific cell caused it; they are never recovered from the message."""
+
+    subject: str
+    code: CaptureCode
+    message: str
+    row: int
+    column: Optional[str] = None
+    raw_value: Optional[str] = None
+
+    @property
+    def text(self) -> str:
+        return f"{self.subject}: {self.message}"
+
+
+class CaptureFailure(ValueError):
+    """A declaration that cannot be captured, with the cell that caused it."""
+
+    def __init__(self, code: CaptureCode, message: str, *, column: Optional[str] = None, raw: Any = None) -> None:
+        super().__init__(message)
+        self.code, self.column = code, column
+        self.raw_value = None if raw is None else str(raw)
+
+
 @dataclass(frozen=True)
 class NativeFinancialCapture:
     """What one imported row declared, before it is bound to an execution.
@@ -82,6 +138,8 @@ class NativeFinancialCapture:
     terms: tuple[FinancialTermEvidence, ...]
     problems: tuple[str, ...]
     selling_price: Optional[DeclaredSellingPrice] = None
+    diagnostics: tuple[CaptureDiagnostic, ...] = ()
+    weight: Optional[FieldValue] = None
 
     def bind(self, execution_id: str) -> FinancialEvidenceSet:
         """This row's FinancialEvidenceSet within `execution_id` (supplied by the caller)."""
@@ -102,6 +160,7 @@ def capture_native_financial_evidence(
     row = _Row(cells, row_number, source, now, parse_cell)
     scenario = row.scenario()
     selling_price = row.selling_price()
+    weight = row.weight()
     terms = []
     for term in FinancialTerm:
         evidence = row.term(term)
@@ -110,11 +169,15 @@ def capture_native_financial_evidence(
         if scenario is not None and evidence.has_usable_amount and term.nature is not TermNature.DIMENSIONLESS_RATIO:
             currency = evidence.amount.unit.split("/")[0]
             if currency != scenario.currency:
-                row.problem(term.value, f"currency {currency} is incompatible with scenario currency "
-                                        f"{scenario.currency}; not converted")
+                row.problem(term.value, CaptureFailure(
+                    CaptureCode.CURRENCY_INCOMPATIBLE,
+                    f"currency {currency} is incompatible with scenario currency {scenario.currency}; not converted",
+                    column=financial_term_column(term, "currency"), raw=currency))
                 continue
         terms.append(evidence)
-    return NativeFinancialCapture(record_ref, scenario, tuple(terms), tuple(row.problems), selling_price)
+    diagnostics = tuple(row.diagnostics)
+    return NativeFinancialCapture(record_ref, scenario, tuple(terms), tuple(d.text for d in diagnostics),
+                                  selling_price, diagnostics, weight)
 
 
 class _Row:
@@ -122,10 +185,14 @@ class _Row:
                  parse_cell: ParseCell) -> None:
         self.cells, self.row_number, self.source, self.now = cells, row_number, source, now
         self.parse_cell = parse_cell
-        self.problems: list[str] = []
+        self.diagnostics: list[CaptureDiagnostic] = []
 
-    def problem(self, subject: str, message: str) -> None:
-        self.problems.append(f"{subject}: {message}")
+    def problem(self, subject: str, error: ValueError) -> None:
+        if isinstance(error, CaptureFailure):
+            code, column, raw = error.code, error.column, error.raw_value
+        else:
+            code, column, raw = CaptureCode.CONTRACT_REJECTED, None, None
+        self.diagnostics.append(CaptureDiagnostic(subject, code, str(error), self.row_number, column, raw))
 
     def _text(self, column: str) -> Optional[str]:
         value, _ = self.parse_cell(self.cells.get(column), "str")
@@ -148,7 +215,8 @@ class _Row:
         missing = [header for header, target in FINANCIAL_SCENARIO_COLUMNS.items()
                    if target not in optional and declared[target] is None]
         if missing:
-            self.problem("scenario", f"not declared: {', '.join(missing)}")
+            self.problem("scenario", CaptureFailure(CaptureCode.SCENARIO_UNDECLARED,
+                                                    f"not declared: {', '.join(missing)}"))
             return None
         try:
             required = frozenset(FinancialTerm(name.strip().upper())
@@ -162,7 +230,7 @@ class _Row:
                 context_requirements=requirements,
             )
         except ValueError as error:
-            self.problem("scenario", str(error))
+            self.problem("scenario", CaptureFailure(CaptureCode.SCENARIO_INVALID, str(error)))
             return None
 
     def selling_price(self) -> Optional[DeclaredSellingPrice]:
@@ -173,7 +241,7 @@ class _Row:
             return None  # not declared in this row: structural absence
         try:
             if "amount" not in present:
-                raise ValueError("declared without an amount column")
+                raise CaptureFailure(CaptureCode.AMOUNT_COLUMN_ABSENT, "declared without an amount column")
             context = self._context(present)
             column = present["amount"]
             raw = self.cells.get(column)
@@ -186,7 +254,9 @@ class _Row:
             else:
                 currency = self._text(present["currency"]) if "currency" in present else None
                 if currency is None:
-                    raise ValueError("a declared price requires its declared currency; none is inferred")
+                    raise CaptureFailure(CaptureCode.CURRENCY_UNDECLARED,
+                                         "a declared price requires its declared currency; none is inferred",
+                                         column=present.get("currency"))
                 provenance = self._provenance(column)
                 method = self._text(present["method"]) if "method" in present else None
                 if method is None:
@@ -198,8 +268,41 @@ class _Row:
                                                  **provenance)
             return DeclaredSellingPrice(amount=amount, context=context)
         except ValueError as error:
-            self.problem("SELLING_PRICE", str(error))
+            self.problem("SELLING_PRICE", error)
             return None
+
+    def weight(self) -> Optional[FieldValue]:
+        """The row's declared weight, exactly as supplied; None when not declared.
+
+        The unit is the declared one (None when the unit cell is blank, reported
+        as UNIT_UNDECLARED): no unit is assumed and no conversion happens here.
+        """
+        present = {header.removeprefix("fin_weight_"): header
+                   for header in FINANCIAL_WEIGHT_COLUMNS if header in self.cells}
+        if all(self._text(column) is None for column in present.values()):
+            return None
+        if "amount" not in present:
+            self.problem("WEIGHT", CaptureFailure(CaptureCode.AMOUNT_COLUMN_ABSENT, "declared without an amount column"))
+            return None
+        column = present["amount"]
+        raw = self.cells.get(column)
+        value, valid = self.parse_cell(raw, "decimal")
+        if value is None:
+            return self._not_found(column)
+        if not valid or value < 0:
+            return FieldValue.invalid(str(raw).strip(), source_type=SourceType.SUPPLIER_FILE,
+                                      **self._provenance(column))
+        unit = self._text(present["unit"]) if "unit" in present else None
+        if unit is None:
+            self.problem("WEIGHT", CaptureFailure(CaptureCode.UNIT_UNDECLARED,
+                                                  "weight declared without a unit; none is assumed",
+                                                  column=present.get("unit")))
+        provenance = self._provenance(column)
+        method = self._text(present["method"]) if "method" in present else None
+        if method is None:
+            return FieldValue.verified(value, unit=unit, source_type=SourceType.SUPPLIER_FILE, **provenance)
+        provenance["method"] = method
+        return FieldValue.inferred(value, unit=unit, source_type=SourceType.SUPPLIER_FILE, **provenance)
 
     def term(self, term: FinancialTerm) -> Optional[FinancialTermEvidence]:
         columns = {suffix: financial_term_column(term, suffix)
@@ -216,19 +319,24 @@ class _Row:
             source_basis = self._text(present["source_basis"]) if "source_basis" in present else None
             if source_basis is not None:
                 if source_basis.lower() not in SOURCE_BASES:
-                    raise ValueError(f"source_basis must be one of {sorted(SOURCE_BASES)}, got {source_basis!r}")
+                    raise CaptureFailure(CaptureCode.SOURCE_BASIS_INVALID,
+                                         f"source_basis must be one of {sorted(SOURCE_BASES)}, got {source_basis!r}",
+                                         column=present["source_basis"], raw=source_basis)
                 if source_basis.lower() == "pack" and allocation is None:
-                    raise ValueError("a pack-sourced amount must declare its allocation to one sellable unit")
+                    raise CaptureFailure(CaptureCode.ALLOCATION_UNDECLARED,
+                                         "a pack-sourced amount must declare its allocation to one sellable unit",
+                                         column=present.get("allocation"))
             return FinancialTermEvidence(term=term, applicability=applicability, context=context,
                                          amount=amount, allocation_method=allocation)
         except ValueError as error:
-            self.problem(term.value, str(error))
+            self.problem(term.value, error)
             return None
 
     def _applicability(self, term: FinancialTerm, present: dict[str, str]) -> Applicability:
         column = present.get("applies")
         if column is None:
-            raise ValueError("declared without an applicability column; applicability is never inferred")
+            raise CaptureFailure(CaptureCode.APPLICABILITY_COLUMN_ABSENT,
+                                 "declared without an applicability column; applicability is never inferred")
         justification = self._text(present["justification"]) if "justification" in present else None
         raw = self.cells.get(column)
         value, valid = self.parse_cell(raw, "bool")
@@ -240,7 +348,9 @@ class _Row:
             justification = justification or f"applicability cell invalid in {self.source} row {self.row_number}"
         else:
             if justification is None:
-                raise ValueError("an applicability assertion requires a declared justification")
+                raise CaptureFailure(CaptureCode.JUSTIFICATION_UNDECLARED,
+                                     "an applicability assertion requires a declared justification",
+                                     column=present.get("justification"))
             method = self._text(present["applies_method"]) if "applies_method" in present else None
             provenance = self._provenance(column)
             if method is None:
@@ -255,17 +365,26 @@ class _Row:
         raw = self.cells.get(present["effective_at"]) if "effective_at" in present else None
         basis = self._text(present["basis"]) if "basis" in present else None
         if raw is None or (isinstance(raw, str) and not raw.strip()):
-            raise ValueError("effective_at not declared; the import time never substitutes for it")
+            raise CaptureFailure(CaptureCode.EFFECTIVE_AT_UNDECLARED,
+                                 "effective_at not declared; the import time never substitutes for it",
+                                 column=present.get("effective_at"))
         if basis is None:
-            raise ValueError("basis not declared; the amount's economic basis is never assumed")
+            raise CaptureFailure(CaptureCode.BASIS_UNDECLARED,
+                                 "basis not declared; the amount's economic basis is never assumed",
+                                 column=present.get("basis"))
         if isinstance(raw, datetime):
             effective_at = raw
         else:
             try:
                 effective_at = datetime.fromisoformat(str(raw).strip())
             except ValueError:
-                raise ValueError(f"effective_at {raw!r} is not an ISO 8601 instant") from None
-        return EffectiveContext(effective_at=effective_at, basis_definition=basis)
+                raise CaptureFailure(CaptureCode.EFFECTIVE_AT_INVALID, f"effective_at {raw!r} is not an ISO 8601 instant",
+                                     column=present["effective_at"], raw=raw) from None
+        try:
+            return EffectiveContext(effective_at=effective_at, basis_definition=basis)
+        except ValueError as error:
+            raise CaptureFailure(CaptureCode.EFFECTIVE_AT_INVALID, str(error),
+                                 column=present["effective_at"], raw=raw) from None
 
     def _amount(self, term: FinancialTerm, present: dict[str, str],
                 applicability: Applicability) -> Optional[FieldValue]:
@@ -276,7 +395,9 @@ class _Row:
         value, valid = self.parse_cell(raw, "decimal")
         if applicability.excludes:
             if value is not None:
-                raise ValueError("an accredited exclusion carries no amount, not even zero")
+                raise CaptureFailure(CaptureCode.EXCLUSION_WITH_AMOUNT,
+                                     "an accredited exclusion carries no amount, not even zero",
+                                     column=column, raw=raw)
             return None
         if value is None:
             return self._not_found(column)
@@ -290,7 +411,9 @@ class _Row:
         else:
             currency = self._text(present["currency"]) if "currency" in present else None
             if currency is None:
-                raise ValueError("a monetary amount requires its declared currency; none is inferred")
+                raise CaptureFailure(CaptureCode.CURRENCY_UNDECLARED,
+                                     "a monetary amount requires its declared currency; none is inferred",
+                                     column=present.get("currency"))
             unit = f"{currency}/{CANONICAL_WEIGHT_UNIT}" if term.nature is TermNature.MONETARY_PER_POUND else currency
         return FieldValue.verified(value, unit=unit, source_type=SourceType.SUPPLIER_FILE,
                                    **self._provenance(column))

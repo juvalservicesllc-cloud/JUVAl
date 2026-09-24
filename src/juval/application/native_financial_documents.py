@@ -9,10 +9,12 @@ complete scenario has no FinancialEvidenceSet and therefore no document —
 its capture problems are reported by the caller only.
 
 The v2 blocks carry only what this flow really has: the inputs it hands to
-the resolver (the declared price, the caller's targets; no per-record weight
-input exists, so weight is recorded as not supplied), the capturer's problem
-texts verbatim, and the implementation identity with whatever version or
-revision the caller actually knows (None otherwise).
+the resolver (the declared price, the declared `fin_weight_*` weight, the
+caller's targets), the capturer's diagnostics as emitted at the source
+(subject, row, and the failing column/raw value when known; format v2 has
+no field for the diagnostic code, which stays on the capture), and the
+implementation identity with whatever version or revision the caller
+actually knows (None otherwise).
 """
 
 from __future__ import annotations
@@ -50,11 +52,12 @@ def build_financial_documents(
             continue
         price = item.capture.selling_price
         supplied = SuppliedInputs(selling_price=price.amount if price is not None else None,
-                                  target_profit=target_profit, target_roi=target_roi)
+                                  weight=item.capture.weight, target_profit=target_profit, target_roi=target_roi)
         resolution = resolve_record_financial_dependencies(
             item, weight=supplied.weight, target_profit=target_profit, target_roi=target_roi)
         core = FinancialRecordDocument(item.evidence, price, resolution,
                                        calculate_financial_results(resolution, calculated_at=calculated_at))
-        documents.append(FinancialRecordDocumentV2(
-            core, supplied, tuple(CaptureProblem(text) for text in item.problems), identity))
+        problems = tuple(CaptureProblem(d.text, subject=d.subject, row=d.row, column=d.column, raw_value=d.raw_value)
+                         for d in item.capture.diagnostics)
+        documents.append(FinancialRecordDocumentV2(core, supplied, problems, identity))
     return tuple(documents)

@@ -395,10 +395,25 @@ Formato v2 (§19; serialización pura, sin persistencia ni consumidores):
     filas v2. Las filas v1 existentes no se convierten ni se rellenan.
   - Probado con la CLI: A y B se cumplen; C no, porque falta `code_revision` y
     porque el código y el runtime nombrados no se pueden verificar.
+- Captura estructurada y peso nativo:
+  - El capturador emite `CaptureDiagnostic` en origen: `subject`, `CaptureCode`,
+    mensaje, fila, y columna y valor original solo cuando una celda concreta es la
+    causa. Mantiene el texto legacy en `problems`.
+  - Los documentos v2 guardan `subject`, `row`, `column` y `raw_value` en
+    `CaptureProblem`.
+  - `code` no tiene campo en v2: queda en la captura y no se persiste. Guardarlo
+    exigiría añadir `code` a `CaptureProblem` en un v3, no modificar v2.
+  - `fin_weight_*` aporta un peso nativo por registro (valor, unidad declarada,
+    estado y provenance `SUPPLIER_FILE`) que llega como input `WEIGHT` del
+    resolvedor y a `supplied_inputs.weight`.
+  - No hay conversión kg→lb ni se usa el peso legacy. Una exclusión acreditada
+    de `SHIPPING_PER_POUND` no exige peso.
 - Pendiente:
-  - que el capturador emita problemas estructurados (código, columna, valor
-    original);
-  - los problemas de registros sin escenario completo, que no tienen documento;
+  - los diagnósticos de registros sin escenario completo o descartados por el
+    importer no tienen documento. El contrato mínimo sería un bloque de
+    diagnósticos por `(execution_id, record_ref)` independiente del set de
+    evidencia; en este loop no se creó ninguna tabla;
+  - persistir `code` (v3);
   - una fuente verificable de `code_revision`.
 - §19 sigue PENDING.
 

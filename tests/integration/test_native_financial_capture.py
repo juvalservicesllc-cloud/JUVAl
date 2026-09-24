@@ -326,7 +326,7 @@ def test_capture_is_deterministic(tmp_path):
 def test_capture_creates_no_price_observation_and_touches_no_downstream_layer():
     tree = ast.parse(pathlib.Path(financial_capture.__file__).read_text(encoding="utf-8"))
     imported = {node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)}
-    assert imported == {"__future__", "dataclasses", "datetime", "decimal", "typing",
+    assert imported == {"__future__", "dataclasses", "datetime", "decimal", "enum", "typing",
                         "juval.domain.financial_evidence", "juval.domain.provenance", "juval.domain.units",
                         "column_mapping"}
     assert not {"PriceObservation", "CostInputs", "FeeInputs"} & set(vars(financial_capture))

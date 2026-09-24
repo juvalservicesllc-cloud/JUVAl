@@ -101,6 +101,15 @@ FINANCIAL_PRICE_COLUMNS: dict[str, str] = {
 }
 
 
+#: Native per-record weight for the financial path (the per-pound shipping
+#: operand). Never read from, or written to, the legacy `weight` column.
+FINANCIAL_WEIGHT_COLUMNS: dict[str, str] = {
+    "fin_weight_amount": "decimal",
+    "fin_weight_unit": "str",
+    "fin_weight_method": "str",
+}
+
+
 def financial_term_column(term: FinancialTerm, suffix: str) -> str:
     """Header of one native evidence column, e.g. fin_referral_fee_amount."""
     return f"fin_{term.value.lower()}_{suffix}"
@@ -123,6 +132,8 @@ FINANCIAL_EVIDENCE_COLUMN_SPECS: tuple[ColumnSpec, ...] = (
     *_financial_term_specs(),
     *(ColumnSpec(header, f"declared_selling_price.{header.removeprefix('fin_selling_price_')}", False, value_type)
       for header, value_type in FINANCIAL_PRICE_COLUMNS.items()),
+    *(ColumnSpec(header, f"financial_weight.{header.removeprefix('fin_weight_')}", False, value_type)
+      for header, value_type in FINANCIAL_WEIGHT_COLUMNS.items()),
 )
 
 

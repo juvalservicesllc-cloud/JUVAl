@@ -316,6 +316,40 @@ NaN, Infinity o negativo da INVALID con el valor original. Un `0` es un cero
 declarado. Una moneda distinta de la del escenario no se rechaza en la captura:
 el resolvedor la informa como `CURRENCY_INCOMPATIBLE`, sin conversión.
 
+### 9.2c Peso financiero nativo (`fin_weight_*`)
+
+| Header | Significado |
+|---|---|
+| `fin_weight_amount` | Peso de la unidad vendible, tal como se declara |
+| `fin_weight_unit` | Unidad declarada; nunca se asume ni se convierte |
+| `fin_weight_method` | Si existe, el proveedor declara que lo *infirió* con ese método → `INFERRED` |
+
+- Se captura en `NativeFinancialCapture.weight` como `FieldValue` de
+  `SUPPLIER_FILE`, con fila y columna.
+- Estados:
+  - si ninguna celda está informada, no hay peso (ausencia estructural);
+  - un importe vacío da NOT_FOUND;
+  - un valor no numérico, NaN, Infinity o negativo da INVALID con el valor
+    original;
+  - un `0` es un cero declarado.
+- Una unidad vacía deja `unit=None` y emite `UNIT_UNDECLARED`.
+- Nunca se lee la columna legacy `weight`/`weight_unit`, y nada del peso nativo
+  llega a los registros comerciales.
+- Es el único origen del input `WEIGHT` del resolvedor, que solo lo usa si
+  `SHIPPING_PER_POUND` aplica con una tarifa utilizable y la unidad es
+  exactamente `lb`. `kg` queda bloqueado como `UNIT_INCOMPATIBLE`, sin conversión.
+
+### 9.2d Diagnósticos estructurados
+
+Cada problema se emite donde se detecta como
+`CaptureDiagnostic(subject, code, message, row, column?, raw_value?)`, con `code`
+de `CaptureCode`.
+- `column` y `raw_value` solo existen cuando una celda concreta causó el problema;
+  nunca se extraen del texto.
+- Un rechazo del contrato de dominio usa `CONTRACT_REJECTED` sin columna.
+- `NativeFinancialCapture.problems` conserva el mismo contenido como texto legacy
+  `"<subject>: <message>"`.
+
 ### 9.3 Entrega del resultado
 
 `ImportResult.financial_captures` tiene un `NativeFinancialCapture` por registro

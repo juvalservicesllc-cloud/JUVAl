@@ -92,12 +92,13 @@ def test_incompatible_target_currency_is_kept_verbatim(tmp_path):
     assert blocked.blocker is ResolutionBlocker.CURRENCY_INCOMPATIBLE
 
 
-def test_capture_problems_are_kept_verbatim_without_invented_structure(tmp_path):
+def test_capture_problems_keep_text_and_the_structure_emitted_at_source(tmp_path):
     _, _, store = cli_run(tmp_path, [row("A", **declared(T.PREP, "0.40", currency=""))], *FINANCIAL)
     document = load_v2(store)
     [problem] = document.capture_problems
     assert problem.text.startswith("PREP: a monetary amount requires its declared currency")
-    assert (problem.subject, problem.row, problem.column, problem.raw_value) == (None, None, None, None)
+    # Emitted by the capturer (4M): the blank currency cell is the cause, it has no raw value.
+    assert (problem.subject, problem.row, problem.column, problem.raw_value) == ("PREP", 2, "fin_prep_currency", None)
     assert document.document.evidence.evidence_for(T.PREP) is None                       # not turned into evidence
 
 
