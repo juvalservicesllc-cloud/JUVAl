@@ -30,7 +30,10 @@
   precondiciones matemáticas y calcula los seis resultados con las expresiones
   existentes. Falta un único criterio literal: la propagación transitiva de estados
   de operandos derivados (§16, §29.11), que hoy no pueden existir porque §15 no
-  aprueba ningún método de derivación. Los pasos 6-9 siguen
+  aprueba ningún método de derivación. El paso 6 (round-trip de persistencia)
+  sigue PENDING. Como avance, `application/financial_serialization.py` define el
+  formato versionado `juval.adr047.financial-record` v1 con round-trip JSON puro,
+  pero no persiste nada. Los pasos 6-9 siguen
   PENDING: no hay cálculo, proyección a CostInputs/FeeInputs, snapshot, persistencia, API, consumo por Decision
   Score ni activación de pipeline.
 
@@ -52,6 +55,7 @@ Implementado como contrato de dominio, sin acreditar dato alguno por sí mismo:
 | `LEGACY_SNAPSHOT_TERMS` / `legacy_snapshot_financial_operands` (application) | Proyección read-only de un record snapshot persistido: solo los slots que el snapshot conserva; el resto queda en ausencia estructural |
 | `FinancialResult` / `DEPENDENCY_MATRIX` / `resolve_financial_dependencies` / `ResultResolution` (domain) | Resolución pura por resultado de §16: dependencias exigidas, operandos utilizables sin copiar, exclusiones, bloqueos con motivo (`ResolutionBlocker`, no un VerificationStatus) y estado de eslabón más débil solo con dependencias resueltas |
 | `calculate_financial_results` / `FinancialCalculation` (application) | Cálculo acreditado por resultado: precondiciones matemáticas evaluadas, valor `CALCULATED` VERIFIED/INFERRED o NOT_FOUND con diagnóstico, operandos y evidencia originales enlazados, exactitud Decimal informada |
+| `FinancialRecordDocument` / `serialize_financial_record` / `deserialize_financial_record` (application) | Formato `juval.adr047.financial-record` v1: serialización pura, JSON-compatible, determinista y reversible de evidencia, precio declarado, resolución y cálculos; sin I/O ni persistencia |
 | `FeeEvidenceState` / `accredited_fee_evidence` (domain) | Vista acreditada por registro de los cuatro términos de fee: DECLARED/OBSERVED/INFERRED/DERIVED frente a ausente, NOT_FOUND, INVALID, excluido o aplicabilidad no resuelta; sin derivación ni defaults |
 | `DeclaredSellingPrice` (domain) | Precio declarado por registro con moneda propia en `amount.unit` y `EffectiveContext`; no es `PriceObservation` |
 | `FINANCIAL_EVIDENCE_COLUMN_SPECS` / `NativeFinancialCapture` / `capture_native_financial_evidence` (infrastructure/excel) | Captura nativa (§22 paso 3): lo que una fila declara explícitamente se convierte en `FinancialScenario`/`FinancialTermEvidence`; lo no representable se omite con motivo, nunca se completa con defaults |
@@ -219,6 +223,51 @@ Reglas:
   asignación, `depends_on`).
 - No hay persistencia, snapshot reproducible, API ni cambios de profitability o
   decisiones. Reproducibilidad financiera histórica (§19): PENDING.
+
+Serialización (§19, §21; avance hacia el paso 6, que sigue PENDING porque exige
+persistencia):
+- Formato `FORMAT="juval.adr047.financial-record"`, `VERSION=1`. La versión
+  identifica solo este contrato de serialización. Se conservan por separado la
+  identidad y versión del escenario, `policy_identity`, `execution_id`,
+  `record_reference` y el método de cálculo (`provenance.method` con la expresión).
+- Un formato o versión desconocidos se rechazan, y también cualquier versión no
+  entera.
+- Un `FinancialRecordDocument` agrupa `FinancialEvidenceSet`, `DeclaredSellingPrice`,
+  `FinancialDependencyResolution` y `FinancialCalculationSet`. Las partes opcionales
+  deben pertenecer a la misma ejecución, registro y escenario, y los cálculos deben
+  proceder de esa resolución.
+- Codificación:
+  - Decimal como `{"decimal": str(value)}`, exacto con signo y escala. Solo se
+    acepta de vuelta la forma canónica, parseada con el constructor `Decimal`, que
+    no redondea ni depende del contexto del llamador.
+  - Ningún valor financiero se codifica como float JSON.
+  - Instantes ISO 8601 canónicos con offset.
+  - Enums por valor.
+  - Claves exactas: una clave faltante o desconocida se rechaza.
+  - Los constructores de dominio revalidan sus invariantes al reconstruir.
+- Política decimal: `FinancialCalculationSet` registra ahora, como campos
+  aditivos, `decimal_precision=28` y `decimal_rounding="ROUND_HALF_EVEN"`, la
+  política efectiva ya descrita, junto con `exact` por resultado.
+- Referencias: cada dependencia de término se escribe con su operando y
+  aplicabilidad en línea y un `evidence_ref`. Al reconstruir, los valores en línea
+  deben coincidir con la evidencia referenciada y se restauran como los mismos
+  objetos del set. Los inputs explícitos (precio, peso, objetivos) vuelven como
+  objetos iguales, no idénticos. Cada cálculo se enlaza por nombre de resultado a su
+  `ResultResolution`.
+- Determinismo: `serialize(deserialize(p)) == p` y el JSON canónico
+  (`sort_keys=True`) es idéntico byte a byte. Lo probado es igualdad semántica
+  completa tras atravesar JSON real.
+- Resultados:
+  - un bloqueado se reconstruye como NOT_FOUND `CALCULATED` con su código y detalle;
+  - un no solicitado sigue ausente;
+  - una exclusión sigue sin importe.
+- Límites:
+  - no hay identidad de versión del algoritmo o implementación, así que un
+    payload no basta para afirmar recalculación histórica;
+  - un input explícito bloqueado (por ejemplo, un precio NOT_FOUND) no se conserva
+    como valor, porque la resolución solo guarda su bloqueo y detalle;
+  - no hay persistencia, snapshot referenciado inmutable ni enlace de
+    recalculación, y la reproducibilidad financiera histórica (§19) sigue PENDING.
 
 Precio declarado: `DeclaredSellingPrice(amount, context)` conserva la moneda en
 `amount.unit`, validada como código de 3 letras. No la toma del escenario, del

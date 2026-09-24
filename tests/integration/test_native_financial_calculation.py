@@ -53,3 +53,23 @@ def test_scenario_that_omits_formula_terms_does_not_calculate(tmp_path):
     item = calculate(xlsx(tmp_path, row)).for_result(R.PROFIT)
     assert item.blocker is CalculationBlocker.FORMULA_TERM_UNDECLARED
     assert item.value.status is VerificationStatus.NOT_FOUND and item.value.value is None
+
+
+def test_native_record_round_trips_through_versioned_json(tmp_path):
+    import json
+
+    from juval.application.financial_serialization import (
+        FinancialRecordDocument, deserialize_financial_record, serialize_financial_record,
+    )
+
+    path = xlsx(tmp_path, every_term_declared(**AMOUNTS))
+    item = run(path).financial_evidence[0]
+    resolution = resolve_record_financial_dependencies(item, target_profit=TP)
+    document = FinancialRecordDocument(item.evidence, item.capture.selling_price, resolution,
+                                       calculate_financial_results(resolution, calculated_at=NOW))
+    text = json.dumps(serialize_financial_record(document), sort_keys=True)
+    back = deserialize_financial_record(json.loads(text))
+    assert back == document
+    assert back.calculations.for_result(R.PROFIT).value.value == Decimal("9.30")
+    assert back.selling_price.amount.provenance.source_reference == "row=2;column=fin_selling_price_amount"
+    assert json.dumps(serialize_financial_record(back), sort_keys=True) == text

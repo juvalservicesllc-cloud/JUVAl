@@ -118,9 +118,14 @@ class FinancialCalculation:
 
 @dataclass(frozen=True)
 class FinancialCalculationSet:
+    """Results of one record. The decimal policy the calculation ran under is
+    recorded with them so a serialized set says how its quotients were rounded."""
+
     execution_id: str
     record_reference: str
     calculations: tuple[FinancialCalculation, ...]
+    decimal_precision: int = DECIMAL_PRECISION
+    decimal_rounding: str = DECIMAL_ROUNDING
 
     def for_result(self, result: FinancialResult) -> FinancialCalculation:
         return next(item for item in self.calculations if item.result == result)
