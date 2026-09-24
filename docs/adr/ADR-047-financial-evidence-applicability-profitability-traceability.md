@@ -9,9 +9,11 @@
 - Estado de implementación: PARTIALLY IMPLEMENTED. El paso 1 de §22
   (contratos de dominio aditivos) existe en `src/juval/domain/financial_evidence.py`,
   probado en `tests/unit/test_financial_evidence.py`. El paso 2 de §22 es
-  PARTIAL: existe solo la frontera de dominio que evalúa operandos legacy como
-  gaps sin promoción (`assess_legacy_financial_operands`); la lectura de runs,
-  snapshots y persistencia históricos sigue PENDING. Los pasos 3-9 siguen
+  PARTIAL: existen la frontera de dominio que evalúa operandos legacy como gaps
+  sin promoción (`assess_legacy_financial_operands`) y la proyección read-only de
+  `CostInputs`/`FeeInputs` en memoria hacia esa evaluación
+  (`application/legacy_financial_projection.py`); la lectura de runs y snapshots
+  persistidos sigue PENDING. Los pasos 3-9 siguen
   PENDING: no hay cálculo, proyección a CostInputs/FeeInputs, captura en importer,
   resolución de dependencias, snapshot, persistencia, API, consumo por Decision
   Score ni activación de pipeline.
@@ -30,6 +32,7 @@ Implementado como contrato de dominio, sin acreditar dato alguno por sí mismo:
 | `FinancialScenario` | Identidad, versión, moneda única, unidad vendible, identidad de política y universo de términos requeridos (§8, §11) |
 | `FinancialEvidenceSet` | Vinculación escenario/ejecución/registro y resolución inequívoca de moneda y dependencias |
 | `LegacyGap` / `LegacyTermGap` / `LegacyFinancialCompatibility` / `assess_legacy_financial_operands` | Evaluación determinista de compatibilidad legacy (§20): informa qué le falta a cada ubicación legacy para satisfacer el contrato; nunca produce evidencia |
+| `LEGACY_COST_TERMS` / `LEGACY_FEE_TERMS` / `legacy_financial_operands` (application) | Correspondencia explícita campo legacy → término y proyección read-only de los valores tal como están almacenados; declara el slot, no acredita el valor |
 
 Invariantes verificadas en tests: ausencia estructural (`amount=None`) distinta de
 NOT_FOUND, INVALID, cero acreditado y exclusión; exclusión sin operando monetario;
@@ -51,7 +54,19 @@ contexto efectivo no declarado y, si es monetario, moneda no vinculada al escena
 (nunca para `referral_fee_rate`). La asignación se exige solo para los términos
 asignados de §9, nunca para COG. `LegacyGap` es un diagnóstico, no un
 VerificationStatus. La correspondencia campo legacy → término se prueba con
-fixtures sintéticos; su uso sobre datos reales pertenece a pasos posteriores.
+fixtures sintéticos.
+
+Proyección legacy (ruta LEGACY, no la de nuevas importaciones): la correspondencia
+de los 12 campos de `CostInputs` y los 4 de `FeeInputs` con los 16 términos vive
+en `application/legacy_financial_projection.py`, cubre cada campo y cada término
+una sola vez y no la usa el dominio. Los valores pasan tal cual, incluidos los
+`Decimal("0")` por default; un `CostInputs`/`FeeInputs` ausente deja sus términos
+en ausencia estructural, nunca en cero. Qué `FeeInputs` se evalúa lo decide el
+llamador, porque el pipeline puede usar el argumento de batch en lugar de
+`record.fees` (§5). El precio de venta no tiene término (§9) y no se proyecta ni
+se convierte en `PriceObservation`. Probado con tipos legacy reales y con un
+registro importado desde un CSV sintético; la evidencia financiera nativa de
+nuevas importaciones (§22 paso 3 en adelante) es una ruta separada.
 
 Pendiente y explícitamente no implementado aquí: proyección determinística de
 operandos (§7), resolución de dependencias por resultado y propagación de estados
@@ -475,7 +490,8 @@ explicar dependencias por resultado y conservar reproducibilidad sin promover
 históricos. Exige más contexto de entrada y conservación; datos antes
 calculables numéricamente pueden no satisfacer el contrato acreditado.
 
-Los contratos de dominio y la frontera legacy de §1.1 no completan por sí solos un criterio íntegro
+Los contratos de dominio, la frontera legacy y su proyección read-only de §1.1
+no completan por sí solos un criterio íntegro
 de ADR-040: no hay resolución, integración, persistencia ni activación. Se
 mantienen Implementation 44/68, Verification 17/68, Production 0/12,
 Security 5/16 y Amazon 0/18, sin porcentaje agregado.
