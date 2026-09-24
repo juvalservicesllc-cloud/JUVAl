@@ -31,9 +31,12 @@
   existentes. Falta un único criterio literal: la propagación transitiva de estados
   de operandos derivados (§16, §29.11), que hoy no pueden existir porque §15 no
   aprueba ningún método de derivación. El paso 6 (round-trip de persistencia)
-  sigue PENDING. Como avance, `application/financial_serialization.py` define el
-  formato versionado `juval.adr047.financial-record` v1 con round-trip JSON puro,
-  pero no persiste nada. Los pasos 6-9 siguen
+  es PARTIAL. El formato `juval.adr047.financial-record` v1
+  (`application/financial_serialization.py`) se persiste y recupera en SQLite
+  (`application/financial_persistence.py` y la tabla
+  `execution_run_financial_records`), en la misma transacción que el run y sus
+  snapshots. Falta el backend Supabase/PostgreSQL y que la API o la CLI persistan
+  documentos. Los pasos 7-9 siguen
   PENDING: no hay cálculo, proyección a CostInputs/FeeInputs, snapshot, persistencia, API, consumo por Decision
   Score ni activación de pipeline.
 
@@ -56,6 +59,7 @@ Implementado como contrato de dominio, sin acreditar dato alguno por sí mismo:
 | `FinancialResult` / `DEPENDENCY_MATRIX` / `resolve_financial_dependencies` / `ResultResolution` (domain) | Resolución pura por resultado de §16: dependencias exigidas, operandos utilizables sin copiar, exclusiones, bloqueos con motivo (`ResolutionBlocker`, no un VerificationStatus) y estado de eslabón más débil solo con dependencias resueltas |
 | `calculate_financial_results` / `FinancialCalculation` (application) | Cálculo acreditado por resultado: precondiciones matemáticas evaluadas, valor `CALCULATED` VERIFIED/INFERRED o NOT_FOUND con diagnóstico, operandos y evidencia originales enlazados, exactitud Decimal informada |
 | `FinancialRecordDocument` / `serialize_financial_record` / `deserialize_financial_record` (application) | Formato `juval.adr047.financial-record` v1: serialización pura, JSON-compatible, determinista y reversible de evidencia, precio declarado, resolución y cálculos; sin I/O ni persistencia |
+| `save_run_with_financial_records` / `load_financial_record` (application) + `execution_run_financial_records` (SQLite) | Persistencia aditiva del payload v1 por `(execution_id, record_ref)`, atómica con run y snapshots; lectura que distingue ausencia, payload corrupto o versión desconocida, e identidad incoherente |
 | `FeeEvidenceState` / `accredited_fee_evidence` (domain) | Vista acreditada por registro de los cuatro términos de fee: DECLARED/OBSERVED/INFERRED/DERIVED frente a ausente, NOT_FOUND, INVALID, excluido o aplicabilidad no resuelta; sin derivación ni defaults |
 | `DeclaredSellingPrice` (domain) | Precio declarado por registro con moneda propia en `amount.unit` y `EffectiveContext`; no es `PriceObservation` |
 | `FINANCIAL_EVIDENCE_COLUMN_SPECS` / `NativeFinancialCapture` / `capture_native_financial_evidence` (infrastructure/excel) | Captura nativa (§22 paso 3): lo que una fila declara explícitamente se convierte en `FinancialScenario`/`FinancialTermEvidence`; lo no representable se omite con motivo, nunca se completa con defaults |
@@ -268,6 +272,54 @@ persistencia):
     como valor, porque la resolución solo guarda su bloqueo y detalle;
   - no hay persistencia, snapshot referenciado inmutable ni enlace de
     recalculación, y la reproducibilidad financiera histórica (§19) sigue PENDING.
+
+Persistencia SQLite (paso 6, PARTIAL):
+- Tabla aditiva `execution_run_financial_records`, con columnas `execution_id`,
+  `record_ref`, `format`, `format_version` y `payload`.
+- PK `(execution_id, record_ref)` y FK compuesta a
+  `execution_run_records(execution_id, record_ref)`: un documento solo puede existir
+  para un snapshot del mismo run. ASIN y UPC no participan en la identidad.
+- La tabla se crea con `CREATE TABLE IF NOT EXISTS` al abrir el store, la misma
+  convención local de ADR-013/019.
+- `SqliteExecutionRunStore.save_execution_run` acepta el argumento aditivo
+  `financial_records`, que se escribe dentro del mismo `with conn:` que el run y
+  los snapshots. Un fallo financiero (FK, PK duplicada, payload de otro run)
+  revierte el run y los snapshots. Esta atomicidad conjunta está probada en el
+  store.
+- El `Protocol` `ExecutionRunStore` y el store de Supabase no cambian.
+- `save_run_with_financial_records` valida antes de escribir que cada documento
+  pertenece al run y a uno de sus snapshots, una sola vez.
+- Un documento guardado no se sobrescribe.
+- `load_financial_record` devuelve:
+  - `None` si no hay documento;
+  - `FinancialSerializationError` si el payload está corrupto o es de formato o
+    versión desconocidos;
+  - `FinancialRecordIntegrityError` si las columnas o la identidad contradicen la
+    ubicación;
+  - errores de SQLite sin alterar.
+- Los runs legacy se leen igual, sin documento y sin backfill, y los snapshots
+  comerciales no cambian.
+
+Garantías y límites del documento persistido:
+- Recuperación: exacta del estado serializado. Está probada con igualdad semántica
+  y texto canónico idéntico.
+- Reconstrucción de entradas: parcial.
+  - Se conserva toda la evidencia del set, el precio declarado y los operandos
+    utilizados.
+  - Un input explícito bloqueado (por ejemplo, un precio o un peso NOT_FOUND) solo
+    queda como bloqueo y detalle, y no se reconstruye desde el texto del
+    diagnóstico.
+  - Los inputs explícitos no suministrados no existen en el documento.
+- Reproducción histórica: no garantizada.
+  - El run guarda `application_version` (`juval.__version__`), pero eso no
+    identifica por sí solo las funciones de `processing/profitability.py`, la
+    política de dependencias ni el entorno.
+  - El formato v1 no se modificó para añadir identidades.
+  - Contrato mínimo propuesto para un formato v2 o un snapshot reproducible:
+    identidad del calculador (módulo y versión del contrato de cálculo), commit o
+    digest de la implementación, `application_version` del run y los inputs
+    explícitos tal como se suministraron, incluidos los inutilizables.
+  - §19 sigue PENDING.
 
 Precio declarado: `DeclaredSellingPrice(amount, context)` conserva la moneda en
 `amount.unit`, validada como código de 3 letras. No la toma del escenario, del

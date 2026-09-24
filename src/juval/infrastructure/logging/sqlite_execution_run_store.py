@@ -32,6 +32,16 @@ row and every `execution_run_records` row inside the same `with conn:`
 block -- sqlite3's context manager commits once at the end or rolls
 back everything on any exception, so a run is never left half-saved.
 
+Native financial records (ADR-047 §22 step 6, SQLite only): a third table,
+`execution_run_financial_records`, holds at most one versioned financial
+payload (application/financial_serialization.py) per `(execution_id,
+record_ref)`, with a composite FOREIGN KEY to `execution_run_records` so a
+financial document can only exist for a record snapshot of the same run.
+The payload's format and version are also stored as columns. They are
+written by `save_execution_run(..., financial_records=...)` inside the same
+transaction as the run and its snapshots. A run saved without them simply
+has no rows here: legacy runs are neither rewritten nor backfilled.
+
 Concurrency: not designed for multi-writer use. Each operation opens and
 closes its own short-lived connection with SQLite's default settings
 (no WAL, no custom timeout) — sufficient for a single local user running
@@ -197,6 +207,28 @@ _BATCH_FILE_COUNT_COLUMNS = (
 )
 
 
+_FINANCIAL_SCHEMA = """
+CREATE TABLE IF NOT EXISTS execution_run_financial_records (
+    execution_id TEXT NOT NULL,
+    record_ref TEXT NOT NULL,
+    format TEXT NOT NULL,
+    format_version INTEGER NOT NULL,
+    payload TEXT NOT NULL,
+    PRIMARY KEY (execution_id, record_ref),
+    FOREIGN KEY (execution_id, record_ref) REFERENCES execution_run_records (execution_id, record_ref)
+)
+"""
+
+
+def _financial_row(execution_id: str, payload: Mapping[str, Any]) -> tuple[str, str, str, int, str]:
+    """Identity columns come from the payload itself; a payload of another run is refused."""
+    evidence = payload["evidence"]
+    if evidence["execution_id"] != execution_id:
+        raise ValueError(f"financial record of execution {evidence['execution_id']!r} saved under {execution_id!r}")
+    return (execution_id, evidence["record_reference"], payload["format"], payload["version"],
+            json.dumps(payload, sort_keys=True))
+
+
 def _add_missing_columns(conn: sqlite3.Connection, table: str, columns: tuple[tuple[str, str], ...]) -> None:
     existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
     for name, definition in columns:
@@ -255,9 +287,19 @@ class SqliteExecutionRunStore:
                 conn.execute(_BATCH_SCHEMA)
                 conn.execute(_BATCH_FILES_SCHEMA)
                 conn.execute(_BATCH_FILES_RUN_INDEX)
+                conn.execute(_FINANCIAL_SCHEMA)
                 _add_missing_columns(conn, "batch_files", _BATCH_FILE_COUNT_COLUMNS)
 
-    def save_execution_run(self, run: ExecutionRun, records: Sequence[Mapping[str, Any]] = ()) -> None:
+    def save_execution_run(
+        self,
+        run: ExecutionRun,
+        records: Sequence[Mapping[str, Any]] = (),
+        *,
+        financial_records: Sequence[Mapping[str, Any]] = (),
+    ) -> None:
+        """Run, record snapshots and (optionally) native financial payloads, all
+        in one transaction: any failure, including a financial one, rolls back
+        everything."""
         with closing(sqlite3.connect(self._db_path)) as conn:
             conn.execute("PRAGMA foreign_keys = ON")
             with conn:
@@ -283,6 +325,21 @@ class SqliteExecutionRunStore:
                         _INSERT_RECORD,
                         (run.execution_id, ordinal, record["record_ref"], json.dumps(record)),
                     )
+                for payload in financial_records:
+                    conn.execute(
+                        "INSERT INTO execution_run_financial_records "
+                        "(execution_id, record_ref, format, format_version, payload) VALUES (?, ?, ?, ?, ?)",
+                        _financial_row(run.execution_id, payload),
+                    )
+
+    def load_financial_record(self, execution_id: str, record_ref: str) -> Optional[tuple[str, int, str]]:
+        """(format, format_version, payload JSON text) of one run's record, or None
+        when that record has no financial document. Parsing is the caller's job."""
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            row = conn.execute(
+                "SELECT format, format_version, payload FROM execution_run_financial_records "
+                "WHERE execution_id = ? AND record_ref = ?", (execution_id, record_ref)).fetchone()
+        return tuple(row) if row is not None else None
 
     def load_execution_run(self, execution_id: str) -> Optional[ExecutionRun]:
         with closing(sqlite3.connect(self._db_path)) as conn:
