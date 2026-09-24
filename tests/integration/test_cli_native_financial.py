@@ -10,7 +10,9 @@ import pytest
 
 from juval.application import native_financial_documents as documents_module
 from juval.application.financial_calculation import CalculationBlocker as CB
-from juval.application.financial_persistence import load_financial_record
+from juval.application.financial_persistence import load_financial_record as load_any
+from juval.application.financial_serialization import FinancialRecordDocument
+from juval.application.financial_serialization_v2 import FinancialRecordDocumentV2
 from juval.application.record_snapshot import record_to_snapshot
 from juval.application.run_pipeline import run_pipeline
 from juval.domain.costs import FeeInputs
@@ -55,6 +57,15 @@ def cli_run(tmp_path, rows, *extra, db="runs.db", execution_id="run-A", name="in
     code = cli.main([str(path), str(tmp_path / f"{execution_id}-out.xlsx"), *ARGS, "--execution-id", execution_id,
                      "--persist-db", str(tmp_path / db), *extra])
     return code, path, SqliteExecutionRunStore(tmp_path / db)
+
+
+def load_financial_record(store, execution_id, record_ref):
+    """The CLI writes v2: return its financial core, or None when there is no document."""
+    document = load_any(store, execution_id, record_ref)
+    if document is None:
+        return None
+    assert type(document) is FinancialRecordDocumentV2
+    return document.document
 
 
 def count(db, table=TABLE):
@@ -175,9 +186,9 @@ def test_financial_failure_rolls_back_the_whole_run(tmp_path, monkeypatch, capsy
 
     def with_foreign_document(outcome, **kwargs):
         docs = real(outcome, **kwargs)
-        foreign = docs[0].evidence.__class__(docs[0].evidence.scenario, "run-OTHER", docs[0].evidence.record_reference,
-                                             docs[0].evidence.terms)
-        return (docs[0].__class__(foreign),)
+        evidence = docs[0].document.evidence
+        foreign = evidence.__class__(evidence.scenario, "run-OTHER", evidence.record_reference, evidence.terms)
+        return (FinancialRecordDocument(foreign),)
 
     monkeypatch.setattr(cli, "build_financial_documents", with_foreign_document)
     code, _, store = cli_run(tmp_path, [row("A")], *FINANCIAL)
@@ -245,7 +256,8 @@ def test_new_module_has_no_legacy_operands_network_or_supabase():
     tree = ast.parse(pathlib.Path(documents_module.__file__).read_text(encoding="utf-8"))
     modules = {node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)}
     assert modules == {"__future__", "datetime", "typing", "juval.application.financial_calculation",
-                       "juval.application.financial_serialization", "juval.application.native_financial_resolution",
-                       "juval.application.run_pipeline", "juval.domain.provenance"}
+                       "juval.application.financial_serialization", "juval.application.financial_serialization_v2",
+                       "juval.application.native_financial_resolution", "juval.application.run_pipeline",
+                       "juval.domain.provenance"}
     cli_text = pathlib.Path(cli.__file__).read_text(encoding="utf-8").lower()
     assert "supabase" not in cli_text and "interfaces.api" not in cli_text

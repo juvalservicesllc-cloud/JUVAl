@@ -201,8 +201,17 @@ def test_corrupt_payload_is_a_serialization_error_not_absence(tmp_path, store, p
 def test_unknown_payload_version_is_rejected(tmp_path, store):
     ref = saved(tmp_path, store)[0]
     text = store.load_financial_record("run-A", ref)[2]
-    tamper(tmp_path, f"UPDATE {TABLE} SET payload = ? WHERE record_ref = ?", text.replace('"version": 1', '"version": 2'), ref)
-    with pytest.raises(FinancialSerializationError, match="version"):
+    tamper(tmp_path, f"UPDATE {TABLE} SET payload = ? WHERE record_ref = ?", text.replace('"version": 1', '"version": 3'), ref)
+    with pytest.raises(FinancialSerializationError, match="version 3"):
+        load_financial_record(store, "run-A", ref)
+
+
+def test_v1_payload_relabelled_as_v2_is_rejected_not_upgraded(tmp_path, store):
+    ref = saved(tmp_path, store)[0]
+    text = store.load_financial_record("run-A", ref)[2]
+    tamper(tmp_path, f"UPDATE {TABLE} SET payload = ?, format_version = 2 WHERE record_ref = ?",
+           text.replace('"version": 1', '"version": 2'), ref)
+    with pytest.raises(FinancialSerializationError, match="supplied_inputs"):
         load_financial_record(store, "run-A", ref)
 
 
@@ -258,7 +267,7 @@ def test_persistence_module_uses_no_supabase_network_or_legacy_operands():
     tree = ast.parse(pathlib.Path(module.__file__).read_text(encoding="utf-8"))
     modules = {node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)}
     assert modules == {"__future__", "typing", "juval.application.financial_serialization",
-                       "juval.domain.execution_run"}
+                       "juval.application.financial_serialization_v2", "juval.domain.execution_run"}
     store_source = pathlib.Path(SqliteExecutionRunStore.__module__.replace(".", "/") + ".py")
     text = (pathlib.Path("src") / store_source).read_text(encoding="utf-8")
     assert "supabase" not in text.lower() and "requests" not in text and "http" not in text.lower()

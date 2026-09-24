@@ -1,12 +1,16 @@
 """Persist and load native financial records (ADR-047 §22 step 6, SQLite).
 
-Stores the v1 payload of application/financial_serialization.py next to the
-run and its record snapshots, in the same transaction, and reads it back.
-The format is not changed: what is stored is exactly serialize_financial_record.
+Stores a financial record payload next to the run and its record snapshots,
+in the same transaction, and reads it back. What is stored is exactly the
+canonical serialization of the document's own version: v1
+(serialize_financial_record) or v2 (serialize_financial_record_v2). Stored
+v1 rows are never rewritten or upgraded.
 
 Read outcomes stay distinct:
   * None                          -> that run/record has no financial document;
-  * FinancialSerializationError   -> stored text is not a valid v1 payload
+  * FinancialRecordDocument       -> a valid v1 document, returned as v1;
+  * FinancialRecordDocumentV2     -> a valid v2 document;
+  * FinancialSerializationError   -> stored text is not a valid payload
                                      (corrupt JSON/structure, unknown format or version);
   * FinancialRecordIntegrityError -> a valid payload whose identity or stored
                                      format columns contradict where it was found;
@@ -20,21 +24,37 @@ limits recorded in ADR-047.
 from __future__ import annotations
 
 import json
-from typing import Any, Mapping, Optional, Protocol, Sequence
+from typing import Any, Mapping, Optional, Protocol, Sequence, Union
 
 from juval.application.financial_serialization import (
     FORMAT,
-    VERSION,
     FinancialRecordDocument,
     FinancialSerializationError,
-    deserialize_financial_record,
     serialize_financial_record,
+)
+from juval.application.financial_serialization_v2 import (
+    FinancialRecordDocumentV2,
+    read_financial_record,
+    serialize_financial_record_v2,
 )
 from juval.domain.execution_run import ExecutionRun
 
 
 class FinancialRecordIntegrityError(ValueError):
     """A financial document does not belong where it is being saved or was found."""
+
+
+AnyFinancialRecord = Union[FinancialRecordDocument, FinancialRecordDocumentV2]
+
+
+def _core(document: AnyFinancialRecord) -> FinancialRecordDocument:
+    return document.document if isinstance(document, FinancialRecordDocumentV2) else document
+
+
+def _serialize(document: AnyFinancialRecord) -> dict[str, Any]:
+    if isinstance(document, FinancialRecordDocumentV2):
+        return serialize_financial_record_v2(document)
+    return serialize_financial_record(document)
 
 
 class FinancialRecordStore(Protocol):
@@ -48,7 +68,7 @@ def save_run_with_financial_records(
     store: FinancialRecordStore,
     run: ExecutionRun,
     snapshots: Sequence[Mapping[str, Any]],
-    documents: Sequence[FinancialRecordDocument],
+    documents: Sequence[AnyFinancialRecord],
 ) -> None:
     """Save run + snapshots + financial documents atomically.
 
@@ -59,7 +79,7 @@ def save_run_with_financial_records(
     seen: set[str] = set()
     payloads = []
     for document in documents:
-        evidence = document.evidence
+        evidence = _core(document).evidence
         if evidence.execution_id != run.execution_id:
             raise FinancialRecordIntegrityError(
                 f"document of execution {evidence.execution_id!r} cannot be saved with {run.execution_id!r}")
@@ -68,13 +88,13 @@ def save_run_with_financial_records(
         if evidence.record_reference in seen:
             raise FinancialRecordIntegrityError(f"{evidence.record_reference!r} has more than one document")
         seen.add(evidence.record_reference)
-        payloads.append(serialize_financial_record(document))
+        payloads.append(_serialize(document))
     store.save_execution_run(run, snapshots, financial_records=payloads)
 
 
 def load_financial_record(
     store: FinancialRecordStore, execution_id: str, record_ref: str
-) -> Optional[FinancialRecordDocument]:
+) -> Optional[AnyFinancialRecord]:
     row = store.load_financial_record(execution_id, record_ref)
     if row is None:
         return None
@@ -83,11 +103,13 @@ def load_financial_record(
         payload = json.loads(text)
     except json.JSONDecodeError as error:
         raise FinancialSerializationError(f"stored financial record is not JSON: {error}") from error
-    document = deserialize_financial_record(payload)  # rejects unknown format/version and corruption
-    if (stored_format, stored_version) != (FORMAT, VERSION):
+    document = read_financial_record(payload)  # explicit version dispatch; rejects unknown/corrupt
+    version = 2 if isinstance(document, FinancialRecordDocumentV2) else 1
+    if (stored_format, stored_version) != (FORMAT, version):
         raise FinancialRecordIntegrityError(
-            f"stored columns declare {stored_format!r} v{stored_version}, payload is {FORMAT!r} v{VERSION}")
-    found = (document.evidence.execution_id, document.evidence.record_reference)
+            f"stored columns declare {stored_format!r} v{stored_version}, payload is {FORMAT!r} v{version}")
+    evidence = _core(document).evidence
+    found = (evidence.execution_id, evidence.record_reference)
     if found != (execution_id, record_ref):
         raise FinancialRecordIntegrityError(f"payload identity {found} stored under {(execution_id, record_ref)}")
     return document

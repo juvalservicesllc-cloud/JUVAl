@@ -31,11 +31,19 @@ Excel de salida.
 
 - `--native-financial-evidence` requiere `--persist-db`. Sin este flag, el
   comportamiento es el legacy de siempre.
-- Con el flag, el run, sus snapshots y un documento financiero v1 por registro con
-  escenario completo (`fin_*`, ver `docs/architecture/EXCEL_PROCESSING.md` §9) se
+- Con el flag, el run, sus snapshots y un documento financiero **v2** por registro
+  con escenario completo (`fin_*`, ver `docs/architecture/EXCEL_PROCESSING.md` §9) se
   guardan en una sola transacción SQLite. Si esa escritura falla, el comando
   devuelve 3 y no se persiste nada del run.
-- Los problemas de captura se imprimen, porque el formato v1 no los guarda.
+- El documento v2 guarda, además del núcleo:
+  - los inputs que recibió el resolvedor, incluso inutilizables;
+  - los problemas de captura del registro, tal cual;
+  - la identidad de implementación, con `application_version` del run y
+    `code_revision`/`configuration` en `null`, porque no existe una fuente
+    verificable.
+- Los problemas de un registro sin escenario completo solo se imprimen, porque ese
+  registro no tiene documento.
+- Los documentos v1 guardados antes se siguen leyendo como v1.
 - Registros, Excel de salida, profitability y decisiones son idénticos a la ruta
   legacy.
 - Los `--financial-target-*` son opcionales y no reutilizan los `--target-*`

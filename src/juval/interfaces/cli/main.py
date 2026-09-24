@@ -13,7 +13,7 @@ persists automatically, and this interface is simply the first concrete
 caller that can choose to.
 
 Native financial evidence (ADR-047) is a second opt-in, `--native-financial-evidence`,
-and needs `--persist-db`: the run, its record snapshots and one v1 financial
+and needs `--persist-db`: the run, its record snapshots and one v2 financial
 document per record with declared native evidence are saved in one SQLite
 transaction. It never changes records, profitability or decisions. Its only
 extra inputs are explicit flags with their own unit (`--financial-target-profit`
@@ -207,8 +207,11 @@ def _persist_native_financial(args: argparse.Namespace, outcome, now: datetime) 
     target_roi = None
     if args.financial_target_roi is not None:
         target_roi = _financial_input(args.financial_target_roi, "ratio", "--financial-target-roi", now)
+    # application_version is the run's real one; no verified code revision source
+    # exists here, so the documents record it as unknown (None).
     documents = build_financial_documents(outcome, calculated_at=now, target_profit=target_profit,
-                                          target_roi=target_roi)
+                                          target_roi=target_roi,
+                                          application_version=outcome.run.application_version)
     problems = sum(len(item.problems) for item in outcome.financial_evidence)
     print(f"financial: captures={len(outcome.financial_evidence)} documents={len(documents)} "
           f"without_scenario={sum(1 for item in outcome.financial_evidence if item.evidence is None)} "

@@ -378,13 +378,28 @@ Formato v2 (§19; serialización pura, sin persistencia ni consumidores):
     revisión desconocidas, tablas distintas de las del código actual, requisitos
     de contexto sin método, ausencia de cálculo) y siempre incluye que el código
     y el runtime nombrados no son verificables desde el documento.
-- Pendiente para conectar v2, sin implementarlo aquí:
-  - que `build_financial_documents` construya `FinancialRecordDocumentV2` con los
-    `target_*` y los `problems` que ya tiene, más `application_version` y
-    `code_revision` suministrados por el llamador;
-  - persistir `format_version=2` en SQLite;
+- Integración de v2 con la CLI y SQLite:
+  - `build_financial_documents` produce ahora `FinancialRecordDocumentV2`:
+    - `supplied_inputs` con el precio declarado, los `--financial-target-*` y el
+      peso como no suministrado, porque no existe input de peso por registro;
+    - un `CaptureProblem(text)` por cada problema del registro, sin estructura
+      inventada;
+    - `ImplementationIdentity.current(application_version=<la del run>)`, con
+      `code_revision` y `configuration` en `null`, porque no hay fuente
+      verificable y no se añadió un flag para rellenarlos.
+  - `save_run_with_financial_records` acepta documentos v1 y v2 y guarda cada uno
+    con su serialización canónica y su `format_version`, en la misma tabla y
+    transacción.
+  - `load_financial_record` usa `read_financial_record` y devuelve
+    `FinancialRecordDocument` para filas v1 o `FinancialRecordDocumentV2` para
+    filas v2. Las filas v1 existentes no se convierten ni se rellenan.
+  - Probado con la CLI: A y B se cumplen; C no, porque falta `code_revision` y
+    porque el código y el runtime nombrados no se pueden verificar.
+- Pendiente:
   - que el capturador emita problemas estructurados (código, columna, valor
-    original).
+    original);
+  - los problemas de registros sin escenario completo, que no tienen documento;
+  - una fuente verificable de `code_revision`.
 - §19 sigue PENDING.
 
 Precio declarado: `DeclaredSellingPrice(amount, context)` conserva la moneda en
