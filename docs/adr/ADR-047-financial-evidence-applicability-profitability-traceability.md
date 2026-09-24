@@ -26,8 +26,11 @@
   sin derivación referral fee↔rate, porque §15 no aprueba ningún método; la
   construcción desde tarifas o fuentes de fees sigue pendiente (H-02). El paso 5 es PARTIAL:
   `domain/financial_dependencies.py` resuelve por resultado las dependencias de
-  evidencia de §16 sin calcular. Faltan las precondiciones matemáticas y el cálculo
-  acreditado. Los pasos 6-9 siguen
+  evidencia de §16 y `application/financial_calculation.py` evalúa las
+  precondiciones matemáticas y calcula los seis resultados con las expresiones
+  existentes. Falta un único criterio literal: la propagación transitiva de estados
+  de operandos derivados (§16, §29.11), que hoy no pueden existir porque §15 no
+  aprueba ningún método de derivación. Los pasos 6-9 siguen
   PENDING: no hay cálculo, proyección a CostInputs/FeeInputs, snapshot, persistencia, API, consumo por Decision
   Score ni activación de pipeline.
 
@@ -48,6 +51,7 @@ Implementado como contrato de dominio, sin acreditar dato alguno por sí mismo:
 | `LEGACY_COST_TERMS` / `LEGACY_FEE_TERMS` / `legacy_financial_operands` (application) | Correspondencia explícita campo legacy → término y proyección read-only de los valores tal como están almacenados; declara el slot, no acredita el valor |
 | `LEGACY_SNAPSHOT_TERMS` / `legacy_snapshot_financial_operands` (application) | Proyección read-only de un record snapshot persistido: solo los slots que el snapshot conserva; el resto queda en ausencia estructural |
 | `FinancialResult` / `DEPENDENCY_MATRIX` / `resolve_financial_dependencies` / `ResultResolution` (domain) | Resolución pura por resultado de §16: dependencias exigidas, operandos utilizables sin copiar, exclusiones, bloqueos con motivo (`ResolutionBlocker`, no un VerificationStatus) y estado de eslabón más débil solo con dependencias resueltas |
+| `calculate_financial_results` / `FinancialCalculation` (application) | Cálculo acreditado por resultado: precondiciones matemáticas evaluadas, valor `CALCULATED` VERIFIED/INFERRED o NOT_FOUND con diagnóstico, operandos y evidencia originales enlazados, exactitud Decimal informada |
 | `FeeEvidenceState` / `accredited_fee_evidence` (domain) | Vista acreditada por registro de los cuatro términos de fee: DECLARED/OBSERVED/INFERRED/DERIVED frente a ausente, NOT_FOUND, INVALID, excluido o aplicabilidad no resuelta; sin derivación ni defaults |
 | `DeclaredSellingPrice` (domain) | Precio declarado por registro con moneda propia en `amount.unit` y `EffectiveContext`; no es `PriceObservation` |
 | `FINANCIAL_EVIDENCE_COLUMN_SPECS` / `NativeFinancialCapture` / `capture_native_financial_evidence` (infrastructure/excel) | Captura nativa (§22 paso 3): lo que una fila declara explícitamente se convierte en `FinancialScenario`/`FinancialTermEvidence`; lo no representable se omite con motivo, nunca se completa con defaults |
@@ -181,6 +185,40 @@ Pendiente del paso 4:
 - cualquier método aprobado de derivación (§15).
 - Mientras se aprueba un método de derivación, el resolvedor tampoco expande
   dependencias transitivas de fees derivados.
+
+Cálculo acreditado (§7, §16, §17; paso 5):
+`calculate_financial_results(resolution, calculated_at=, requested=)` vive en
+`application/` porque reutiliza sin cambios las funciones puras Decimal de
+`processing/profitability.py`: `compute_profit`, `compute_roi`, `compute_margin`,
+`compute_break_even_price` y `compute_max_cog_for_target_*`. Las expresiones son,
+por tanto, exactamente las existentes, y un test lo comprueba contra el motor
+legacy con operandos equivalentes.
+
+Reglas:
+- Neutros: un término de la fórmula aporta su operando, o 0 solo si su exclusión
+  está resuelta (§7). `SHIPPING_PER_POUND` aporta tasa × peso en lb.
+- Tensión §8/§7, resuelta de forma conservadora: un término que el escenario no
+  requiere ni representa no es dependencia para la resolución, pero tampoco tiene
+  un neutro acreditado. Por eso el cálculo se bloquea con
+  `FORMULA_TERM_UNDECLARED` en lugar de sumarlo como cero (§13). En la práctica,
+  un escenario calculable declara cada término de la fórmula, como operando o
+  como exclusión.
+- Precondiciones: las mismas cadenas que el resolvedor (C = COG + C0 > 0, P > 0,
+  1 - r > 0, 1 + tr > 0), evaluadas sin tolerancias. Si alguna falla, el resultado
+  es un NOT_FOUND `CALCULATED` con el diagnóstico en `evidence`, nunca cero.
+- Estado: VERIFIED o INFERRED según `combine_verification_status`, con
+  `source_type=CALCULATED`, `retrieved_at=calculated_at` (instante del cálculo),
+  el método con la expresión y la referencia al escenario.
+- Moneda: la del escenario, o `ratio` para ROI y margin.
+- Un resultado no solicitado queda ausente del conjunto, no como cálculo fallido.
+- Decimal: un contexto nuevo por llamada con la precisión y el redondeo por
+  defecto de Python (prec=28, ROUND_HALF_EVEN), que es la política efectiva del
+  motor legacy; no es una política nueva. El contexto global del llamador no
+  altera el resultado, y `exact=False` indica que una división tuvo que redondear.
+- Cada dependencia enlaza su `FinancialTermEvidence` completo (contexto,
+  asignación, `depends_on`).
+- No hay persistencia, snapshot reproducible, API ni cambios de profitability o
+  decisiones. Reproducibilidad financiera histórica (§19): PENDING.
 
 Precio declarado: `DeclaredSellingPrice(amount, context)` conserva la moneda en
 `amount.unit`, validada como código de 3 letras. No la toma del escenario, del

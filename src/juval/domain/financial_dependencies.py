@@ -36,6 +36,7 @@ from .financial_evidence import (
     FinancialEvidenceSet,
     FinancialScenario,
     FinancialTerm,
+    FinancialTermEvidence,
 )
 from .provenance import FieldValue, VerificationStatus, combine_verification_status
 from .units import CANONICAL_WEIGHT_UNIT
@@ -106,6 +107,8 @@ class DependencyResolution:
     provenance as captured); `applicability` is the assertion a term's
     inclusion or exclusion depends on. An accredited exclusion has no operand,
     `excluded=True` and keeps its applicability status (INFERRED stays INFERRED).
+    `evidence` links the term's whole FinancialTermEvidence (context,
+    allocation, depends_on) so no part of it is lost by resolution.
     """
 
     dependency: str
@@ -115,6 +118,7 @@ class DependencyResolution:
     excluded: bool = False
     blocker: Optional[ResolutionBlocker] = None
     detail: Optional[str] = None
+    evidence: Optional[FinancialTermEvidence] = None
 
     @property
     def statuses(self) -> tuple[VerificationStatus, ...]:
@@ -204,21 +208,21 @@ def _resolve_term(term: FinancialTerm, evidence: FinancialEvidenceSet,
     if not item.applicability.is_resolved:
         return (DependencyResolution(term.value, term, applicability=applies,
                                      blocker=ResolutionBlocker.APPLICABILITY_UNRESOLVED,
-                                     detail=f"applicability is {applies.status.value}"),)
+                                     detail=f"applicability is {applies.status.value}", evidence=item),)
     if item.applicability.excludes:
-        return (DependencyResolution(term.value, term, applicability=applies, excluded=True),)
+        return (DependencyResolution(term.value, term, applicability=applies, excluded=True, evidence=item),)
     amount = item.amount
     if amount is None:
         resolved = DependencyResolution(term.value, term, applicability=applies,
                                         blocker=ResolutionBlocker.STRUCTURALLY_ABSENT,
-                                        detail="applies but no amount is represented")
+                                        detail="applies but no amount is represented", evidence=item)
     elif not amount.is_usable:
         blocker = (ResolutionBlocker.VALUE_INVALID if amount.status is VerificationStatus.INVALID
                    else ResolutionBlocker.VALUE_NOT_FOUND)
         resolved = DependencyResolution(term.value, term, operand=None, applicability=applies,
-                                        blocker=blocker, detail=f"amount is {amount.status.value}")
+                                        blocker=blocker, detail=f"amount is {amount.status.value}", evidence=item)
     else:
-        resolved = DependencyResolution(term.value, term, operand=amount, applicability=applies)
+        resolved = DependencyResolution(term.value, term, operand=amount, applicability=applies, evidence=item)
     if term is not FinancialTerm.SHIPPING_PER_POUND or resolved.blocker is not None:
         return (resolved,)
     # A per-pound rate is only an operand together with the effective weight.
