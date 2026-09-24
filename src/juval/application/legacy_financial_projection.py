@@ -11,13 +11,18 @@ This is the LEGACY diagnostic path only. It is not how new imports capture
 financial evidence, and nothing here builds FinancialTermEvidence, a
 FinancialEvidenceSet or a price observation. The selling price has no
 FinancialTerm (ADR-047 §9) and is deliberately not projected.
+
+Two legacy sources are read: in-memory CostInputs/FeeInputs, and persisted
+record snapshots (application/record_snapshot.py), which keep only `cog` and
+`shipping_per_unit`. What a snapshot never stored stays structurally absent;
+it is not rebuilt from today's defaults, the runtime record or the importer.
 """
 
 from __future__ import annotations
 
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from types import MappingProxyType
-from typing import Mapping, Optional
+from typing import Any, Mapping, Optional
 
 from juval.domain.costs import CostInputs, FeeInputs
 from juval.domain.financial_evidence import FinancialTerm
@@ -64,4 +69,54 @@ def legacy_financial_operands(
             raise ValueError(f"Expected {kind.__name__} or None, got {type(legacy).__name__}")
         for name, term in terms.items():
             operands[term] = getattr(legacy, name) if legacy is not None else None
+    return operands
+
+
+#: Record snapshot key -> FinancialTerm, for the only financial inputs
+#: record_to_snapshot persists. total_fees/seller_proceeds/total_cost are
+#: calculated results, not terms, and are deliberately not projected.
+LEGACY_SNAPSHOT_TERMS: Mapping[str, FinancialTerm] = MappingProxyType({
+    "cog": FinancialTerm.COG,
+    "shipping_per_unit": FinancialTerm.SHIPPING_PER_UNIT,
+})
+
+
+def _snapshot_decimal(key: str, raw: Any) -> Optional[Decimal]:
+    """Parse one persisted slot; parsing is syntax, not accreditation.
+
+    The writer stores str(Decimal) of a non-negative CostInputs value, or None.
+    Anything else is corruption and fails loudly: never read as zero, absence
+    or NOT_FOUND. The exact round-trip check rejects float-like drift,
+    whitespace and signs the writer never produces.
+    """
+    if raw is None:
+        return None
+    try:
+        value = Decimal(raw) if isinstance(raw, str) else None
+    except InvalidOperation:
+        value = None
+    if value is None or str(value) != raw or value.is_nan() or value < 0:
+        raise ValueError(f"Corrupt legacy snapshot {key!r}: {raw!r} is not a persisted Decimal string")
+    return value
+
+
+def legacy_snapshot_financial_operands(
+    snapshot: Mapping[str, Any],
+) -> dict[FinancialTerm, Optional[Decimal]]:
+    """Legacy slots of one persisted record snapshot, keyed by FinancialTerm.
+
+    Only `cog` and `shipping_per_unit` are read; the other 14 terms are
+    structurally absent because the snapshot never stored them. Both keys have
+    been written since the snapshot format exists, so a snapshot missing
+    either is not this contract and is rejected rather than read as absence.
+    """
+    if not isinstance(snapshot, Mapping):
+        raise ValueError(f"Expected a record snapshot mapping, got {type(snapshot).__name__}")
+    missing = [key for key in LEGACY_SNAPSHOT_TERMS if key not in snapshot]
+    if missing:
+        raise ValueError(f"Not a legacy record snapshot: missing {', '.join(missing)}")
+    operands: dict[FinancialTerm, Optional[Decimal]] = dict.fromkeys(
+        (*LEGACY_COST_TERMS.values(), *LEGACY_FEE_TERMS.values()))
+    for key, term in LEGACY_SNAPSHOT_TERMS.items():
+        operands[term] = _snapshot_decimal(key, snapshot[key])
     return operands

@@ -1,4 +1,5 @@
 """Synthetic legacy fixtures only: real CostInputs/FeeInputs types, no provider data."""
+import copy
 import dataclasses
 import sys
 from datetime import datetime, timezone
@@ -8,14 +9,18 @@ import pytest
 
 from juval.application import legacy_financial_projection as projection
 from juval.application.legacy_financial_projection import (
-    LEGACY_COST_TERMS, LEGACY_FEE_TERMS, legacy_financial_operands,
+    LEGACY_COST_TERMS, LEGACY_FEE_TERMS, LEGACY_SNAPSHOT_TERMS, legacy_financial_operands,
+    legacy_snapshot_financial_operands,
 )
+from juval.application.record_snapshot import record_to_snapshot
 from juval.domain.costs import CostInputs, FeeInputs
 from juval.domain.financial_evidence import (
     FinancialEvidenceSet, FinancialTerm, FinancialTermEvidence, LegacyGap,
     assess_legacy_financial_operands,
 )
+from juval.domain.product import Identification, Price, Product, SellingPriceSource
 from juval.domain.provenance import FieldValue, SourceType, VerificationStatus
+from juval.domain.sourcing_record import SourcingRecord
 
 NOW = datetime(2026, 2, 3, tzinfo=timezone.utc)
 COSTS = CostInputs(cog=Decimal("4.50"), shipping_per_unit=Decimal("0.80"))
@@ -117,3 +122,103 @@ def test_projection_and_assessment_are_deterministic():
 def test_projection_rejects_swapped_or_untyped_legacy_objects(costs, fees):
     with pytest.raises(ValueError):
         legacy_financial_operands(costs, fees)
+
+
+# -- Persisted record snapshots (application/record_snapshot.py) ----------
+
+def snapshot(costs=COSTS, fees=FEES):
+    price = FieldValue.verified(Decimal("19.99"), unit="USD", source="synthetic-supplier-file",
+                                source_type=SourceType.SUPPLIER_FILE, retrieved_at=NOW, method="m")
+    asin = FieldValue.not_found(source="synthetic", method="m", retrieved_at=NOW)
+    product = Product(identification=Identification(asin=asin, marketplace="US", supplier_sku="SKU-1"),
+                      price=Price(selling_price_used=price,
+                                  selling_price_source=SellingPriceSource.CURRENT_BUY_BOX))
+    return record_to_snapshot(SourcingRecord(record_ref="row_1", product=product,
+                                             costs=costs, fees=fees))
+
+
+PERSISTED = {FinancialTerm.COG, FinancialTerm.SHIPPING_PER_UNIT}
+
+
+def test_snapshot_mapping_is_a_subset_of_the_cost_mapping():
+    assert dict(LEGACY_SNAPSHOT_TERMS).items() <= dict(LEGACY_COST_TERMS).items()
+    assert set(LEGACY_SNAPSHOT_TERMS.values()) == PERSISTED
+
+
+def test_snapshot_projects_persisted_strings_and_leaves_the_rest_absent():
+    stored = snapshot()
+    assert (stored["cog"], stored["shipping_per_unit"]) == ("4.50", "0.80")
+    operands = legacy_snapshot_financial_operands(stored)
+    assert operands[FinancialTerm.COG] == Decimal("4.50")
+    assert operands[FinancialTerm.SHIPPING_PER_UNIT] == Decimal("0.80")
+    assert type(operands[FinancialTerm.COG]) is Decimal
+    assert set(operands) == set(FinancialTerm)
+    # FeeInputs were attached to the record, yet the snapshot never stored them:
+    # nothing reappears from today's defaults or the runtime record.
+    assert {term for term, value in operands.items() if value is None} == set(FinancialTerm) - PERSISTED
+    report = assess_legacy_financial_operands(operands)
+    for entry in report.terms:
+        if entry.term in PERSISTED:
+            assert entry.represented and LegacyGap.NO_PROVENANCE in entry.gaps
+        else:
+            assert entry.gaps == (LegacyGap.STRUCTURALLY_ABSENT,)
+    assert [entry.term.value for entry in report.terms] == sorted(t.value for t in FinancialTerm)
+    assert not report.satisfies_contract
+
+
+def test_snapshot_without_costs_is_all_structural_absence():
+    operands = legacy_snapshot_financial_operands(snapshot(costs=None))
+    assert all(value is None for value in operands.values())
+
+
+@pytest.mark.parametrize("raw", ["0", "0.0", "0.00"])
+def test_persisted_zero_is_parsed_but_never_accredited(raw):
+    operands = legacy_snapshot_financial_operands({**snapshot(), "shipping_per_unit": raw})
+    assert str(operands[FinancialTerm.SHIPPING_PER_UNIT]) == raw
+    entry = assess_legacy_financial_operands(operands).gap_for(FinancialTerm.SHIPPING_PER_UNIT)
+    assert {LegacyGap.NO_PROVENANCE, LegacyGap.ZERO_INDISTINGUISHABLE_FROM_DEFAULT,
+            LegacyGap.APPLICABILITY_UNRESOLVED} <= set(entry.gaps)
+
+
+def test_decimal_strings_parse_exactly_without_float_round_trip():
+    raw = "0.1000000000000000055511151231257827"
+    operands = legacy_snapshot_financial_operands({**snapshot(), "cog": raw})
+    assert str(operands[FinancialTerm.COG]) == raw
+    assert operands[FinancialTerm.COG] != Decimal(float(raw))
+
+
+@pytest.mark.parametrize("raw", [
+    "", " ", "abc", " 4.50", "4.50 ", "+4.50", "-1", "NaN", "sNaN", "4,50", 4.5, 4, True,
+    {"value": "4.50"},
+])
+def test_corrupt_persisted_value_fails_loudly_instead_of_zero_or_absence(raw):
+    with pytest.raises(ValueError, match="Corrupt legacy snapshot"):
+        legacy_snapshot_financial_operands({**snapshot(), "cog": raw})
+
+
+@pytest.mark.parametrize("key", ["cog", "shipping_per_unit"])
+def test_snapshot_missing_a_contract_key_is_rejected_not_read_as_absence(key):
+    stored = snapshot()
+    del stored[key]
+    with pytest.raises(ValueError, match="Not a legacy record snapshot"):
+        legacy_snapshot_financial_operands(stored)
+    with pytest.raises(ValueError):
+        legacy_snapshot_financial_operands([("cog", "1")])
+
+
+def test_snapshot_projection_is_read_only_deterministic_and_creates_no_evidence():
+    stored = snapshot()
+    before = copy.deepcopy(stored)
+    first = legacy_snapshot_financial_operands(stored)
+    assert stored == before  # input not mutated
+    assert first == legacy_snapshot_financial_operands(before)
+    assert list(first) == list(legacy_snapshot_financial_operands(before))
+    assert assess_legacy_financial_operands(first) == assess_legacy_financial_operands(
+        legacy_snapshot_financial_operands(before))
+    assert not any(isinstance(v, (FieldValue, FinancialTermEvidence, FinancialEvidenceSet))
+                   for v in first.values())
+    # The persisted selling price (a provenanced FieldValue dict) is left untouched,
+    # has no FinancialTerm slot and never becomes a PriceObservation.
+    assert "selling_price" not in LEGACY_SNAPSHOT_TERMS
+    assert stored["selling_price"]["status"] == "VERIFIED"
+    assert Decimal("19.99") not in first.values()

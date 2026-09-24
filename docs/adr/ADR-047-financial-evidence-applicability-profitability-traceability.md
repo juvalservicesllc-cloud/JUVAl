@@ -8,12 +8,13 @@
   Evidence Contract y de la dirección aditiva A+ el 2026-09-22.
 - Estado de implementación: PARTIALLY IMPLEMENTED. El paso 1 de §22
   (contratos de dominio aditivos) existe en `src/juval/domain/financial_evidence.py`,
-  probado en `tests/unit/test_financial_evidence.py`. El paso 2 de §22 es
-  PARTIAL: existen la frontera de dominio que evalúa operandos legacy como gaps
-  sin promoción (`assess_legacy_financial_operands`) y la proyección read-only de
-  `CostInputs`/`FeeInputs` en memoria hacia esa evaluación
-  (`application/legacy_financial_projection.py`); la lectura de runs y snapshots
-  persistidos sigue PENDING. Los pasos 3-9 siguen
+  probado en `tests/unit/test_financial_evidence.py`. El paso 2 de §22 está
+  IMPLEMENTED: la frontera de dominio evalúa operandos legacy como gaps sin
+  promoción (`assess_legacy_financial_operands`) y
+  `application/legacy_financial_projection.py` proyecta read-only hacia ella las
+  dos fuentes legacy existentes, `CostInputs`/`FeeInputs` en memoria y los record
+  snapshots persistidos. Ningún consumidor (API, UI, exportación) la usa todavía;
+  exponerla es parte del paso 7. Los pasos 3-9 siguen
   PENDING: no hay cálculo, proyección a CostInputs/FeeInputs, captura en importer,
   resolución de dependencias, snapshot, persistencia, API, consumo por Decision
   Score ni activación de pipeline.
@@ -33,6 +34,7 @@ Implementado como contrato de dominio, sin acreditar dato alguno por sí mismo:
 | `FinancialEvidenceSet` | Vinculación escenario/ejecución/registro y resolución inequívoca de moneda y dependencias |
 | `LegacyGap` / `LegacyTermGap` / `LegacyFinancialCompatibility` / `assess_legacy_financial_operands` | Evaluación determinista de compatibilidad legacy (§20): informa qué le falta a cada ubicación legacy para satisfacer el contrato; nunca produce evidencia |
 | `LEGACY_COST_TERMS` / `LEGACY_FEE_TERMS` / `legacy_financial_operands` (application) | Correspondencia explícita campo legacy → término y proyección read-only de los valores tal como están almacenados; declara el slot, no acredita el valor |
+| `LEGACY_SNAPSHOT_TERMS` / `legacy_snapshot_financial_operands` (application) | Proyección read-only de un record snapshot persistido: solo los slots que el snapshot conserva; el resto queda en ausencia estructural |
 
 Invariantes verificadas en tests: ausencia estructural (`amount=None`) distinta de
 NOT_FOUND, INVALID, cero acreditado y exclusión; exclusión sin operando monetario;
@@ -68,10 +70,26 @@ se convierte en `PriceObservation`. Probado con tipos legacy reales y con un
 registro importado desde un CSV sintético; la evidencia financiera nativa de
 nuevas importaciones (§22 paso 3 en adelante) es una ruta separada.
 
+Snapshots persistidos (§5, §20): `record_to_snapshot` no tiene identificador de
+versión y, desde que existe el formato, conserva de los 16 términos solo `cog` y
+`shipping_per_unit`, como `str(Decimal)` o `null`; `total_fees`,
+`seller_proceeds` y `total_cost` son resultados, no términos, y no se proyectan.
+Los otros 14 términos quedan en ausencia estructural aunque el registro original
+tuviera `CostInputs`/`FeeInputs`: no se reconstruyen desde defaults actuales, el
+registro runtime ni reglas del importer. Parsear es sintaxis, no acreditación: el
+Decimal resultante sigue siendo un operando legacy sin provenance, y un `"0"`
+persistido conserva `ZERO_INDISTINGUISHABLE_FROM_DEFAULT`. El parseo es
+`Decimal(str)` exacto (sin float) y exige que el string sea exactamente el que el
+escritor produce: un valor no string, no parseable, no canónico, NaN o negativo, o
+un snapshot sin alguna de las dos claves, se rechaza con error explícito en lugar
+de leerse como cero, ausencia o NOT_FOUND. Probado con dicts de `record_to_snapshot`
+y con una lectura desde `SqliteExecutionRunStore`, que produce el mismo
+diagnóstico que el dict escrito. El store de Supabase devuelve el mismo formato de
+snapshot, pero no se probó contra una base real.
+
 Pendiente y explícitamente no implementado aquí: proyección determinística de
 operandos (§7), resolución de dependencias por resultado y propagación de estados
-(§16, §17), snapshot efectivo reproducible (§19), lectura de runs/snapshots
-históricos sin promoción (§20), persistencia/API aditivas (§21) y el consumo por el componente profitability
+(§16, §17), snapshot efectivo reproducible (§19), persistencia/API aditivas (§21) y el consumo por el componente profitability
 (§23). Los criterios de §29 relativos a esos pasos no quedan satisfechos por esta
 implementación de contratos.
 
