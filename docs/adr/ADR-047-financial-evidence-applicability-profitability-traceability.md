@@ -21,10 +21,13 @@
   `docs/architecture/EXCEL_PROCESSING.md` §9). Avance fuera de la numeración de
   §22 (no completa el paso 4): `run_pipeline_with_financial_evidence` transporta
   esa evidencia, ya vinculada al `execution_id` real y al `record_ref` de cada
-  registro, junto al resultado intacto de `run_pipeline`. El paso 5 es PARTIAL:
+  registro, junto al resultado intacto de `run_pipeline`. El paso 4 es PARTIAL: `domain/financial_fees.py`
+  construye la vista acreditada de fees por registro desde la evidencia nativa,
+  sin derivación referral fee↔rate, porque §15 no aprueba ningún método; la
+  construcción desde tarifas o fuentes de fees sigue pendiente (H-02). El paso 5 es PARTIAL:
   `domain/financial_dependencies.py` resuelve por resultado las dependencias de
   evidencia de §16 sin calcular. Faltan las precondiciones matemáticas y el cálculo
-  acreditado. El paso 4 (construcción acreditada de fees) y los pasos 6-9 siguen
+  acreditado. Los pasos 6-9 siguen
   PENDING: no hay cálculo, proyección a CostInputs/FeeInputs, snapshot, persistencia, API, consumo por Decision
   Score ni activación de pipeline.
 
@@ -45,6 +48,8 @@ Implementado como contrato de dominio, sin acreditar dato alguno por sí mismo:
 | `LEGACY_COST_TERMS` / `LEGACY_FEE_TERMS` / `legacy_financial_operands` (application) | Correspondencia explícita campo legacy → término y proyección read-only de los valores tal como están almacenados; declara el slot, no acredita el valor |
 | `LEGACY_SNAPSHOT_TERMS` / `legacy_snapshot_financial_operands` (application) | Proyección read-only de un record snapshot persistido: solo los slots que el snapshot conserva; el resto queda en ausencia estructural |
 | `FinancialResult` / `DEPENDENCY_MATRIX` / `resolve_financial_dependencies` / `ResultResolution` (domain) | Resolución pura por resultado de §16: dependencias exigidas, operandos utilizables sin copiar, exclusiones, bloqueos con motivo (`ResolutionBlocker`, no un VerificationStatus) y estado de eslabón más débil solo con dependencias resueltas |
+| `FeeEvidenceState` / `accredited_fee_evidence` (domain) | Vista acreditada por registro de los cuatro términos de fee: DECLARED/OBSERVED/INFERRED/DERIVED frente a ausente, NOT_FOUND, INVALID, excluido o aplicabilidad no resuelta; sin derivación ni defaults |
+| `DeclaredSellingPrice` (domain) | Precio declarado por registro con moneda propia en `amount.unit` y `EffectiveContext`; no es `PriceObservation` |
 | `FINANCIAL_EVIDENCE_COLUMN_SPECS` / `NativeFinancialCapture` / `capture_native_financial_evidence` (infrastructure/excel) | Captura nativa (§22 paso 3): lo que una fila declara explícitamente se convierte en `FinancialScenario`/`FinancialTermEvidence`; lo no representable se omite con motivo, nunca se completa con defaults |
 
 Invariantes verificadas en tests: ausencia estructural (`amount=None`) distinta de
@@ -152,6 +157,37 @@ Límites documentados:
   declaración de moneda del precio (vínculo con ADR-046). Break-even no depende
   de P y sí puede resolverse.
 - La profitability y las decisiones legacy no cambian, y nada se persiste.
+
+Fees acreditados (§12, §15, avance PARTIAL del paso 4):
+- `accredited_fee_evidence(evidence_set)` clasifica, para REFERRAL_FEE,
+  FULFILLMENT_FEE, OTHER_SELLING_FEES y REFERRAL_FEE_RATE, la evidencia del propio
+  registro. Posibles clasificaciones: DECLARED (VERIFIED de `SUPPLIER_FILE`/`USER_INPUT`),
+  OBSERVED (VERIFIED de `OFFICIAL_API`/`AUTHORIZED_EXTERNAL_SOURCE`; hoy no existe
+  ninguna fuente así, H-02), INFERRED, DERIVED (VERIFIED `CALCULATED`), ausencia
+  estructural, aplicabilidad no resuelta, exclusión (sin importe), importe ausente,
+  NOT_FOUND o INVALID.
+- Un VERIFIED de `DATABASE` o de otro origen que no acredita quién lo declaró
+  se rechaza en lugar de etiquetarse.
+- Referral fee y referral rate siguen independientes: §15 no aprueba ningún método
+  de derivación, así que no existe ninguno.
+- Nuevas invariantes de dominio:
+  - un importe utilizable `CALCULATED` exige `depends_on` (§15, §18);
+  - ningún importe, precio declarado ni aplicabilidad puede proceder de
+    `AI_ANALYSIS` (ADR-006/ADR-008).
+- Un `FeeInputs` de batch nunca se usa como evidencia de fee.
+
+Pendiente del paso 4:
+- construcción desde tarifas o fuentes de fees autorizadas (H-02);
+- cualquier método aprobado de derivación (§15).
+- Mientras se aprueba un método de derivación, el resolvedor tampoco expande
+  dependencias transitivas de fees derivados.
+
+Precio declarado: `DeclaredSellingPrice(amount, context)` conserva la moneda en
+`amount.unit`, validada como código de 3 letras. No la toma del escenario, del
+marketplace, de símbolos ni del precio legacy. Exige `EffectiveContext`, no es
+una `PriceObservation` y se captura con las columnas `fin_selling_price_*`.
+`application/native_financial_resolution.py` lo entrega al resolvedor sin recurrir
+al precio legacy.
 
 Pendiente y explícitamente no implementado aquí: proyección determinística de
 operandos (§7), resolución de dependencias por resultado y propagación de estados

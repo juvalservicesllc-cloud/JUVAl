@@ -292,6 +292,30 @@ Reglas (sin inferencias):
   representación mínima (igual que toda columna decimal legacy), sin aritmética.
   Para conservar exactamente escala y dígitos, declarar el importe como texto.
 
+### 9.2b Precio de venta declarado (`fin_selling_price_*`)
+
+El precio no es un `FinancialTerm` (ADR-047 §9). Se declara por fila con
+columnas propias y se captura como `DeclaredSellingPrice(amount, context)` en
+`NativeFinancialCapture.selling_price`. Nunca lee ni modifica la columna legacy
+`selling_price` y nunca es una `PriceObservation` de mercado (ADR-046).
+
+| Header | Significado |
+|---|---|
+| `fin_selling_price_amount` | Importe por unidad vendible |
+| `fin_selling_price_currency` | Moneda (3 letras mayúsculas); obligatoria para un importe utilizable |
+| `fin_selling_price_effective_at` | Instante efectivo ISO 8601 con offset |
+| `fin_selling_price_basis` | Base del precio (qué representa) |
+| `fin_selling_price_method` | Si existe, el proveedor declara que lo *infirió* con ese método → `INFERRED` |
+
+Si ninguna celda está informada, no hay precio (ausencia estructural). Si falta la
+columna de importe, la moneda (para un importe utilizable), `effective_at` o
+`basis`, o si la moneda está mal formada (`usd`, `USD/lb`, `ratio`, `$`), no se
+captura el precio y el motivo queda en `problems`. Una celda de importe vacía da
+NOT_FOUND (`SUPPLIER_FILE`, evidencia de celda en blanco). Un valor no numérico,
+NaN, Infinity o negativo da INVALID con el valor original. Un `0` es un cero
+declarado. Una moneda distinta de la del escenario no se rechaza en la captura:
+el resolvedor la informa como `CURRENCY_INCOMPATIBLE`, sin conversión.
+
 ### 9.3 Entrega del resultado
 
 `ImportResult.financial_captures` tiene un `NativeFinancialCapture` por registro
@@ -309,4 +333,6 @@ vinculación es por `record_ref` (incluye el número de fila), nunca por posici�
 ni por ASIN/UPC; cualquier desajuste de cardinalidad u orden entre registros
 importados, capturas y registros procesados falla explícitamente. La evidencia
 no alimenta cálculos, riesgo, score ni decisiones, y no se persiste ni se expone
-por API.
+por API. `application/native_financial_resolution.py::resolve_record_financial_dependencies`
+entrega al resolvedor de ADR-047 §16 esa evidencia junto con el precio nativo
+declarado. Nunca recurre al precio legacy ni a `FeeInputs`.

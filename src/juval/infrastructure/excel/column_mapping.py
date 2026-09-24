@@ -90,6 +90,17 @@ FINANCIAL_TERM_SUFFIXES: dict[str, str] = {
 }
 
 
+#: Native declared selling price (not a FinancialTerm, ADR-047 §9): kept apart
+#: from the legacy `selling_price` column, which it never reads or changes.
+FINANCIAL_PRICE_COLUMNS: dict[str, str] = {
+    "fin_selling_price_amount": "decimal",
+    "fin_selling_price_currency": "str",
+    "fin_selling_price_effective_at": "datetime",
+    "fin_selling_price_basis": "str",
+    "fin_selling_price_method": "str",
+}
+
+
 def financial_term_column(term: FinancialTerm, suffix: str) -> str:
     """Header of one native evidence column, e.g. fin_referral_fee_amount."""
     return f"fin_{term.value.lower()}_{suffix}"
@@ -110,6 +121,8 @@ FINANCIAL_EVIDENCE_COLUMN_SPECS: tuple[ColumnSpec, ...] = (
     *(ColumnSpec(header, f"financial_scenario.{target}", False, "str")
       for header, target in FINANCIAL_SCENARIO_COLUMNS.items()),
     *_financial_term_specs(),
+    *(ColumnSpec(header, f"declared_selling_price.{header.removeprefix('fin_selling_price_')}", False, value_type)
+      for header, value_type in FINANCIAL_PRICE_COLUMNS.items()),
 )
 
 

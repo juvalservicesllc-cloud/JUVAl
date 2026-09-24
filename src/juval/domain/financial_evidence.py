@@ -37,7 +37,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from enum import Enum
 
-from .provenance import FieldValue, VerificationStatus
+from .provenance import FieldValue, SourceType, VerificationStatus
 from .units import CANONICAL_WEIGHT_UNIT
 
 #: Unit of a dimensionless ratio. A ratio never carries a currency and is never
@@ -150,9 +150,17 @@ def _declared_currency(unit: str, nature: TermNature) -> str:
     return unit
 
 
+def _reject_ai_source(value: FieldValue, name: str) -> None:
+    # Financial amounts and applicability are sensitive fields: AI may explain
+    # them, never produce them (ADR-006, ADR-008).
+    if value.provenance.source_type is SourceType.AI_ANALYSIS:
+        raise ValueError(f"{name} must never come from AI_ANALYSIS")
+
+
 def _validate_amount(term: FinancialTerm, amount: FieldValue) -> None:
     if not isinstance(amount, FieldValue) or not isinstance(amount.status, VerificationStatus):
         raise ValueError("A financial amount requires a FieldValue with an explicit verification status")
+    _reject_ai_source(amount, f"{term.value} amount")
     if not amount.is_usable:
         # NOT_FOUND/INVALID keep their cause and raw diagnostics, and never a
         # usable operand, a substituted zero or a fabricated unit.
@@ -226,6 +234,7 @@ class Applicability:
                 raise ValueError("A usable applicability assertion requires a boolean value")
         elif self.applies.value is not None:
             raise ValueError("An unresolved applicability assertion must not carry a usable value")
+        _reject_ai_source(self.applies, "Applicability")
         _text(self.justification, "justification")
 
     @property
@@ -295,6 +304,11 @@ class FinancialTermEvidence:
             )
         if not isinstance(self.depends_on, tuple):
             raise ValueError("depends_on must be an immutable tuple")
+        if (self.has_usable_amount and self.amount.provenance.source_type is SourceType.CALCULATED
+                and not self.depends_on):
+            # A derived amount keeps resolvable links to what it was derived
+            # from (ADR-047 §15, §18); a method string alone is not enough.
+            raise ValueError(f"A derived {self.term.value} amount must declare what it depends on")
         seen: set[tuple[str, str, FinancialTerm | None]] = set()
         for dependency in self.depends_on:
             if not isinstance(dependency, FinancialDependency):
@@ -309,6 +323,35 @@ class FinancialTermEvidence:
     @property
     def has_usable_amount(self) -> bool:
         return self.amount is not None and self.amount.is_usable
+
+
+@dataclass(frozen=True)
+class DeclaredSellingPrice:
+    """A selling price explicitly declared for one record, with its currency.
+
+    Deliberately not an ADR-046 PriceObservation: a supplier-declared price is
+    not a market observation and gains no observation context from its name.
+    Its currency lives in amount.unit and is never taken from the scenario,
+    the marketplace, a price symbol or the legacy selling price (ADR-047 §11).
+    """
+
+    amount: FieldValue[Decimal]
+    context: EffectiveContext
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.amount, FieldValue) or not isinstance(self.amount.status, VerificationStatus):
+            raise ValueError("A declared price requires a FieldValue with an explicit verification status")
+        _reject_ai_source(self.amount, "A declared price")
+        if not isinstance(self.context, EffectiveContext):
+            raise ValueError("Explicit EffectiveContext required")
+        if not self.amount.is_usable:
+            if self.amount.value is not None:
+                raise ValueError("NOT_FOUND/INVALID price evidence must not carry a usable value")
+            return
+        value = self.amount.value
+        if not isinstance(value, Decimal) or not value.is_finite() or value < 0:
+            raise ValueError("A usable declared price must be a finite, non-negative Decimal")
+        _currency(self.amount.unit, "Declared price currency")
 
 
 @dataclass(frozen=True)

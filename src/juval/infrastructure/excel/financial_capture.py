@@ -34,6 +34,7 @@ from juval.domain.financial_evidence import (
     MAX_EXCLUSIVE_RATE,
     RATIO_UNIT,
     Applicability,
+    DeclaredSellingPrice,
     EffectiveContext,
     FinancialEvidenceSet,
     FinancialScenario,
@@ -44,7 +45,12 @@ from juval.domain.financial_evidence import (
 from juval.domain.provenance import FieldValue, SourceType
 from juval.domain.units import CANONICAL_WEIGHT_UNIT
 
-from .column_mapping import FINANCIAL_EVIDENCE_COLUMN_SPECS, FINANCIAL_SCENARIO_COLUMNS, financial_term_column
+from .column_mapping import (
+    FINANCIAL_EVIDENCE_COLUMN_SPECS,
+    FINANCIAL_PRICE_COLUMNS,
+    FINANCIAL_SCENARIO_COLUMNS,
+    financial_term_column,
+)
 
 ParseCell = Callable[[Any, str], tuple[Optional[Any], bool]]
 
@@ -66,13 +72,16 @@ class NativeFinancialCapture:
 
     `problems` lists, in a deterministic order, every declaration that could
     not be captured and why. `scenario is None` means no complete scenario was
-    declared, so the row's evidence cannot be bound.
+    declared, so the row's evidence cannot be bound. `selling_price` is the
+    row's native declared price (None when not declared); it is never the
+    legacy `selling_price` and never a market PriceObservation.
     """
 
     record_ref: str
     scenario: Optional[FinancialScenario]
     terms: tuple[FinancialTermEvidence, ...]
     problems: tuple[str, ...]
+    selling_price: Optional[DeclaredSellingPrice] = None
 
     def bind(self, execution_id: str) -> FinancialEvidenceSet:
         """This row's FinancialEvidenceSet within `execution_id` (supplied by the caller)."""
@@ -92,6 +101,7 @@ def capture_native_financial_evidence(
 ) -> NativeFinancialCapture:
     row = _Row(cells, row_number, source, now, parse_cell)
     scenario = row.scenario()
+    selling_price = row.selling_price()
     terms = []
     for term in FinancialTerm:
         evidence = row.term(term)
@@ -104,7 +114,7 @@ def capture_native_financial_evidence(
                                         f"{scenario.currency}; not converted")
                 continue
         terms.append(evidence)
-    return NativeFinancialCapture(record_ref, scenario, tuple(terms), tuple(row.problems))
+    return NativeFinancialCapture(record_ref, scenario, tuple(terms), tuple(row.problems), selling_price)
 
 
 class _Row:
@@ -153,6 +163,42 @@ class _Row:
             )
         except ValueError as error:
             self.problem("scenario", str(error))
+            return None
+
+    def selling_price(self) -> Optional[DeclaredSellingPrice]:
+        """The row's declared price; its currency is only ever the declared column."""
+        present = {header.removeprefix("fin_selling_price_"): header
+                   for header in FINANCIAL_PRICE_COLUMNS if header in self.cells}
+        if all(self._text(column) is None for column in present.values()):
+            return None  # not declared in this row: structural absence
+        try:
+            if "amount" not in present:
+                raise ValueError("declared without an amount column")
+            context = self._context(present)
+            column = present["amount"]
+            raw = self.cells.get(column)
+            value, valid = self.parse_cell(raw, "decimal")
+            if value is None:
+                amount = self._not_found(column)
+            elif not valid or value < 0:
+                amount = FieldValue.invalid(str(raw).strip(), source_type=SourceType.SUPPLIER_FILE,
+                                            **self._provenance(column))
+            else:
+                currency = self._text(present["currency"]) if "currency" in present else None
+                if currency is None:
+                    raise ValueError("a declared price requires its declared currency; none is inferred")
+                provenance = self._provenance(column)
+                method = self._text(present["method"]) if "method" in present else None
+                if method is None:
+                    amount = FieldValue.verified(value, unit=currency, source_type=SourceType.SUPPLIER_FILE,
+                                                 **provenance)
+                else:
+                    provenance["method"] = method
+                    amount = FieldValue.inferred(value, unit=currency, source_type=SourceType.SUPPLIER_FILE,
+                                                 **provenance)
+            return DeclaredSellingPrice(amount=amount, context=context)
+        except ValueError as error:
+            self.problem("SELLING_PRICE", str(error))
             return None
 
     def term(self, term: FinancialTerm) -> Optional[FinancialTermEvidence]:
