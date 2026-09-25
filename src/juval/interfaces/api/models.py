@@ -249,3 +249,38 @@ class RunAnalyticsOut(BaseModel):
     brands: BrandDistributionOut = BrandDistributionOut()
     issue_types: list[IssueTypeOut] = []
     price_spread: PriceSpreadOut = PriceSpreadOut()
+
+
+class StoredPayloadOut(BaseModel):
+    """One persisted ADR-047 payload, exactly as stored (validated, never
+    re-serialized or completed). `format`/`version` are the stored identity:
+    `juval.adr047.financial-record` v1 or v2, or
+    `juval.adr047.capture-diagnostics` v1."""
+
+    format: str
+    version: int
+    payload: dict[str, Any]
+
+
+class RecordFinancialOut(BaseModel):
+    """What is stored for one `(execution_id, record_ref)` (ADR-047).
+
+    `financial_document: null` means no document was stored for the record
+    (legacy run, record without a scenario, or flow not enabled);
+    `capture_diagnostics: null` means no diagnostics set was stored, which is
+    distinct from a stored empty set (`payload.diagnostics == []`). Neither
+    null is evidence of anything. `inconsistencies` lists disagreements
+    between a v2 document and its diagnostics set; neither side is preferred.
+    """
+
+    execution_id: str
+    record_ref: str
+    financial_document: Optional[StoredPayloadOut] = None
+    capture_diagnostics: Optional[StoredPayloadOut] = None
+    inconsistencies: list[str] = []
+
+
+class RunFinancialResponse(BaseModel):
+    execution_id: str
+    records: list[RecordFinancialOut]
+    pagination: RecordPaginationOut

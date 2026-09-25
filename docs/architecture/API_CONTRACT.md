@@ -229,6 +229,64 @@ provenance metadata. Historical snapshots without these keys return
 `provenance: null`, `unit: null`, and `raw_value: null`; they are never
 reconstructed at read time.
 
+## 2e. Financial evidence, read-only (ADR-047 step 7, 2026-09-25)
+
+Two `GET` routes that expose what the ADR-047 native financial flow persisted.
+They calculate, repair and complete nothing, and they never write. Both
+require `runs:read`, the same permission as `/records`.
+
+- `GET /api/v1/runs/{execution_id}/financial?limit=&offset=` returns
+  `RunFinancialResponse {execution_id, records: [RecordFinancialOut], pagination}`.
+  There is one entry per persisted record snapshot, in `record_ref` order,
+  paginated like `/records` (`limit` 1-100, default 50). Rows the importer
+  discarded have no `record_ref` and do not appear.
+- `GET /api/v1/runs/{execution_id}/records/{record_ref}/financial` returns one
+  `RecordFinancialOut` for the composite identity `(execution_id, record_ref)`.
+  There is no separate financial identity.
+
+`RecordFinancialOut` has these fields:
+
+- `execution_id` and `record_ref`.
+- `financial_document`: a `StoredPayloadOut {format, version, payload}`, or
+  `null`. The format is `juval.adr047.financial-record`, version 1 or 2, and
+  each document is served in its own stored version.
+- `capture_diagnostics`: a `StoredPayloadOut`, or `null`. The format is
+  `juval.adr047.capture-diagnostics` v1.
+- `inconsistencies`: a list of text. It reports a disagreement between a v2
+  document and its diagnostics set, without preferring either side.
+
+`payload` is the stored JSON exactly as persisted. It has been validated by
+`application/financial_persistence.py` (format, version, identity) but never
+re-serialized. States (`VERIFIED`/`INFERRED`/`NOT_FOUND`/`INVALID`),
+provenance (for example `SUPPLIER_FILE`), exclusions and blocked results
+travel unchanged. Supplier-declared evidence is never relabelled as Amazon
+verification.
+
+Absence is a legitimate result, not an error. `financial_document: null`
+means no document was stored: a historical run, a record without a
+scenario, or the flow not enabled. `capture_diagnostics: null` means no set
+was stored, which differs from a stored empty set (`payload.diagnostics == []`).
+
+| Status | Meaning |
+|---|---|
+| `200` | Run (and record) exist; nulls mean nothing stored |
+| `404 unknown execution_id` | run-level route, unknown run |
+| `404 unknown record for execution` | record route, unknown run or record (same non-enumerating detail as §2d) |
+| `401` / `403` | no valid session/token / no `runs:read` |
+| `500 stored financial data failed validation` | corrupt payload, unknown version or identity/column mismatch; details only in server logs |
+| `503 financial persistence is not available on this deployment` | financial tables missing (PostgreSQL migration `20260925000005` not applied) |
+| `500 internal server error` | any other storage failure (generic handler) |
+
+Deployment limits:
+
+- On SQLite the tables are created by the store itself.
+- On Supabase the routes answer `503` until migration `20260925000005` is
+  applied. It has not been applied to any real project yet. Only a disposable
+  PostgreSQL 16 cluster has been verified.
+- No API or CLI path writes financial documents to PostgreSQL yet.
+- The run-level route performs two single-row reads per record in the page
+  (each one is its own connection on PostgreSQL).
+
 ## 3. Modelos de request (`models.py`)
 
 Reflejan exactamente `domain.decision.Thresholds` / `domain.costs.FeeInputs`

@@ -48,6 +48,12 @@ from juval.domain.execution_run import ExecutionStatus
 from juval.domain.batch import Batch, BatchFile, BatchFileStatus, aggregate_batch_status
 from juval.domain.execution_run import ExecutionRun, hash_file
 from juval.application.execution_run_store import ExecutionRunStore
+from juval.application.financial_persistence import (
+    FinancialRecordIntegrityError,
+    FinancialStorageUnavailable,
+)
+from juval.application.financial_report import RecordFinancialReport, record_financial_report
+from juval.application.financial_serialization import FinancialSerializationError
 from juval.application.record_snapshot_store import RecordSnapshotQuery
 from juval.infrastructure.excel.exporter import append_literal_row, export_excel
 from juval.infrastructure.excel.importer import SUPPORTED_INPUT_SUFFIXES, UnsupportedInputFormat
@@ -58,8 +64,11 @@ from . import bff, service
 from .auth import RUNS_CREATE, RUNS_EXPORT, RUNS_READ, auth_mode, require, set_session_resolver
 from .models import (
     FeesIn,
+    RecordFinancialOut,
     RecordOut,
     RunFailedResponse,
+    RunFinancialResponse,
+    StoredPayloadOut,
     RecordPaginationOut,
     RunAnalyticsOut,
     BatchFileOut,
@@ -637,6 +646,67 @@ async def get_run_analytics(execution_id: str, _principal=Depends(require(RUNS_R
         raise HTTPException(status_code=404, detail="unknown execution_id")
     response = RunAnalyticsOut(execution_id=execution_id, **store.get_run_analytics(execution_id))
     return JSONResponse(status_code=200, content=response.model_dump(mode="json"))
+
+
+def _stored(payload: Optional[dict]) -> Optional[StoredPayloadOut]:
+    return StoredPayloadOut(format=payload["format"], version=payload["version"], payload=payload) if payload is not None else None
+
+
+def _record_financial_out(store: ExecutionRunStore, execution_id: str, snapshot: dict) -> RecordFinancialOut:
+    """Validated stored payloads of one record, or an HTTP error that never
+    passes for absence and never echoes stored content or storage internals."""
+    try:
+        report: RecordFinancialReport = record_financial_report(store, execution_id, snapshot)
+    except FinancialStorageUnavailable:
+        logger.error("financial tables missing for execution_id=%s (migration not applied)", execution_id)
+        raise HTTPException(status_code=503, detail="financial persistence is not available on this deployment")
+    except (FinancialSerializationError, FinancialRecordIntegrityError) as exc:
+        logger.error("stored financial data failed validation: execution_id=%s record_ref=%s error=%s",
+                     execution_id, snapshot["record_ref"], type(exc).__name__)
+        raise HTTPException(status_code=500, detail="stored financial data failed validation")
+    return RecordFinancialOut(execution_id=execution_id, record_ref=report.record_ref,
+                              financial_document=_stored(report.document_payload),
+                              capture_diagnostics=_stored(report.diagnostics_payload),
+                              inconsistencies=list(report.inconsistencies))
+
+
+@app.get("/api/v1/runs/{execution_id}/financial", response_model=RunFinancialResponse)
+async def get_run_financial(
+    execution_id: str,
+    limit: int = Query(_RECORDS_LIST_DEFAULT_LIMIT, ge=1, le=_RECORDS_LIST_MAX_LIMIT),
+    offset: int = Query(0, ge=0),
+    _principal=Depends(require(RUNS_READ)),
+) -> JSONResponse:
+    """Stored ADR-047 financial documents and capture diagnostics of a run's
+    records, one entry per record snapshot in `record_ref` order (the Catalog
+    default), paginated like `/records`. Read-only: nothing is calculated."""
+    store = _require_execution_run_store()
+    if store.load_execution_run(execution_id) is None:
+        raise HTTPException(status_code=404, detail="unknown execution_id")
+    page = store.list_records(execution_id, RecordSnapshotQuery(limit=limit, offset=offset))
+    response = RunFinancialResponse(
+        execution_id=execution_id,
+        records=[_record_financial_out(store, execution_id, snapshot) for snapshot in page.items],
+        pagination=RecordPaginationOut(limit=limit, offset=offset, total=page.total,
+                                       has_more=offset + len(page.items) < page.total),
+    )
+    return JSONResponse(status_code=200, content=response.model_dump(mode="json"))
+
+
+@app.get("/api/v1/runs/{execution_id}/records/{record_ref}/financial", response_model=RecordFinancialOut)
+async def get_record_financial(
+    execution_id: str,
+    record_ref: str,
+    _principal=Depends(require(RUNS_READ)),
+) -> JSONResponse:
+    """Stored ADR-047 payloads of one `(execution_id, record_ref)`. Unknown run
+    and unknown record share the non-enumerating 404 of the record endpoint;
+    a known record with nothing stored is 200 with nulls, not 404."""
+    store = _require_execution_run_store()
+    snapshot = store.load_record(execution_id, record_ref) if store.load_execution_run(execution_id) else None
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="unknown record for execution")
+    return JSONResponse(status_code=200, content=_record_financial_out(store, execution_id, snapshot).model_dump(mode="json"))
 
 
 @app.exception_handler(Exception)

@@ -43,7 +43,8 @@ capture_diagnostics=...)` writes them in the run's own transaction, and the
 rows are built by the SQLite store's own helpers, so both backends store the
 identical canonical TEXT (not JSONB, which would not keep the text
 byte-identical). `load_financial_record` / `load_capture_diagnostics` return
-the raw `(format, format_version, payload)` row or None; parsing and
+the raw `(format, format_version, payload)` row or None, and raise
+FinancialStorageUnavailable when the migration was not applied; parsing and
 integrity checks stay in application/financial_persistence.py.
 """
 
@@ -54,6 +55,7 @@ from typing import Any, Mapping, Optional, Sequence
 
 from juval.domain.execution_run import ExecutionRun, ExecutionStatus
 from juval.domain.batch import Batch, BatchFile, BatchFileStatus, BatchStatus
+from juval.application.financial_persistence import FinancialStorageUnavailable
 from juval.application.record_snapshot_store import RecordSnapshotPage, RecordSnapshotQuery
 from juval.application.run_analytics import brand_distribution, issue_types, numeric_summary, price_spread
 from juval.infrastructure.logging.sqlite_execution_run_store import _diagnostics_row, _financial_row
@@ -240,9 +242,14 @@ class SupabaseExecutionRunStore:
                 conn.execute(_INSERT_DIAGNOSTICS, _diagnostics_row(run.execution_id, payload))
 
     def _payload_row(self, table: str, execution_id: str, record_ref: str) -> Optional[tuple[str, int, str]]:
-        with self._connect() as conn:
-            row = conn.execute(f"SELECT format, format_version, payload FROM {table} "
-                               "WHERE execution_id = %s AND record_ref = %s", (execution_id, record_ref)).fetchone()
+        psycopg, _ = _require_driver()
+        try:
+            with self._connect() as conn:
+                row = conn.execute(f"SELECT format, format_version, payload FROM {table} "
+                                   "WHERE execution_id = %s AND record_ref = %s", (execution_id, record_ref)).fetchone()
+        except psycopg.errors.UndefinedTable as error:
+            # Migration 20260925000005 not applied: an error, never "no document".
+            raise FinancialStorageUnavailable(f"table {table} does not exist") from error
         return tuple(row) if row is not None else None
 
     def load_financial_record(self, execution_id: str, record_ref: str) -> Optional[tuple[str, int, str]]:

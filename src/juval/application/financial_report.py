@@ -19,8 +19,8 @@ from typing import Any, Optional, Protocol
 from juval.application.capture_diagnostics import RecordCaptureDiagnostics
 from juval.application.financial_persistence import (
     AnyFinancialRecord,
-    load_capture_diagnostics,
-    load_financial_record,
+    load_capture_diagnostics_with_payload,
+    load_financial_record_with_payload,
 )
 from juval.application.financial_serialization_v2 import FinancialRecordDocumentV2
 from juval.domain.execution_run import ExecutionRun
@@ -49,6 +49,10 @@ class RecordFinancialReport:
     document: Optional[AnyFinancialRecord]
     diagnostics: Optional[RecordCaptureDiagnostics]
     inconsistencies: tuple[str, ...] = ()
+    # The stored JSON behind `document` / `diagnostics`, as persisted (None when
+    # nothing is stored), so a reader can expose it without re-serializing.
+    document_payload: Optional[dict[str, Any]] = None
+    diagnostics_payload: Optional[dict[str, Any]] = None
 
 
 @dataclass(frozen=True)
@@ -67,14 +71,19 @@ def build_financial_report(store: ReportStore, execution_id: str) -> FinancialRu
     run = store.load_execution_run(execution_id)
     if run is None:
         raise ExecutionNotFound(execution_id)
-    records = []
-    for snapshot in store.load_records(execution_id):
-        ref = snapshot["record_ref"]
-        document = load_financial_record(store, execution_id, ref)
-        diagnostics = load_capture_diagnostics(store, execution_id, ref)
-        records.append(RecordFinancialReport(ref, snapshot, document, diagnostics,
-                                             _inconsistencies(document, diagnostics)))
-    return FinancialRunReport(run, tuple(records))
+    return FinancialRunReport(run, tuple(record_financial_report(store, execution_id, snapshot)
+                                         for snapshot in store.load_records(execution_id)))
+
+
+def record_financial_report(store: ReportStore, execution_id: str,
+                            snapshot: dict[str, Any]) -> RecordFinancialReport:
+    """What is stored for one record snapshot of `execution_id`; never writes."""
+    ref = snapshot["record_ref"]
+    document, document_payload = load_financial_record_with_payload(store, execution_id, ref) or (None, None)
+    diagnostics, diagnostics_payload = (load_capture_diagnostics_with_payload(store, execution_id, ref)
+                                        or (None, None))
+    return RecordFinancialReport(ref, snapshot, document, diagnostics, _inconsistencies(document, diagnostics),
+                                 document_payload, diagnostics_payload)
 
 
 def _inconsistencies(document: Optional[AnyFinancialRecord],

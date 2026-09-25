@@ -41,9 +41,11 @@
   (con `.down.sql`) y `SupabaseExecutionRunStore` con el mismo contrato que SQLite.
   No se ha aplicado a ningún proyecto Supabase: el despliegue sigue pendiente, y
   ni la API ni la CLI escriben todavía documentos financieros en PostgreSQL.
-  Los pasos 7-9 siguen PENDING: no
-  hay API financiera, proyección a CostInputs/FeeInputs, snapshot efectivo
-  reproducible (§19), consumo por Decision Score ni activación de pipeline.
+  El paso 7 es PARTIAL: hay lectura HTTP versionada y de solo lectura de
+  documentos y diagnósticos persistidos (`docs/architecture/API_CONTRACT.md`
+  §2e), pero la API no los escribe. Los pasos 8-9 siguen PENDING, igual que la
+  proyección a CostInputs/FeeInputs y el snapshot efectivo reproducible (§19):
+  no hay consumo por Decision Score ni activación de pipeline.
 
 ### 1.1 Contratos implementados y pendientes
 
@@ -494,9 +496,30 @@ Formato v2 (§19; serialización pura, sin persistencia ni consumidores):
   - No verificado: la aplicación en un proyecto Supabase real, sus roles y
     grants efectivos, y el pooler. Aplicarla es un paso humano de despliegue. La
     conexión del backend debe usar el rol propietario, como en ADR-036.
+- API de solo lectura (paso 7, PARTIAL, 2026-09-25):
+  - `GET /api/v1/runs/{execution_id}/financial` (paginado como `/records`) y
+    `GET /api/v1/runs/{execution_id}/records/{record_ref}/financial`, con
+    `runs:read`. Contrato en `docs/architecture/API_CONTRACT.md` §2e.
+  - Devuelven el payload almacenado tal cual, con su formato y versión (v1, v2,
+    diagnósticos v1), validado por los lectores de
+    `application/financial_persistence.py` (`*_with_payload`) y compuesto por
+    `record_financial_report`, el mismo que usa el reporte CLI. No recalculan,
+    no re-serializan y no rellenan nada.
+  - `null` significa "nada guardado", nunca cero ni verificación.
+  - Códigos: 404 para run o registro desconocido; 500 genérico cuando los datos
+    guardados no validan (el detalle solo va al log); 503 cuando faltan las
+    tablas. `SupabaseExecutionRunStore` traduce `UndefinedTable` a
+    `FinancialStorageUnavailable`.
+  - Verificado: `tests/integration/test_api_financial.py`, 17 tests sobre
+    SQLite. Cubren contenido, v1/v2, runs históricos, aislamiento, paginación,
+    404, 500, 503, ausencia de escritura (hash del archivo y 405), autenticación
+    401/403 con el verificador RS256 de pruebas, y OpenAPI. Otro test, sobre el
+    clúster PostgreSQL desechable, cubre 200 y un 503 real tras la reversión.
 - Pendiente:
   - despliegue de la migración anterior (humano, fuera de los tests);
-  - API financiera aditiva/versionada (paso 7), que tampoco existe para SQLite;
+  - escritura financiera desde la API (el paso 7 solo cubre lectura);
+  - propiedad por run: la API autoriza por el permiso `runs:read`, no por
+    propietario, porque los runs no tienen propietario en el modelo actual;
   - integración con Decision Score (paso 8) y activación (paso 9);
   - las filas descartadas por el importer no tienen `record_ref`, así que quedan
     fuera. Necesitarían una identidad por `(execution_id, número de fila de
@@ -514,7 +537,7 @@ al precio legacy.
 Pendiente y explícitamente no implementado: proyección determinística de
 operandos hacia CostInputs/FeeInputs (§7), propagación transitiva de estados de
 operandos derivados (§16, §17), snapshot efectivo reproducible (§19), despliegue
-de la migración PostgreSQL y API aditiva (§21) y el consumo por el componente profitability
+de la migración PostgreSQL y escritura por API (§21) y el consumo por el componente profitability
 (§23). Los criterios de §29 relativos a esos pasos no quedan satisfechos.
 
 ## 2. Contexto y problema
@@ -933,9 +956,9 @@ históricos. Exige más contexto de entrada y conservación; datos antes
 calculables numéricamente pueden no satisfacer el contrato acreditado.
 
 Lo implementado según §1.1 (contratos, frontera legacy, captura, resolución,
-cálculo, persistencia SQLite y PostgreSQL verificada en un clúster desechable) no
-completa por sí solo un criterio íntegro de ADR-040: no hay migración desplegada,
-API ni activación. Se
+cálculo, persistencia SQLite y PostgreSQL verificada en un clúster desechable,
+API de solo lectura) no completa por sí solo un criterio íntegro de ADR-040: no
+hay migración desplegada, escritura por API ni activación. Se
 mantienen Implementation 44/68, Verification 17/68, Production 0/12,
 Security 5/16 y Amazon 0/18, sin porcentaje agregado.
 

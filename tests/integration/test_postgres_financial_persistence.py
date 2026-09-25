@@ -29,7 +29,7 @@ from psycopg.conninfo import make_conninfo  # noqa: E402
 
 from juval.application.capture_diagnostics import RecordCaptureDiagnostics  # noqa: E402
 from juval.application.financial_persistence import (  # noqa: E402
-    FinancialRecordIntegrityError, load_capture_diagnostics, load_financial_record,
+    FinancialRecordIntegrityError, FinancialStorageUnavailable, load_capture_diagnostics, load_financial_record,
     save_run_with_financial_records,
 )
 from juval.application.financial_serialization import (  # noqa: E402
@@ -165,8 +165,9 @@ def test_rollback_drops_only_the_new_tables_and_can_be_reapplied(tmp_path, dsn, 
         assert conn.execute("select to_regclass(%s), to_regclass(%s)", (DOC, DIAG)).fetchone() == (None, None)
     assert store.load_execution_run("run-A") == result.run                          # run and snapshots survive
     assert store.load_records("run-A") == snapshots
-    with pytest.raises(psycopg.errors.UndefinedTable):                              # loud, never "no document"
-        store.load_financial_record("run-A", snapshots[0]["record_ref"])
+    for load in (store.load_financial_record, store.load_capture_diagnostics):      # loud, never "no document"
+        with pytest.raises(FinancialStorageUnavailable):
+            load("run-A", snapshots[0]["record_ref"])
     apply(dsn, NEW)
     assert load_financial_record(store, "run-A", snapshots[0]["record_ref"]) is None
 
@@ -343,3 +344,27 @@ def test_stored_documents_leave_the_commercial_snapshot_untouched(tmp_path, stor
     save_run_with_financial_records(store, result.run, snapshots, docs)
     assert store.load_records("run-A") == snapshots
     assert "financial" not in json.dumps(store.load_records("run-A"))
+
+
+# -- Read-only API over PostgreSQL -------------------------------------------------------
+
+def test_financial_api_reads_postgres_and_reports_a_missing_migration(tmp_path, dsn, store, monkeypatch):
+    from fastapi.testclient import TestClient
+    from juval.interfaces.api.main import app
+
+    result, snapshots, [document] = build(tmp_path, [row("A")])
+    save_run_with_financial_records(store, result.run, snapshots, [document])
+    ref = document.evidence.record_reference
+    monkeypatch.setenv("JUVAL_RUN_STORAGE_DIR", str(tmp_path))
+    monkeypatch.setenv("JUVAL_EXECUTION_STORE", "supabase")
+    monkeypatch.setenv("JUVAL_SUPABASE_DB_URL", dsn)                                   # the disposable schema
+    client = TestClient(app, raise_server_exceptions=False)
+    body = client.get(f"/api/v1/runs/run-A/records/{ref}/financial").json()
+    assert body["financial_document"] == {"format": "juval.adr047.financial-record", "version": 1,
+                                          "payload": json.loads(store.load_financial_record("run-A", ref)[2])}
+    assert body["capture_diagnostics"] is None
+    apply(dsn, f"{NEW}.down")
+    for url in ("/api/v1/runs/run-A/financial", f"/api/v1/runs/run-A/records/{ref}/financial"):
+        response = client.get(url)
+        assert response.status_code == 503
+        assert response.json() == {"detail": "financial persistence is not available on this deployment"}

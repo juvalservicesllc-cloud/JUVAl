@@ -14,7 +14,14 @@ Read outcomes stay distinct:
                                      (corrupt JSON/structure, unknown format or version);
   * FinancialRecordIntegrityError -> a valid payload whose identity or stored
                                      format columns contradict where it was found;
-  * sqlite3.Error                 -> storage failure, propagated untouched.
+  * FinancialStorageUnavailable   -> the store's financial tables do not exist
+                                     (PostgreSQL migration not applied), never
+                                     read as "no document";
+  * sqlite3.Error / psycopg.Error -> other storage failures, propagated untouched.
+
+The *_with_payload readers return the same validated object together with the
+stored JSON exactly as parsed from the stored text, for callers (the read-only
+API) that must expose the persisted payload, not a re-serialization of it.
 
 Capture diagnostics (application/capture_diagnostics.py) are saved in the same
 transaction, one set per captured record, independent of any document: a
@@ -54,6 +61,10 @@ from juval.domain.execution_run import ExecutionRun
 
 class FinancialRecordIntegrityError(ValueError):
     """A financial document does not belong where it is being saved or was found."""
+
+
+class FinancialStorageUnavailable(RuntimeError):
+    """The store has no financial tables: its schema migration was not applied."""
 
 
 AnyFinancialRecord = Union[FinancialRecordDocument, FinancialRecordDocumentV2]
@@ -127,6 +138,14 @@ def save_run_with_financial_records(
 def load_financial_record(
     store: FinancialRecordStore, execution_id: str, record_ref: str
 ) -> Optional[AnyFinancialRecord]:
+    loaded = load_financial_record_with_payload(store, execution_id, record_ref)
+    return loaded[0] if loaded is not None else None
+
+
+def load_financial_record_with_payload(
+    store: FinancialRecordStore, execution_id: str, record_ref: str
+) -> Optional[tuple[AnyFinancialRecord, dict[str, Any]]]:
+    """The validated document and the stored payload it was read from."""
     row = store.load_financial_record(execution_id, record_ref)
     if row is None:
         return None
@@ -144,13 +163,20 @@ def load_financial_record(
     found = (evidence.execution_id, evidence.record_reference)
     if found != (execution_id, record_ref):
         raise FinancialRecordIntegrityError(f"payload identity {found} stored under {(execution_id, record_ref)}")
-    return document
+    return document, json.loads(text)  # fresh parse: the stored JSON, untouched by the reader
 
 
 def load_capture_diagnostics(
     store: FinancialRecordStore, execution_id: str, record_ref: str
 ) -> Optional[RecordCaptureDiagnostics]:
     """None when no set was stored for that run/record (e.g. a legacy run)."""
+    loaded = load_capture_diagnostics_with_payload(store, execution_id, record_ref)
+    return loaded[0] if loaded is not None else None
+
+
+def load_capture_diagnostics_with_payload(
+    store: FinancialRecordStore, execution_id: str, record_ref: str
+) -> Optional[tuple[RecordCaptureDiagnostics, dict[str, Any]]]:
     row = store.load_capture_diagnostics(execution_id, record_ref)
     if row is None:
         return None
@@ -167,4 +193,4 @@ def load_capture_diagnostics(
     if (item.execution_id, item.record_ref) != (execution_id, record_ref):
         raise FinancialRecordIntegrityError(
             f"diagnostics identity {(item.execution_id, item.record_ref)} stored under {(execution_id, record_ref)}")
-    return item
+    return item, json.loads(text)
