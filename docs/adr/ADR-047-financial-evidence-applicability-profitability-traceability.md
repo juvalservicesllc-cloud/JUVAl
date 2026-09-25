@@ -433,6 +433,20 @@ Formato v2 (§19; serialización pura, sin persistencia ni consumidores):
     con él (probado).
   - Los documentos históricos con solo texto no reciben códigos, y v1/v2 no
     cambian.
+- Consulta de solo lectura:
+  - `python -m juval.interfaces.cli.financial_report --persist-db <db>
+    --execution-id <id>` usa `ReadOnlySqliteRunReader`, que abre SQLite con URI
+    `mode=ro`: no crea la base, no ejecuta DDL y el motor rechaza cualquier
+    escritura (probado).
+  - `build_financial_report` reutiliza los lectores validados de documentos y
+    diagnósticos. Muestra v1 y v2 como tales, registros sin documento, conjuntos
+    de diagnósticos no guardados frente a vacíos, y resultados calculados,
+    bloqueados o no solicitados, sin recalcular ni rellenar nada.
+  - Una discrepancia entre los `capture_problems` de un v2 y su conjunto de
+    diagnósticos se informa como inconsistencia (salida 5), sin elegir ninguno.
+  - Corrupción, versión desconocida o identidad incoherente abortan sin reporte.
+  - Una base anterior a las tablas financieras se lee como "nada guardado", sin
+    crear esas tablas.
 - Pendiente:
   - las filas descartadas por el importer no tienen `record_ref`, así que quedan
     fuera. Necesitarían una identidad por `(execution_id, número de fila de

@@ -57,6 +57,30 @@ Excel de salida.
 - No hay input de peso por registro, así que los resultados que dependen de un
   `shipping_per_pound` aplicable quedan bloqueados.
 
+### Consulta financiera de solo lectura
+
+```bash
+.venv/bin/python -m juval.interfaces.cli.financial_report \
+    --persist-db runs.db --execution-id <execution_id>
+```
+
+- Muestra, por registro y en orden de procesamiento:
+  - el documento financiero (v1, v2 o ninguno);
+  - cada resultado calculado con valor, unidad y estado, o `BLOCKED` con su
+    diagnóstico;
+  - los resultados no solicitados;
+  - el conjunto de diagnósticos (no guardado, vacío o con sus `CaptureCode`, fila,
+    columna y valor original).
+- Abre SQLite en modo `mode=ro`: no crea la base, no ejecuta DDL y no recalcula
+  nada. No hay base de datos por defecto ni "última ejecución".
+- Códigos de salida:
+  - 0: reporte;
+  - 2: la base no existe;
+  - 4: el `execution_id` no está guardado;
+  - 5: integridad (payload corrupto, versión desconocida, identidad o
+    discrepancia v2/diagnósticos);
+  - 6: no es una base SQLite legible.
+
 Fuera de alcance de este entrypoint (todavía `PENDING`/`BLOCKED`, ver
 `CLAUDE.md` §14 y `docs/PROJECT_PLAN.md` Fase 4+): API HTTP, PWA,
 `.exe`, autenticación, listar corridas históricas.
