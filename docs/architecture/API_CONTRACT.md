@@ -17,6 +17,9 @@ Versionado: prefijo `/api/v1/` desde el primer endpoint.
 | `thresholds` | string (JSON) | Sí | Serializa `ThresholdsIn` — ver §3 |
 | `fees` | string (JSON) | Sí | Serializa `FeesIn` — ver §3 |
 | `persist` | bool (`"true"`/`"false"`) | No, default `false` | Si `true`, persiste el `ExecutionRun` vía `JUVAL_EXECUTION_DB_PATH` (ver §5) |
+| `native_financial_evidence` | bool | No, default `false` | Opt-in ADR-047 (§1a); exige `persist=true` |
+| `financial_target_profit` + `financial_target_profit_currency` | decimal + string | No, siempre juntos | Objetivo de beneficio del flujo financiero nativo; exige el opt-in |
+| `financial_target_roi` | decimal (ratio, `0.30` = 30%) | No | Objetivo de ROI del flujo financiero nativo; exige el opt-in |
 
 No existe ningún default comercial para `thresholds`/`fees` — igual que
 el CLI (`interfaces/cli/main.py`), el operador/cliente debe declararlos
@@ -99,6 +102,36 @@ que ya existe").
 | 422 | El archivo subido no es un `.xlsx` válido (`zipfile.BadZipFile` / `openpyxl.utils.exceptions.InvalidFileException`, verificado intentando abrirlo realmente — nunca se confía en el nombre ni el MIME type declarado por el cliente) |
 | 413 | El archivo excede `JUVAL_MAX_UPLOAD_BYTES`, si está configurado (ver §4) |
 | 500 | `persist=true` sin `JUVAL_EXECUTION_DB_PATH` configurado, o cualquier error interno no anticipado — nunca expone traceback ni rutas del servidor (verificado por test, `test_no_traceback_is_ever_exposed`) |
+
+### 1a. Flujo financiero nativo (ADR-047, 2026-09-25)
+
+Con `native_financial_evidence=true` y `persist=true`, el endpoint ejecuta
+`run_pipeline_with_financial_evidence`. Construye un documento
+`juval.adr047.financial-record` v2 por registro con escenario declarado en las
+columnas `fin_*` (`build_financial_documents`) y un conjunto de diagnósticos
+por registro capturado (`capture_diagnostics_sets`). Todo se guarda con
+`save_run_with_financial_records` en la misma transacción que el run y sus
+snapshots. Son las mismas funciones de aplicación que usa la CLI
+`--native-financial-evidence`.
+
+- Los objetivos se registran como `USER_INPUT` con fuente `juval-api`. Nunca
+  se toman de `thresholds`, y un objetivo omitido deja bloqueados los
+  resultados que lo necesitan.
+- No se infiere moneda, fee, coste, precio, peso ni aplicabilidad. Lo que
+  falta queda como ausencia estructural o como NOT_FOUND/INVALID, con
+  resultados bloqueados según ADR-047.
+- `records`, profit, ROI y decisiones de la respuesta son idénticos a los del
+  mismo POST sin el opt-in (probado).
+- La respuesta añade `financial`, que es `null` sin opt-in:
+  `{captures, documents, without_scenario, capture_diagnostics_sets,
+  capture_problems}`. Los documentos se leen con §2e.
+- `422`: opt-in sin `persist=true`, objetivos sin opt-in, beneficio sin
+  moneda (o al revés), o decimal no finito.
+- Si falla cualquier escritura de esa transacción, la respuesta es `500
+  internal server error` y no queda nada del run: ni run, ni snapshots, ni
+  documentos, ni diagnósticos (probado en SQLite y en PostgreSQL desechable).
+- Sin el opt-in, el comportamiento anterior no cambia. `POST /api/v1/batches`
+  no ofrece este flujo.
 
 ## 2. `GET /api/v1/runs/{execution_id}/download`
 
@@ -283,9 +316,14 @@ Deployment limits:
 - On Supabase the routes answer `503` until migration `20260925000005` is
   applied. It has not been applied to any real project yet. Only a disposable
   PostgreSQL 16 cluster has been verified.
-- No API or CLI path writes financial documents to PostgreSQL yet.
-- The run-level route performs two single-row reads per record in the page
-  (each one is its own connection on PostgreSQL).
+- `POST /api/v1/runs` with `native_financial_evidence=true` writes the
+  documents to whichever store is configured (§1a).
+- Reads are batched. A page is served by one read of the run, one of the page
+  and one batch read of its documents and diagnostics (two queries over one
+  connection). The number of connections per page does not grow with
+  `limit`, which is tested on SQLite and on disposable PostgreSQL.
+- Access is by permission, not by owner: runs have no owner, so anyone holding
+  `runs:read` can read every run.
 
 ## 3. Modelos de request (`models.py`)
 

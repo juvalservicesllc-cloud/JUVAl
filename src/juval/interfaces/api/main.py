@@ -43,7 +43,7 @@ from pydantic import ValidationError
 import juval
 import openpyxl
 from juval.application.record_snapshot import record_to_snapshot
-from juval.application.run_pipeline import run_pipeline
+from juval.application.run_pipeline import run_pipeline, run_pipeline_with_financial_evidence
 from juval.domain.execution_run import ExecutionStatus
 from juval.domain.batch import Batch, BatchFile, BatchFileStatus, aggregate_batch_status
 from juval.domain.execution_run import ExecutionRun, hash_file
@@ -51,8 +51,14 @@ from juval.application.execution_run_store import ExecutionRunStore
 from juval.application.financial_persistence import (
     FinancialRecordIntegrityError,
     FinancialStorageUnavailable,
+    save_run_with_financial_records,
 )
-from juval.application.financial_report import RecordFinancialReport, record_financial_report
+from juval.application.native_financial_documents import (
+    build_financial_documents,
+    capture_diagnostics_sets,
+    declared_financial_target,
+)
+from juval.application.financial_report import record_financial_reports
 from juval.application.financial_serialization import FinancialSerializationError
 from juval.application.record_snapshot_store import RecordSnapshotQuery
 from juval.infrastructure.excel.exporter import append_literal_row, export_excel
@@ -65,6 +71,7 @@ from .auth import RUNS_CREATE, RUNS_EXPORT, RUNS_READ, auth_mode, require, set_s
 from .models import (
     FeesIn,
     RecordFinancialOut,
+    RunFinancialSummaryOut,
     RecordOut,
     RunFailedResponse,
     RunFinancialResponse,
@@ -248,6 +255,10 @@ async def create_run(
     thresholds: str = Form(...),
     fees: str = Form(...),
     persist: bool = Form(False),
+    native_financial_evidence: bool = Form(False),
+    financial_target_profit: Optional[Decimal] = Form(None),
+    financial_target_profit_currency: Optional[str] = Form(None),
+    financial_target_roi: Optional[Decimal] = Form(None),
     _principal=Depends(require(RUNS_CREATE)),
     _csrf: None = Depends(bff.csrf_guard),
 ) -> JSONResponse:
@@ -259,6 +270,8 @@ async def create_run(
         domain_fees = service.fees_from_in(fees_in)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    _check_financial_options(persist, native_financial_evidence, financial_target_profit,
+                             financial_target_profit_currency, financial_target_roi)
 
     filename = safe_input_filename(file.filename)
     max_bytes = service.max_upload_bytes()
@@ -281,19 +294,22 @@ async def create_run(
     input_path = run_directory / filename
     input_path.write_bytes(body)
 
+    now = service.now_utc()
+    pipeline = run_pipeline_with_financial_evidence if native_financial_evidence else run_pipeline
     try:
-        run, records = run_pipeline(
+        outcome = pipeline(
             input_path,
             domain_thresholds,
             fees=domain_fees,
             application_version=juval.__version__,
             execution_id=execution_id,
-            now=service.now_utc(),
+            now=now,
         )
     except _UNREADABLE_INPUT as exc:
         raise HTTPException(status_code=422, detail=_unreadable_input_detail(filename, exc)) from exc
     finally:
         input_path.unlink(missing_ok=True)  # never keep the uploaded input around (Sec. 12)
+    run, records = (outcome.run, outcome.records) if native_financial_evidence else outcome
 
     if run.status == ExecutionStatus.FAILED:
         body_out = RunFailedResponse(
@@ -308,6 +324,7 @@ async def create_run(
     record_snapshots = [record_to_snapshot(r) for r in records]
 
     persisted = False
+    financial = None
     if persist:
         store = _execution_run_store()
         if store is None:
@@ -315,7 +332,14 @@ async def create_run(
                 status_code=500,
                 detail="persist=true was requested but JUVAL_EXECUTION_DB_PATH is not configured",
             )
-        store.save_execution_run(run, record_snapshots)
+        if native_financial_evidence:
+            # One transaction for run, snapshots, documents and diagnostics: a
+            # failure raises (generic 500) and nothing of this run is persisted.
+            financial = _persist_native_financial(
+                store, outcome, record_snapshots, now,
+                financial_target_profit, financial_target_profit_currency, financial_target_roi)
+        else:
+            store.save_execution_run(run, record_snapshots)
         persisted = True
 
     export_excel(records, service.output_path(execution_id))
@@ -332,8 +356,46 @@ async def create_run(
         warnings=run.warnings,
         persisted=persisted,
         records=[RecordOut(**s) for s in record_snapshots],
+        financial=financial,
     )
     return JSONResponse(status_code=200, content=response.model_dump(mode="json"))
+
+
+def _check_financial_options(persist, native, target_profit, target_profit_currency, target_roi) -> None:
+    """Same rules as the CLI's opt-in (ADR-047): nothing is inferred or defaulted."""
+    if native and not persist:
+        raise HTTPException(status_code=422, detail="native_financial_evidence requires persist=true")
+    if not native and any(v is not None for v in (target_profit, target_profit_currency, target_roi)):
+        raise HTTPException(status_code=422, detail="financial_target_* fields require native_financial_evidence=true")
+    if (target_profit is None) != (target_profit_currency is None):
+        raise HTTPException(status_code=422,
+                            detail="financial_target_profit and financial_target_profit_currency go together")
+    for name, value in (("financial_target_profit", target_profit), ("financial_target_roi", target_roi)):
+        if value is not None and not value.is_finite():
+            raise HTTPException(status_code=422, detail=f"{name} must be a finite decimal")
+
+
+def _persist_native_financial(store, outcome, snapshots, now, target_profit, target_profit_currency,
+                              target_roi) -> RunFinancialSummaryOut:
+    """Build the ADR-047 documents with the CLI's own application functions and
+    save them atomically with the run. Never changes records or decisions."""
+    def declared(value, unit, field):
+        return declared_financial_target(value, unit, source="juval-api", method=f"request field {field}",
+                                         retrieved_at=now)
+
+    profit = declared(target_profit, target_profit_currency, "financial_target_profit") if target_profit is not None else None
+    roi = declared(target_roi, "ratio", "financial_target_roi") if target_roi is not None else None
+    documents = build_financial_documents(outcome, calculated_at=now, target_profit=profit, target_roi=roi,
+                                          application_version=outcome.run.application_version)
+    diagnostics = capture_diagnostics_sets(outcome)
+    save_run_with_financial_records(store, outcome.run, snapshots, documents, diagnostics)
+    return RunFinancialSummaryOut(
+        captures=len(outcome.financial_evidence),
+        documents=len(documents),
+        without_scenario=sum(1 for item in outcome.financial_evidence if item.evidence is None),
+        capture_diagnostics_sets=len(diagnostics),
+        capture_problems=sum(len(item.problems) for item in outcome.financial_evidence),
+    )
 
 
 @app.post("/api/v1/batches", response_model=BatchResponse)
@@ -652,22 +714,24 @@ def _stored(payload: Optional[dict]) -> Optional[StoredPayloadOut]:
     return StoredPayloadOut(format=payload["format"], version=payload["version"], payload=payload) if payload is not None else None
 
 
-def _record_financial_out(store: ExecutionRunStore, execution_id: str, snapshot: dict) -> RecordFinancialOut:
-    """Validated stored payloads of one record, or an HTTP error that never
-    passes for absence and never echoes stored content or storage internals."""
+def _financial_out(store: ExecutionRunStore, execution_id: str, snapshots: list[dict]) -> list[RecordFinancialOut]:
+    """Validated stored payloads of these records, read in one batch, or an
+    HTTP error that never passes for absence and never echoes stored content
+    or storage internals."""
     try:
-        report: RecordFinancialReport = record_financial_report(store, execution_id, snapshot)
+        reports = record_financial_reports(store, execution_id, snapshots)
     except FinancialStorageUnavailable:
         logger.error("financial tables missing for execution_id=%s (migration not applied)", execution_id)
         raise HTTPException(status_code=503, detail="financial persistence is not available on this deployment")
     except (FinancialSerializationError, FinancialRecordIntegrityError) as exc:
-        logger.error("stored financial data failed validation: execution_id=%s record_ref=%s error=%s",
-                     execution_id, snapshot["record_ref"], type(exc).__name__)
+        logger.error("stored financial data failed validation: execution_id=%s error=%s",
+                     execution_id, type(exc).__name__)
         raise HTTPException(status_code=500, detail="stored financial data failed validation")
-    return RecordFinancialOut(execution_id=execution_id, record_ref=report.record_ref,
-                              financial_document=_stored(report.document_payload),
-                              capture_diagnostics=_stored(report.diagnostics_payload),
-                              inconsistencies=list(report.inconsistencies))
+    return [RecordFinancialOut(execution_id=execution_id, record_ref=report.record_ref,
+                               financial_document=_stored(report.document_payload),
+                               capture_diagnostics=_stored(report.diagnostics_payload),
+                               inconsistencies=list(report.inconsistencies))
+            for report in reports]
 
 
 @app.get("/api/v1/runs/{execution_id}/financial", response_model=RunFinancialResponse)
@@ -686,7 +750,7 @@ async def get_run_financial(
     page = store.list_records(execution_id, RecordSnapshotQuery(limit=limit, offset=offset))
     response = RunFinancialResponse(
         execution_id=execution_id,
-        records=[_record_financial_out(store, execution_id, snapshot) for snapshot in page.items],
+        records=_financial_out(store, execution_id, page.items),
         pagination=RecordPaginationOut(limit=limit, offset=offset, total=page.total,
                                        has_more=offset + len(page.items) < page.total),
     )
@@ -706,7 +770,8 @@ async def get_record_financial(
     snapshot = store.load_record(execution_id, record_ref) if store.load_execution_run(execution_id) else None
     if snapshot is None:
         raise HTTPException(status_code=404, detail="unknown record for execution")
-    return JSONResponse(status_code=200, content=_record_financial_out(store, execution_id, snapshot).model_dump(mode="json"))
+    [record] = _financial_out(store, execution_id, [snapshot])
+    return JSONResponse(status_code=200, content=record.model_dump(mode="json"))
 
 
 @app.exception_handler(Exception)

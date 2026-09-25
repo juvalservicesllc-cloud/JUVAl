@@ -252,6 +252,28 @@ class SupabaseExecutionRunStore:
             raise FinancialStorageUnavailable(f"table {table} does not exist") from error
         return tuple(row) if row is not None else None
 
+    def load_financial_rows(
+        self, execution_id: str, record_refs: Optional[Sequence[str]] = None,
+    ) -> tuple[dict[str, tuple[str, int, str]], dict[str, tuple[str, int, str]]]:
+        """Financial and diagnostics rows of many records of one run, keyed by
+        record_ref, over one connection (two queries). None = the whole run."""
+        psycopg, _ = _require_driver()
+        if record_refs is not None and not record_refs:
+            return {}, {}
+        found = []
+        try:
+            with self._connect() as conn:
+                for table in ("execution_run_financial_records", "execution_run_capture_diagnostics"):
+                    sql = f"SELECT record_ref, format, format_version, payload FROM {table} WHERE execution_id = %s"
+                    params: list[Any] = [execution_id]
+                    if record_refs is not None:
+                        sql += " AND record_ref = ANY(%s)"
+                        params.append(list(record_refs))
+                    found.append({ref: (fmt, version, payload) for ref, fmt, version, payload in conn.execute(sql, params)})
+        except psycopg.errors.UndefinedTable as error:
+            raise FinancialStorageUnavailable("financial tables do not exist") from error
+        return found[0], found[1]
+
     def load_financial_record(self, execution_id: str, record_ref: str) -> Optional[tuple[str, int, str]]:
         """(format, format_version, payload JSON text) of one run's record, or None
         when that record has no financial document. Parsing is the caller's job."""

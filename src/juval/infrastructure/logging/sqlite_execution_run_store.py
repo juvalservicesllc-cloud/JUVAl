@@ -254,6 +254,18 @@ def _diagnostics_row(execution_id: str, payload: Mapping[str, Any]) -> tuple[str
             json.dumps(payload, sort_keys=True))
 
 
+def _rows_by_ref(conn: sqlite3.Connection, table: str, execution_id: str,
+                 record_refs: Optional[Sequence[str]]) -> dict[str, tuple[str, int, str]]:
+    sql = f"SELECT record_ref, format, format_version, payload FROM {table} WHERE execution_id = ?"
+    params: list[Any] = [execution_id]
+    if record_refs is not None:
+        if not record_refs:
+            return {}
+        sql += f" AND record_ref IN ({','.join('?' for _ in record_refs)})"
+        params.extend(record_refs)
+    return {ref: (fmt, version, payload) for ref, fmt, version, payload in conn.execute(sql, params)}
+
+
 def _add_missing_columns(conn: sqlite3.Connection, table: str, columns: tuple[tuple[str, str], ...]) -> None:
     existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
     for name, definition in columns:
@@ -382,6 +394,16 @@ class SqliteExecutionRunStore:
                 "SELECT format, format_version, payload FROM execution_run_capture_diagnostics "
                 "WHERE execution_id = ? AND record_ref = ?", (execution_id, record_ref)).fetchone()
         return tuple(row) if row is not None else None
+
+    def load_financial_rows(
+        self, execution_id: str, record_refs: Optional[Sequence[str]] = None,
+    ) -> tuple[dict[str, tuple[str, int, str]], dict[str, tuple[str, int, str]]]:
+        """Financial and diagnostics rows of many records of one run, keyed by
+        record_ref, over one connection (two queries). None = the whole run;
+        a record with nothing stored is simply missing from the dict."""
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            return (_rows_by_ref(conn, "execution_run_financial_records", execution_id, record_refs),
+                    _rows_by_ref(conn, "execution_run_capture_diagnostics", execution_id, record_refs))
 
     def load_execution_run(self, execution_id: str) -> Optional[ExecutionRun]:
         with closing(sqlite3.connect(self._db_path)) as conn:

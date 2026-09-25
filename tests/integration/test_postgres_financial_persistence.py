@@ -368,3 +368,53 @@ def test_financial_api_reads_postgres_and_reports_a_missing_migration(tmp_path, 
         response = client.get(url)
         assert response.status_code == 503
         assert response.json() == {"detail": "financial persistence is not available on this deployment"}
+
+
+def test_api_writes_and_batch_reads_financial_documents_on_postgres(tmp_path, dsn, store, monkeypatch):
+    """POST (native flow) -> PostgreSQL -> GET, with a constant connection count
+    per page and a failing financial write leaving nothing behind."""
+    from fastapi.testclient import TestClient
+    from juval.infrastructure.persistence import supabase_execution_run_store as pg_module
+    from juval.interfaces.api import service
+    from juval.interfaces.api.main import app
+
+    from .test_api_financial_flow import NATIVE, ROWS, post
+
+    monkeypatch.setenv("JUVAL_RUN_STORAGE_DIR", str(tmp_path / "runs"))
+    monkeypatch.setenv("JUVAL_EXECUTION_STORE", "supabase")
+    monkeypatch.setenv("JUVAL_SUPABASE_DB_URL", dsn)                                   # the disposable schema
+    monkeypatch.delenv("JUVAL_MAX_UPLOAD_BYTES", raising=False)
+    ids = iter(("pg-api-1", "pg-api-2"))
+    monkeypatch.setattr(service, "new_execution_id", lambda: next(ids))
+    client = TestClient(app, raise_server_exceptions=False)
+    path = xlsx(tmp_path, *ROWS)
+
+    created = post(path, **NATIVE)
+    assert created.status_code == 200, created.text
+    assert created.json()["financial"]["documents"] == 3
+    real, calls = psycopg.connect, []
+
+    def counting(*args, **kwargs):
+        calls.append(args)
+        return real(*args, **kwargs)
+    monkeypatch.setattr(psycopg, "connect", counting)
+    per_page = []
+    for limit in (1, 4):
+        calls.clear()
+        page = client.get("/api/v1/runs/pg-api-1/financial", params={"limit": limit})
+        assert page.status_code == 200 and len(page.json()["records"]) == limit
+        per_page.append(len(calls))
+    assert per_page[0] == per_page[1] <= 3                     # run, page, one batch read
+    monkeypatch.setattr(psycopg, "connect", real)
+    entries = client.get("/api/v1/runs/pg-api-1/financial").json()["records"]
+    for entry in entries:
+        ref = entry["record_ref"]
+        row_ = store.load_financial_record("pg-api-1", ref)
+        assert entry["financial_document"] == (None if row_ is None else
+                                               {"format": row_[0], "version": row_[1], "payload": json.loads(row_[2])})
+
+    def fail(execution_id, payload):
+        raise ValueError("simulated failure after the run and snapshot inserts")
+    monkeypatch.setattr(pg_module, "_diagnostics_row", fail)
+    assert post(path, **NATIVE).status_code == 500
+    assert store.load_execution_run("pg-api-2") is None and store.load_records("pg-api-2") == []

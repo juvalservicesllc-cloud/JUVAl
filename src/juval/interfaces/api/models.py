@@ -123,6 +123,19 @@ class RunResponse(BaseModel):
     warnings: int
     persisted: bool
     records: list[RecordOut] = []
+    # Only when native_financial_evidence=true was requested (ADR-047); null otherwise.
+    financial: Optional["RunFinancialSummaryOut"] = None
+
+
+class RunFinancialSummaryOut(BaseModel):
+    """Counts of what the native financial flow persisted with the run. The
+    documents themselves are read from GET /api/v1/runs/{id}/financial."""
+
+    captures: int
+    documents: int
+    without_scenario: int
+    capture_diagnostics_sets: int
+    capture_problems: int
 
 
 class RunFailedResponse(BaseModel):

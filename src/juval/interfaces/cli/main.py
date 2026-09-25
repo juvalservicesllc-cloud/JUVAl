@@ -34,15 +34,18 @@ from pathlib import Path
 from typing import Optional, Sequence
 
 import juval
-from juval.application.capture_diagnostics import RecordCaptureDiagnostics
 from juval.application.financial_persistence import save_run_with_financial_records
-from juval.application.native_financial_documents import build_financial_documents
+from juval.application.native_financial_documents import (
+    build_financial_documents,
+    capture_diagnostics_sets,
+    declared_financial_target,
+)
 from juval.application.record_snapshot import record_to_snapshot
 from juval.application.run_pipeline import run_pipeline, run_pipeline_with_financial_evidence
 from juval.domain.costs import FeeInputs
 from juval.domain.decision import Decision, Thresholds
 from juval.domain.execution_run import ExecutionStatus
-from juval.domain.provenance import FieldValue, SourceType
+from juval.domain.provenance import FieldValue
 from juval.domain.risk import Severity
 from juval.infrastructure.excel.exporter import export_excel
 from juval.infrastructure.logging.sqlite_execution_run_store import SqliteExecutionRunStore
@@ -116,9 +119,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _financial_input(value: Decimal, unit: str, flag: str, now: datetime) -> FieldValue:
-    # Declared by the operator for this run: USER_INPUT, never a supplier or Amazon value.
-    return FieldValue.verified(value, unit=unit, source="juval-cli", method=f"operator flag {flag}",
-                               retrieved_at=now, source_type=SourceType.USER_INPUT)
+    return declared_financial_target(value, unit, source="juval-cli", method=f"operator flag {flag}",
+                                     retrieved_at=now)
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
@@ -220,10 +222,7 @@ def _persist_native_financial(args: argparse.Namespace, outcome, now: datetime) 
     for item in outcome.financial_evidence:
         for problem in item.problems:
             print(f"  {item.record_ref}: {problem}")
-    # One diagnostics set per captured record, with or without a scenario; an
-    # empty set records "captured, no diagnostics". Dropped rows have no record.
-    diagnostics = [RecordCaptureDiagnostics(outcome.run.execution_id, item.record_ref, item.capture.diagnostics)
-                   for item in outcome.financial_evidence]
+    diagnostics = capture_diagnostics_sets(outcome)
     try:
         save_run_with_financial_records(SqliteExecutionRunStore(args.persist_db), outcome.run,
                                         [record_to_snapshot(record) for record in outcome.records], documents,

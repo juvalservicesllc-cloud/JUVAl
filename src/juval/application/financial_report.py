@@ -14,13 +14,13 @@ side is preferred.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional, Protocol
+from typing import Any, Optional, Protocol, Sequence
 
 from juval.application.capture_diagnostics import RecordCaptureDiagnostics
 from juval.application.financial_persistence import (
     AnyFinancialRecord,
-    load_capture_diagnostics_with_payload,
-    load_financial_record_with_payload,
+    read_capture_diagnostics_row,
+    read_financial_row,
 )
 from juval.application.financial_serialization_v2 import FinancialRecordDocumentV2
 from juval.domain.execution_run import ExecutionRun
@@ -37,9 +37,9 @@ class ReportStore(Protocol):
 
     def load_records(self, execution_id: str) -> list[dict[str, Any]]: ...
 
-    def load_financial_record(self, execution_id: str, record_ref: str) -> Optional[tuple[str, int, str]]: ...
-
-    def load_capture_diagnostics(self, execution_id: str, record_ref: str) -> Optional[tuple[str, int, str]]: ...
+    def load_financial_rows(
+        self, execution_id: str, record_refs: Optional[Sequence[str]] = None,
+    ) -> tuple[dict[str, tuple[str, int, str]], dict[str, tuple[str, int, str]]]: ...
 
 
 @dataclass(frozen=True)
@@ -71,19 +71,27 @@ def build_financial_report(store: ReportStore, execution_id: str) -> FinancialRu
     run = store.load_execution_run(execution_id)
     if run is None:
         raise ExecutionNotFound(execution_id)
-    return FinancialRunReport(run, tuple(record_financial_report(store, execution_id, snapshot)
-                                         for snapshot in store.load_records(execution_id)))
+    return FinancialRunReport(run, record_financial_reports(store, execution_id, store.load_records(execution_id),
+                                                            whole_run=True))
 
 
-def record_financial_report(store: ReportStore, execution_id: str,
-                            snapshot: dict[str, Any]) -> RecordFinancialReport:
-    """What is stored for one record snapshot of `execution_id`; never writes."""
-    ref = snapshot["record_ref"]
-    document, document_payload = load_financial_record_with_payload(store, execution_id, ref) or (None, None)
-    diagnostics, diagnostics_payload = (load_capture_diagnostics_with_payload(store, execution_id, ref)
-                                        or (None, None))
-    return RecordFinancialReport(ref, snapshot, document, diagnostics, _inconsistencies(document, diagnostics),
-                                 document_payload, diagnostics_payload)
+def record_financial_reports(store: ReportStore, execution_id: str, snapshots: Sequence[dict[str, Any]], *,
+                             whole_run: bool = False) -> tuple[RecordFinancialReport, ...]:
+    """What is stored for these record snapshots of `execution_id`, in their
+    order, from one batch read (not one read per record); never writes.
+    `whole_run` reads every row of the run instead of listing the refs."""
+    refs = None if whole_run else [snapshot["record_ref"] for snapshot in snapshots]
+    documents, diagnostics_rows = store.load_financial_rows(execution_id, refs)
+    reports = []
+    for snapshot in snapshots:
+        ref = snapshot["record_ref"]
+        document, document_payload = read_financial_row(documents.get(ref), execution_id, ref) or (None, None)
+        diagnostics, diagnostics_payload = (read_capture_diagnostics_row(diagnostics_rows.get(ref), execution_id, ref)
+                                            or (None, None))
+        reports.append(RecordFinancialReport(ref, snapshot, document, diagnostics,
+                                             _inconsistencies(document, diagnostics),
+                                             document_payload, diagnostics_payload))
+    return tuple(reports)
 
 
 def _inconsistencies(document: Optional[AnyFinancialRecord],

@@ -204,13 +204,14 @@ def test_missing_financial_tables_are_a_503_not_an_empty_answer(db, monkeypatch)
         def __getattr__(self, name):
             return getattr(store, name)
 
-        def load_financial_record(self, *_):
-            raise FinancialStorageUnavailable("table execution_run_financial_records does not exist")
+        def load_financial_rows(self, *_):
+            raise FinancialStorageUnavailable("financial tables do not exist")
 
     monkeypatch.setattr(api, "_execution_run_store", Unmigrated)
-    response = client.get("/api/v1/runs/run-A/financial")
-    assert response.status_code == 503
-    assert response.json() == {"detail": "financial persistence is not available on this deployment"}
+    for url in ("/api/v1/runs/run-A/financial", f"/api/v1/runs/run-A/records/{refs(store)[0]}/financial"):
+        response = client.get(url)
+        assert response.status_code == 503
+        assert response.json() == {"detail": "financial persistence is not available on this deployment"}
 
 
 def test_unconfigured_store_is_a_500(db, monkeypatch):

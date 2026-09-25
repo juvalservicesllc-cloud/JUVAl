@@ -9,6 +9,7 @@ import openpyxl
 import pytest
 
 from juval.application import capture_diagnostics as module
+from juval.application import native_financial_documents as documents_module
 from juval.application.capture_diagnostics import (
     RecordCaptureDiagnostics, deserialize_capture_diagnostics, serialize_capture_diagnostics,
 )
@@ -148,7 +149,7 @@ def test_stored_corruption_version_and_identity_are_errors_not_absence(tmp_path)
 
 @pytest.mark.parametrize("tamper_kind", ["other_run", "unknown_record", "duplicate"])
 def test_invalid_diagnostics_sets_write_nothing(tmp_path, monkeypatch, tamper_kind, capsys):
-    real = cli.RecordCaptureDiagnostics
+    real = documents_module.RecordCaptureDiagnostics
 
     def build(execution_id, record_ref, diagnostics):
         if tamper_kind == "other_run":
@@ -157,7 +158,7 @@ def test_invalid_diagnostics_sets_write_nothing(tmp_path, monkeypatch, tamper_ki
             return real(execution_id, "row_99:GHOST", diagnostics)
         return real(execution_id, "row_2:A", diagnostics)                # both records claim row_2:A
 
-    monkeypatch.setattr(cli, "RecordCaptureDiagnostics", build)
+    monkeypatch.setattr(documents_module, "RecordCaptureDiagnostics", build)
     code, _, store = cli_run(tmp_path, [row("A"), row("B")], *FINANCIAL)
     assert code == 3 and "nothing was persisted" in capsys.readouterr().err
     assert store.load_execution_run("run-A") is None and store.load_records("run-A") == []

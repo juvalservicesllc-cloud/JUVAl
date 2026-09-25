@@ -111,6 +111,6 @@ def test_financial_port_matches_the_sqlite_store_exactly():
     # FinancialRecordStore with the same signatures, so the application code is shared.
     from juval.infrastructure.logging.sqlite_execution_run_store import SqliteExecutionRunStore
 
-    for name in ("save_execution_run", "load_financial_record", "load_capture_diagnostics"):
+    for name in ("save_execution_run", "load_financial_record", "load_capture_diagnostics", "load_financial_rows"):
         assert inspect.signature(getattr(SupabaseExecutionRunStore, name)) == \
             inspect.signature(getattr(SqliteExecutionRunStore, name)), name

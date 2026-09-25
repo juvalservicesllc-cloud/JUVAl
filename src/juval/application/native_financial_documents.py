@@ -20,8 +20,10 @@ actually knows (None otherwise).
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from typing import Optional
 
+from juval.application.capture_diagnostics import RecordCaptureDiagnostics
 from juval.application.financial_calculation import calculate_financial_results
 from juval.application.financial_serialization import FinancialRecordDocument
 from juval.application.financial_serialization_v2 import (
@@ -32,7 +34,7 @@ from juval.application.financial_serialization_v2 import (
 )
 from juval.application.native_financial_resolution import resolve_record_financial_dependencies
 from juval.application.run_pipeline import PipelineRunWithFinancialEvidence
-from juval.domain.provenance import FieldValue
+from juval.domain.provenance import FieldValue, SourceType
 
 
 def build_financial_documents(
@@ -61,3 +63,22 @@ def build_financial_documents(
                          for d in item.capture.diagnostics)
         documents.append(FinancialRecordDocumentV2(core, supplied, problems, identity))
     return tuple(documents)
+
+
+def declared_financial_target(value: Decimal, unit: str, *, source: str, method: str,
+                              retrieved_at: datetime) -> FieldValue:
+    """A target the operator declared for this run: USER_INPUT, never a supplier
+    or Amazon value, and never taken from the commercial thresholds."""
+    if not isinstance(value, Decimal) or not value.is_finite():
+        raise ValueError(f"{method}: a finite decimal is required, got {value!r}")
+    if not isinstance(unit, str) or not unit.strip():
+        raise ValueError(f"{method}: an explicit unit is required")
+    return FieldValue.verified(value, unit=unit, source=source, method=method,
+                               retrieved_at=retrieved_at, source_type=SourceType.USER_INPUT)
+
+
+def capture_diagnostics_sets(result: PipelineRunWithFinancialEvidence) -> tuple[RecordCaptureDiagnostics, ...]:
+    """One set per captured record, with or without a scenario; an empty set
+    records "captured, no diagnostics". Dropped rows have no record, so no set."""
+    return tuple(RecordCaptureDiagnostics(result.run.execution_id, item.record_ref, item.capture.diagnostics)
+                 for item in result.financial_evidence)

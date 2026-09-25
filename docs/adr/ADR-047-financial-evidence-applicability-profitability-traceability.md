@@ -39,11 +39,17 @@
   El backend PostgreSQL está IMPLEMENTED y verificado solo en un clúster
   desechable: migración aditiva `20260925000005_execution_run_financial_records`
   (con `.down.sql`) y `SupabaseExecutionRunStore` con el mismo contrato que SQLite.
-  No se ha aplicado a ningún proyecto Supabase: el despliegue sigue pendiente, y
-  ni la API ni la CLI escriben todavía documentos financieros en PostgreSQL.
-  El paso 7 es PARTIAL: hay lectura HTTP versionada y de solo lectura de
-  documentos y diagnósticos persistidos (`docs/architecture/API_CONTRACT.md`
-  §2e), pero la API no los escribe. Los pasos 8-9 siguen PENDING, igual que la
+  No se ha aplicado a ningún proyecto Supabase (NOT DEPLOYED).
+  El paso 7 está IMPLEMENTED para `POST /api/v1/runs` y para la lectura, con
+  estos estados:
+  - IMPLEMENTED: el opt-in `native_financial_evidence` escribe documentos y
+    diagnósticos en la transacción del run
+    (`docs/architecture/API_CONTRACT.md` §1a), y dos GET versionados de solo
+    lectura con lectura por lotes los devuelven (§2e).
+  - VERIFIED IN DISPOSABLE POSTGRESQL: SQLite y PostgreSQL 16 desechable.
+  - NOT DEPLOYED: Supabase real.
+  - PENDING: `POST /api/v1/batches`.
+  Los pasos 8-9 siguen PENDING, igual que la
   proyección a CostInputs/FeeInputs y el snapshot efectivo reproducible (§19):
   no hay consumo por Decision Score ni activación de pipeline.
 
@@ -496,14 +502,40 @@ Formato v2 (§19; serialización pura, sin persistencia ni consumidores):
   - No verificado: la aplicación en un proyecto Supabase real, sus roles y
     grants efectivos, y el pooler. Aplicarla es un paso humano de despliegue. La
     conexión del backend debe usar el rol propietario, como en ADR-036.
-- API de solo lectura (paso 7, PARTIAL, 2026-09-25):
+- Escritura desde la API y lectura por lotes (paso 7, 2026-09-25):
+  - `POST /api/v1/runs` acepta el opt-in `native_financial_evidence=true`
+    (exige `persist=true`) y los objetivos opcionales
+    `financial_target_profit` + `_currency` y `financial_target_roi`. Los
+    objetivos se registran como `USER_INPUT`, fuente `juval-api`.
+  - Reutiliza `run_pipeline_with_financial_evidence`,
+    `build_financial_documents`, `capture_diagnostics_sets`,
+    `declared_financial_target` y `save_run_with_financial_records`.
+    `capture_diagnostics_sets` y `declared_financial_target` se movieron desde
+    la CLI a `application/native_financial_documents.py` para compartirlos; la
+    CLI no cambia de comportamiento.
+  - Los documentos persistidos son iguales, como JSON, a los que
+    construyen directamente las funciones de aplicación con el mismo archivo
+    (probado). `records` y decisiones son idénticos al POST sin opt-in.
+  - Atomicidad: un fallo simulado en la escritura de diagnósticos, después de
+    insertar run y snapshots, da 500 y deja 0 filas en SQLite y en PostgreSQL
+    desechable (probado).
+  - Lectura por lotes: `load_financial_rows(execution_id, record_refs)` en los
+    stores SQLite y PostgreSQL y en el lector read-only lee documentos y
+    diagnósticos de una página (o de todo el run, para el reporte CLI) con una
+    conexión y dos consultas. `record_financial_reports` valida cada fila con
+    `read_financial_row` / `read_capture_diagnostics_row`. Probado: las
+    conexiones por página son las mismas con `limit=1` que con `limit=4`
+    (SQLite ≤4, PostgreSQL ≤3).
+  - Tests: `tests/integration/test_api_financial_flow.py` (14, SQLite) y un
+    test de flujo completo en `test_postgres_financial_persistence.py`.
+- API de solo lectura (paso 7, 2026-09-25):
   - `GET /api/v1/runs/{execution_id}/financial` (paginado como `/records`) y
     `GET /api/v1/runs/{execution_id}/records/{record_ref}/financial`, con
     `runs:read`. Contrato en `docs/architecture/API_CONTRACT.md` §2e.
   - Devuelven el payload almacenado tal cual, con su formato y versión (v1, v2,
     diagnósticos v1), validado por los lectores de
-    `application/financial_persistence.py` (`*_with_payload`) y compuesto por
-    `record_financial_report`, el mismo que usa el reporte CLI. No recalculan,
+    `application/financial_persistence.py` y compuesto por
+    `record_financial_reports`, el mismo que usa el reporte CLI. No recalculan,
     no re-serializan y no rellenan nada.
   - `null` significa "nada guardado", nunca cero ni verificación.
   - Códigos: 404 para run o registro desconocido; 500 genérico cuando los datos
@@ -517,7 +549,7 @@ Formato v2 (§19; serialización pura, sin persistencia ni consumidores):
     clúster PostgreSQL desechable, cubre 200 y un 503 real tras la reversión.
 - Pendiente:
   - despliegue de la migración anterior (humano, fuera de los tests);
-  - escritura financiera desde la API (el paso 7 solo cubre lectura);
+  - flujo financiero en `POST /api/v1/batches`;
   - propiedad por run: la API autoriza por el permiso `runs:read`, no por
     propietario, porque los runs no tienen propietario en el modelo actual;
   - integración con Decision Score (paso 8) y activación (paso 9);
@@ -537,7 +569,7 @@ al precio legacy.
 Pendiente y explícitamente no implementado: proyección determinística de
 operandos hacia CostInputs/FeeInputs (§7), propagación transitiva de estados de
 operandos derivados (§16, §17), snapshot efectivo reproducible (§19), despliegue
-de la migración PostgreSQL y escritura por API (§21) y el consumo por el componente profitability
+de la migración PostgreSQL (§21) y el consumo por el componente profitability
 (§23). Los criterios de §29 relativos a esos pasos no quedan satisfechos.
 
 ## 2. Contexto y problema
@@ -957,8 +989,8 @@ calculables numéricamente pueden no satisfacer el contrato acreditado.
 
 Lo implementado según §1.1 (contratos, frontera legacy, captura, resolución,
 cálculo, persistencia SQLite y PostgreSQL verificada en un clúster desechable,
-API de solo lectura) no completa por sí solo un criterio íntegro de ADR-040: no
-hay migración desplegada, escritura por API ni activación. Se
+escritura opt-in y lectura por API) no completa por sí solo un criterio íntegro
+de ADR-040: no hay migración desplegada ni activación. Se
 mantienen Implementation 44/68, Verification 17/68, Production 0/12,
 Security 5/16 y Amazon 0/18, sin porcentaje agregado.
 

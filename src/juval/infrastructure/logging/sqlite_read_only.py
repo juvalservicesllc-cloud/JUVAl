@@ -16,11 +16,11 @@ import json
 import sqlite3
 from contextlib import closing
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Sequence
 
 from juval.domain.execution_run import ExecutionRun
 
-from .sqlite_execution_run_store import _SELECT, _SELECT_RECORDS, _row_to_run
+from .sqlite_execution_run_store import _SELECT, _SELECT_RECORDS, _row_to_run, _rows_by_ref
 
 
 class ReadOnlySqliteRunReader:
@@ -63,3 +63,10 @@ class ReadOnlySqliteRunReader:
 
     def load_capture_diagnostics(self, execution_id: str, record_ref: str) -> Optional[tuple[str, int, str]]:
         return self._payload_row("execution_run_capture_diagnostics", execution_id, record_ref)
+
+    def load_financial_rows(
+        self, execution_id: str, record_refs: Optional[Sequence[str]] = None,
+    ) -> tuple[dict[str, tuple[str, int, str]], dict[str, tuple[str, int, str]]]:
+        with closing(self._connect()) as conn:
+            return tuple(_rows_by_ref(conn, table, execution_id, record_refs) if self._has_table(conn, table) else {}
+                         for table in ("execution_run_financial_records", "execution_run_capture_diagnostics"))

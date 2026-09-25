@@ -255,7 +255,8 @@ def test_same_input_yields_the_same_stored_payload(tmp_path):
 def test_new_module_has_no_legacy_operands_network_or_supabase():
     tree = ast.parse(pathlib.Path(documents_module.__file__).read_text(encoding="utf-8"))
     modules = {node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)}
-    assert modules == {"__future__", "datetime", "typing", "juval.application.financial_calculation",
+    assert modules == {"__future__", "datetime", "decimal", "typing", "juval.application.capture_diagnostics",
+                       "juval.application.financial_calculation",
                        "juval.application.financial_serialization", "juval.application.financial_serialization_v2",
                        "juval.application.native_financial_resolution", "juval.application.run_pipeline",
                        "juval.domain.provenance"}

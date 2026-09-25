@@ -19,9 +19,11 @@ Read outcomes stay distinct:
                                      read as "no document";
   * sqlite3.Error / psycopg.Error -> other storage failures, propagated untouched.
 
-The *_with_payload readers return the same validated object together with the
-stored JSON exactly as parsed from the stored text, for callers (the read-only
-API) that must expose the persisted payload, not a re-serialization of it.
+read_financial_row / read_capture_diagnostics_row apply those same checks to a
+row the caller already fetched (e.g. one batch read for a page), and return the
+validated object together with the stored JSON exactly as parsed from the
+stored text, for callers (the read-only API) that must expose the persisted
+payload, not a re-serialization of it.
 
 Capture diagnostics (application/capture_diagnostics.py) are saved in the same
 transaction, one set per captured record, independent of any document: a
@@ -138,15 +140,14 @@ def save_run_with_financial_records(
 def load_financial_record(
     store: FinancialRecordStore, execution_id: str, record_ref: str
 ) -> Optional[AnyFinancialRecord]:
-    loaded = load_financial_record_with_payload(store, execution_id, record_ref)
+    loaded = read_financial_row(store.load_financial_record(execution_id, record_ref), execution_id, record_ref)
     return loaded[0] if loaded is not None else None
 
 
-def load_financial_record_with_payload(
-    store: FinancialRecordStore, execution_id: str, record_ref: str
-) -> Optional[tuple[AnyFinancialRecord, dict[str, Any]]]:
-    """The validated document and the stored payload it was read from."""
-    row = store.load_financial_record(execution_id, record_ref)
+def read_financial_row(row: Optional[tuple[str, int, str]], execution_id: str,
+                       record_ref: str) -> Optional[tuple[AnyFinancialRecord, dict[str, Any]]]:
+    """Validate one stored `(format, format_version, payload)` row found under
+    `(execution_id, record_ref)`; None stays None (nothing stored)."""
     if row is None:
         return None
     stored_format, stored_version, text = row
@@ -170,14 +171,13 @@ def load_capture_diagnostics(
     store: FinancialRecordStore, execution_id: str, record_ref: str
 ) -> Optional[RecordCaptureDiagnostics]:
     """None when no set was stored for that run/record (e.g. a legacy run)."""
-    loaded = load_capture_diagnostics_with_payload(store, execution_id, record_ref)
+    loaded = read_capture_diagnostics_row(store.load_capture_diagnostics(execution_id, record_ref),
+                                          execution_id, record_ref)
     return loaded[0] if loaded is not None else None
 
 
-def load_capture_diagnostics_with_payload(
-    store: FinancialRecordStore, execution_id: str, record_ref: str
-) -> Optional[tuple[RecordCaptureDiagnostics, dict[str, Any]]]:
-    row = store.load_capture_diagnostics(execution_id, record_ref)
+def read_capture_diagnostics_row(row: Optional[tuple[str, int, str]], execution_id: str,
+                                 record_ref: str) -> Optional[tuple[RecordCaptureDiagnostics, dict[str, Any]]]:
     if row is None:
         return None
     stored_format, stored_version, text = row
