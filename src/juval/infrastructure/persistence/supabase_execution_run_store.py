@@ -35,6 +35,16 @@ never left half-saved.
 `snapshot` is stored as `JSONB` (Postgres' native type for exactly this
 kind of structured JSON payload) -- psycopg adapts a Python dict to
 JSONB automatically via `psycopg.types.json.Json`.
+
+Native financial records and capture diagnostics (ADR-047 §22 step 6,
+migration 20260925000005_execution_run_financial_records.sql): same
+contract as the SQLite store. `save_execution_run(..., financial_records=...,
+capture_diagnostics=...)` writes them in the run's own transaction, and the
+rows are built by the SQLite store's own helpers, so both backends store the
+identical canonical TEXT (not JSONB, which would not keep the text
+byte-identical). `load_financial_record` / `load_capture_diagnostics` return
+the raw `(format, format_version, payload)` row or None; parsing and
+integrity checks stay in application/financial_persistence.py.
 """
 
 from __future__ import annotations
@@ -46,6 +56,7 @@ from juval.domain.execution_run import ExecutionRun, ExecutionStatus
 from juval.domain.batch import Batch, BatchFile, BatchFileStatus, BatchStatus
 from juval.application.record_snapshot_store import RecordSnapshotPage, RecordSnapshotQuery
 from juval.application.run_analytics import brand_distribution, issue_types, numeric_summary, price_spread
+from juval.infrastructure.logging.sqlite_execution_run_store import _diagnostics_row, _financial_row
 
 _INSERT = """
 INSERT INTO execution_runs (
@@ -59,6 +70,16 @@ INSERT INTO execution_runs (
 _INSERT_RECORD = """
 INSERT INTO execution_run_records (execution_id, ordinal, record_ref, snapshot)
 VALUES (%s, %s, %s, %s)
+"""
+
+_INSERT_FINANCIAL = """
+INSERT INTO execution_run_financial_records (execution_id, record_ref, format, format_version, payload)
+VALUES (%s, %s, %s, %s, %s)
+"""
+
+_INSERT_DIAGNOSTICS = """
+INSERT INTO execution_run_capture_diagnostics (execution_id, record_ref, format, format_version, payload)
+VALUES (%s, %s, %s, %s, %s)
 """
 
 _SELECT = """
@@ -178,7 +199,17 @@ class SupabaseExecutionRunStore:
         psycopg, _ = _require_driver()
         return psycopg.connect(self._connection_string)
 
-    def save_execution_run(self, run: ExecutionRun, records: Sequence[Mapping[str, Any]] = ()) -> None:
+    def save_execution_run(
+        self,
+        run: ExecutionRun,
+        records: Sequence[Mapping[str, Any]] = (),
+        *,
+        financial_records: Sequence[Mapping[str, Any]] = (),
+        capture_diagnostics: Sequence[Mapping[str, Any]] = (),
+    ) -> None:
+        """Run, record snapshots and (optionally) native financial payloads and
+        capture diagnostics, all in one transaction: any failure, including a
+        financial or diagnostics one, rolls back everything."""
         _, Json = _require_driver()
         with self._connect() as conn:
             conn.execute(
@@ -203,6 +234,26 @@ class SupabaseExecutionRunStore:
                     _INSERT_RECORD,
                     (run.execution_id, ordinal, record["record_ref"], Json(dict(record))),
                 )
+            for payload in financial_records:
+                conn.execute(_INSERT_FINANCIAL, _financial_row(run.execution_id, payload))
+            for payload in capture_diagnostics:
+                conn.execute(_INSERT_DIAGNOSTICS, _diagnostics_row(run.execution_id, payload))
+
+    def _payload_row(self, table: str, execution_id: str, record_ref: str) -> Optional[tuple[str, int, str]]:
+        with self._connect() as conn:
+            row = conn.execute(f"SELECT format, format_version, payload FROM {table} "
+                               "WHERE execution_id = %s AND record_ref = %s", (execution_id, record_ref)).fetchone()
+        return tuple(row) if row is not None else None
+
+    def load_financial_record(self, execution_id: str, record_ref: str) -> Optional[tuple[str, int, str]]:
+        """(format, format_version, payload JSON text) of one run's record, or None
+        when that record has no financial document. Parsing is the caller's job."""
+        return self._payload_row("execution_run_financial_records", execution_id, record_ref)
+
+    def load_capture_diagnostics(self, execution_id: str, record_ref: str) -> Optional[tuple[str, int, str]]:
+        """(format, format_version, payload JSON text) of one record's stored
+        diagnostics, or None when none were stored for it."""
+        return self._payload_row("execution_run_capture_diagnostics", execution_id, record_ref)
 
     def load_execution_run(self, execution_id: str) -> Optional[ExecutionRun]:
         with self._connect() as conn:

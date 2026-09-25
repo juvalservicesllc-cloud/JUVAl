@@ -35,7 +35,7 @@ def test_implements_the_execution_run_store_port_shape():
     save_params = list(inspect.signature(store.save_execution_run).parameters)
     load_params = list(inspect.signature(store.load_execution_run).parameters)
     list_params = list(inspect.signature(store.list_execution_runs).parameters)
-    assert save_params == ["run", "records"]
+    assert save_params == ["run", "records", "financial_records", "capture_diagnostics"]
     assert load_params == ["execution_id"]
     assert list_params == ["limit"]
 
@@ -104,3 +104,13 @@ except ModuleNotFoundError as exc:
     assert "postgres" in str(exc), exc
     print("CONNECT_REQUIRES_DRIVER")
 """
+
+
+def test_financial_port_matches_the_sqlite_store_exactly():
+    # ADR-047 step 6: both backends satisfy application/financial_persistence.py's
+    # FinancialRecordStore with the same signatures, so the application code is shared.
+    from juval.infrastructure.logging.sqlite_execution_run_store import SqliteExecutionRunStore
+
+    for name in ("save_execution_run", "load_financial_record", "load_capture_diagnostics"):
+        assert inspect.signature(getattr(SupabaseExecutionRunStore, name)) == \
+            inspect.signature(getattr(SqliteExecutionRunStore, name)), name

@@ -124,6 +124,15 @@ real (`tests/integration/test_supabase_execution_run_store.py`):
 INSERT+SELECT+cleanup de records con round-trip de provenance
 (`NOT_FOUND`), y `list_execution_runs` — las 3 pasan (`3 passed`).
 
+`supabase/migrations/20260925000005_execution_run_financial_records.sql`
+(ADR-047 paso 6, `[NO APLICADA]`) — tablas `execution_run_financial_records` y
+`execution_run_capture_diagnostics`, iguales a las de SQLite: PK `(execution_id,
+record_ref)`, FK compuesta a `execution_run_records`, `payload text` (no `jsonb`,
+para conservar el texto canónico byte a byte) y RLS habilitada sin políticas.
+Tiene reversión en `.down.sql`. Verificada solo en un clúster PostgreSQL
+desechable (`tests/integration/test_postgres_financial_persistence.py`); detalle
+en ADR-047 §1.1.
+
 ## 4. Row Level Security — `[DESPLEGADO, VERIFICADO 2026-08-17]`
 
 Migración aplicada al proyecto real (§1). `select rowsecurity from

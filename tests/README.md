@@ -22,3 +22,12 @@ search path without `public`, and removes only that schema in `finally`.
 Previously the fixture dropped runtime-named tables using a runtime DSN;
 that unsafe behavior has been removed. Other Supabase integration tests have
 separate environment contracts; use the lab to avoid inheriting their DSNs.
+
+## Disposable financial persistence cluster (2026-09-25)
+
+`tests/integration/test_postgres_financial_persistence.py` (ADR-047 step 6)
+runs only with `JUVAL_POSTGRES_BIN` (e.g. `/usr/lib/postgresql/16/bin`). It
+creates its own cluster with `initdb` in a temporary directory, listening only
+on a Unix socket there, applies the real `supabase/migrations/` files to a
+per-test schema, and removes everything afterwards. It reads no DSN from the
+environment, so it cannot reach a runtime or production database.

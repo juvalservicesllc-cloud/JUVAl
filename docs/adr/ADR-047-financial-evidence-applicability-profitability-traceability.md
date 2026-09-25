@@ -36,8 +36,12 @@
   (`application/financial_persistence.py` y la tabla
   `execution_run_financial_records`), en la misma transacción que el run y sus
   snapshots. La CLI local lo persiste con el opt-in `--native-financial-evidence`.
-  Falta el backend Supabase/PostgreSQL: exige una migración nueva en
-  `supabase/migrations/`, no autorizada todavía. Los pasos 7-9 siguen PENDING: no
+  El backend PostgreSQL está IMPLEMENTED y verificado solo en un clúster
+  desechable: migración aditiva `20260925000005_execution_run_financial_records`
+  (con `.down.sql`) y `SupabaseExecutionRunStore` con el mismo contrato que SQLite.
+  No se ha aplicado a ningún proyecto Supabase: el despliegue sigue pendiente, y
+  ni la API ni la CLI escriben todavía documentos financieros en PostgreSQL.
+  Los pasos 7-9 siguen PENDING: no
   hay API financiera, proyección a CostInputs/FeeInputs, snapshot efectivo
   reproducible (§19), consumo por Decision Score ni activación de pipeline.
 
@@ -60,7 +64,7 @@ Implementado como contrato de dominio, sin acreditar dato alguno por sí mismo:
 | `FinancialResult` / `DEPENDENCY_MATRIX` / `resolve_financial_dependencies` / `ResultResolution` (domain) | Resolución pura por resultado de §16: dependencias exigidas, operandos utilizables sin copiar, exclusiones, bloqueos con motivo (`ResolutionBlocker`, no un VerificationStatus) y estado de eslabón más débil solo con dependencias resueltas |
 | `calculate_financial_results` / `FinancialCalculation` (application) | Cálculo acreditado por resultado: precondiciones matemáticas evaluadas, valor `CALCULATED` VERIFIED/INFERRED o NOT_FOUND con diagnóstico, operandos y evidencia originales enlazados, exactitud Decimal informada |
 | `FinancialRecordDocument` / `serialize_financial_record` / `deserialize_financial_record` (application) | Formato `juval.adr047.financial-record` v1: serialización pura, JSON-compatible, determinista y reversible de evidencia, precio declarado, resolución y cálculos; sin I/O ni persistencia |
-| `save_run_with_financial_records` / `load_financial_record` (application) + `execution_run_financial_records` (SQLite) | Persistencia aditiva del payload v1 por `(execution_id, record_ref)`, atómica con run y snapshots; lectura que distingue ausencia, payload corrupto o versión desconocida, e identidad incoherente |
+| `save_run_with_financial_records` / `load_financial_record` (application) + `execution_run_financial_records` (SQLite y PostgreSQL) | Persistencia aditiva del payload v1 por `(execution_id, record_ref)`, atómica con run y snapshots; lectura que distingue ausencia, payload corrupto o versión desconocida, e identidad incoherente |
 | `FinancialRecordDocumentV2` / `serialize_financial_record_v2` / `deserialize_financial_record_v2` / `read_financial_record` / `assess_reproducibility` (application) | Formato v2 puro: núcleo v1 idéntico más inputs suministrados, problemas de captura e identidad de implementación; lectura v1/v2 discriminada por versión; evaluación separada de las garantías A/B/C de §19; sin I/O ni consumidores |
 | `FeeEvidenceState` / `accredited_fee_evidence` (domain) | Vista acreditada por registro de los cuatro términos de fee: DECLARED/OBSERVED/INFERRED/DERIVED frente a ausente, NOT_FOUND, INVALID, excluido o aplicabilidad no resuelta; sin derivación ni defaults |
 | `DeclaredSellingPrice` (domain) | Precio declarado por registro con moneda propia en `amount.unit` y `EffectiveContext`; no es `PriceObservation` |
@@ -448,7 +452,52 @@ Formato v2 (§19; serialización pura, sin persistencia ni consumidores):
   - Corrupción, versión desconocida o identidad incoherente abortan sin reporte.
   - Una base anterior a las tablas financieras se lee como "nada guardado", sin
     crear esas tablas.
+- Persistencia PostgreSQL (2026-09-25):
+  - Implementado: migración aditiva
+    `supabase/migrations/20260925000005_execution_run_financial_records.sql`
+    con las tablas `execution_run_financial_records` y
+    `execution_run_capture_diagnostics`, columna por columna iguales a las de
+    SQLite. Tienen PK `(execution_id, record_ref)` y FK compuesta a
+    `execution_run_records`, y `CHECK` sobre el literal de `format` y
+    `format_version >= 1`. `payload` es `text` y no `jsonb`, porque `jsonb`
+    reordena y normaliza el JSON y el texto dejaría de ser byte-idéntico.
+  - RLS: habilitada sin políticas ni `FORCE`, la misma postura que
+    `execution_runs`/`execution_run_records`. Solo el rol propietario, el backend
+    por conexión directa, lee o escribe; los datos financieros no quedan más
+    expuestos que su run.
+  - Reversión: `.down.sql` elimina solo esas dos tablas; runs y snapshots siguen
+    legibles como legacy. Borra los documentos guardados, que no se pueden
+    reconstruir.
+  - Store: `SupabaseExecutionRunStore.save_execution_run(...,
+    financial_records=, capture_diagnostics=)` escribe todo en la transacción del
+    run. `load_financial_record` / `load_capture_diagnostics` devuelven la fila
+    cruda o `None`. Las filas se construyen con los mismos helpers que SQLite, y
+    parseo e integridad siguen en `application/financial_persistence.py`, sin
+    lógica duplicada. Si falta la tabla, se lanza `UndefinedTable`, nunca "sin
+    documento".
+  - Verificado: `tests/integration/test_postgres_financial_persistence.py`, 18
+    tests contra un clúster PostgreSQL 16 desechable (initdb en un directorio
+    temporal, solo socket Unix, sin DSN del entorno), con `JUVAL_POSTGRES_BIN`.
+    Cubren:
+    - migración desde el esquema previo con un run legacy (reaplicarla no cambia
+      nada);
+    - columnas y restricciones;
+    - round-trip v1, y v2 más diagnósticos generados por la CLI real, con texto
+      byte-idéntico al de SQLite;
+    - aislamiento entre runs y duplicados;
+    - rollback conjunto ante violaciones de FK, PK o identidad;
+    - errores de integridad y serialización en lectura, y rechazo por `CHECK`;
+    - que un rol no propietario con `GRANT` vea 0 filas y no pueda insertar;
+    - reversión y reaplicación.
+    Una mutación de prueba (`payload jsonb`, RLS eliminada) hace fallar 7 de
+    esos tests.
+  - No verificado: la aplicación en un proyecto Supabase real, sus roles y
+    grants efectivos, y el pooler. Aplicarla es un paso humano de despliegue. La
+    conexión del backend debe usar el rol propietario, como en ADR-036.
 - Pendiente:
+  - despliegue de la migración anterior (humano, fuera de los tests);
+  - API financiera aditiva/versionada (paso 7), que tampoco existe para SQLite;
+  - integración con Decision Score (paso 8) y activación (paso 9);
   - las filas descartadas por el importer no tienen `record_ref`, así que quedan
     fuera. Necesitarían una identidad por `(execution_id, número de fila de
     origen)` en un contrato aparte;
@@ -464,8 +513,8 @@ al precio legacy.
 
 Pendiente y explícitamente no implementado: proyección determinística de
 operandos hacia CostInputs/FeeInputs (§7), propagación transitiva de estados de
-operandos derivados (§16, §17), snapshot efectivo reproducible (§19), persistencia
-Supabase/PostgreSQL y API aditiva (§21) y el consumo por el componente profitability
+operandos derivados (§16, §17), snapshot efectivo reproducible (§19), despliegue
+de la migración PostgreSQL y API aditiva (§21) y el consumo por el componente profitability
 (§23). Los criterios de §29 relativos a esos pasos no quedan satisfechos.
 
 ## 2. Contexto y problema
@@ -884,8 +933,9 @@ históricos. Exige más contexto de entrada y conservación; datos antes
 calculables numéricamente pueden no satisfacer el contrato acreditado.
 
 Lo implementado según §1.1 (contratos, frontera legacy, captura, resolución,
-cálculo y persistencia SQLite local) no completa por sí solo un criterio íntegro
-de ADR-040: no hay persistencia de producción, API ni activación. Se
+cálculo, persistencia SQLite y PostgreSQL verificada en un clúster desechable) no
+completa por sí solo un criterio íntegro de ADR-040: no hay migración desplegada,
+API ni activación. Se
 mantienen Implementation 44/68, Verification 17/68, Production 0/12,
 Security 5/16 y Amazon 0/18, sin porcentaje agregado.
 
