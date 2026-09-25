@@ -36,9 +36,10 @@
   (`application/financial_persistence.py` y la tabla
   `execution_run_financial_records`), en la misma transacción que el run y sus
   snapshots. La CLI local lo persiste con el opt-in `--native-financial-evidence`.
-  Falta el backend Supabase/PostgreSQL, que la API no usa todavía. Los pasos 7-9 siguen
-  PENDING: no hay cálculo, proyección a CostInputs/FeeInputs, snapshot, persistencia, API, consumo por Decision
-  Score ni activación de pipeline.
+  Falta el backend Supabase/PostgreSQL: exige una migración nueva en
+  `supabase/migrations/`, no autorizada todavía. Los pasos 7-9 siguen PENDING: no
+  hay API financiera, proyección a CostInputs/FeeInputs, snapshot efectivo
+  reproducible (§19), consumo por Decision Score ni activación de pipeline.
 
 ### 1.1 Contratos implementados y pendientes
 
@@ -461,11 +462,11 @@ una `PriceObservation` y se captura con las columnas `fin_selling_price_*`.
 `application/native_financial_resolution.py` lo entrega al resolvedor sin recurrir
 al precio legacy.
 
-Pendiente y explícitamente no implementado aquí: proyección determinística de
-operandos (§7), resolución de dependencias por resultado y propagación de estados
-(§16, §17), snapshot efectivo reproducible (§19), persistencia/API aditivas (§21) y el consumo por el componente profitability
-(§23). Los criterios de §29 relativos a esos pasos no quedan satisfechos por esta
-implementación de contratos.
+Pendiente y explícitamente no implementado: proyección determinística de
+operandos hacia CostInputs/FeeInputs (§7), propagación transitiva de estados de
+operandos derivados (§16, §17), snapshot efectivo reproducible (§19), persistencia
+Supabase/PostgreSQL y API aditiva (§21) y el consumo por el componente profitability
+(§23). Los criterios de §29 relativos a esos pasos no quedan satisfechos.
 
 ## 2. Contexto y problema
 
@@ -882,9 +883,9 @@ explicar dependencias por resultado y conservar reproducibilidad sin promover
 históricos. Exige más contexto de entrada y conservación; datos antes
 calculables numéricamente pueden no satisfacer el contrato acreditado.
 
-Los contratos de dominio, la frontera legacy y su proyección read-only de §1.1
-no completan por sí solos un criterio íntegro
-de ADR-040: no hay resolución, integración, persistencia ni activación. Se
+Lo implementado según §1.1 (contratos, frontera legacy, captura, resolución,
+cálculo y persistencia SQLite local) no completa por sí solo un criterio íntegro
+de ADR-040: no hay persistencia de producción, API ni activación. Se
 mantienen Implementation 44/68, Verification 17/68, Production 0/12,
 Security 5/16 y Amazon 0/18, sin porcentaje agregado.
 
