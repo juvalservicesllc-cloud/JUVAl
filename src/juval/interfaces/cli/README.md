@@ -41,8 +41,11 @@ Excel de salida.
   - la identidad de implementación, con `application_version` del run y
     `code_revision`/`configuration` en `null`, porque no existe una fuente
     verificable.
-- Los problemas de un registro sin escenario completo solo se imprimen, porque ese
-  registro no tiene documento.
+- Los diagnósticos de captura de **cada** registro capturado, tenga escenario o no,
+  se guardan en la misma transacción como un conjunto independiente
+  (`juval.adr047.capture-diagnostics` v1). Un conjunto vacío significa "capturado
+  sin diagnósticos". Un registro sin escenario tiene diagnósticos pero no
+  documento financiero.
 - Los documentos v1 guardados antes se siguen leyendo como v1.
 - Registros, Excel de salida, profitability y decisiones son idénticos a la ruta
   legacy.

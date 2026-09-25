@@ -266,7 +266,8 @@ def test_persisting_documents_changes_no_commercial_snapshot(tmp_path, store):
 def test_persistence_module_uses_no_supabase_network_or_legacy_operands():
     tree = ast.parse(pathlib.Path(module.__file__).read_text(encoding="utf-8"))
     modules = {node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)}
-    assert modules == {"__future__", "typing", "juval.application.financial_serialization",
+    assert modules == {"__future__", "typing", "juval.application.capture_diagnostics",
+                       "juval.application.financial_serialization",
                        "juval.application.financial_serialization_v2", "juval.domain.execution_run"}
     store_source = pathlib.Path(SqliteExecutionRunStore.__module__.replace(".", "/") + ".py")
     text = (pathlib.Path("src") / store_source).read_text(encoding="utf-8")

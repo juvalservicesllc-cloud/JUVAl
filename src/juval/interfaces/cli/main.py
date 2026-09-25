@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import Optional, Sequence
 
 import juval
+from juval.application.capture_diagnostics import RecordCaptureDiagnostics
 from juval.application.financial_persistence import save_run_with_financial_records
 from juval.application.native_financial_documents import build_financial_documents
 from juval.application.record_snapshot import record_to_snapshot
@@ -219,16 +220,22 @@ def _persist_native_financial(args: argparse.Namespace, outcome, now: datetime) 
     for item in outcome.financial_evidence:
         for problem in item.problems:
             print(f"  {item.record_ref}: {problem}")
+    # One diagnostics set per captured record, with or without a scenario; an
+    # empty set records "captured, no diagnostics". Dropped rows have no record.
+    diagnostics = [RecordCaptureDiagnostics(outcome.run.execution_id, item.record_ref, item.capture.diagnostics)
+                   for item in outcome.financial_evidence]
     try:
         save_run_with_financial_records(SqliteExecutionRunStore(args.persist_db), outcome.run,
-                                        [record_to_snapshot(record) for record in outcome.records], documents)
+                                        [record_to_snapshot(record) for record in outcome.records], documents,
+                                        diagnostics)
     except (ValueError, sqlite3.Error) as error:
         # One transaction: nothing of this run was persisted.
         print(f"error: persistence failed, nothing was persisted for {outcome.run.execution_id}: {error}",
               file=sys.stderr)
         return 3
-    print(f"execution_run, {len(outcome.records)} record snapshots and {len(documents)} financial documents "
-          f"persisted to {args.persist_db} (execution_id={outcome.run.execution_id})")
+    print(f"execution_run, {len(outcome.records)} record snapshots, {len(documents)} financial documents and "
+          f"{len(diagnostics)} capture diagnostics sets persisted to {args.persist_db} "
+          f"(execution_id={outcome.run.execution_id})")
     return 0
 
 

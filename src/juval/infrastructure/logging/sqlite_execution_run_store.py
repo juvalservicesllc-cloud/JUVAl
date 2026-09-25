@@ -39,7 +39,12 @@ record_ref)`, with a composite FOREIGN KEY to `execution_run_records` so a
 financial document can only exist for a record snapshot of the same run.
 The payload's format and version are also stored as columns. They are
 written by `save_execution_run(..., financial_records=...)` inside the same
-transaction as the run and its snapshots. A run saved without them simply
+transaction as the run and its snapshots. A fourth table,
+`execution_run_capture_diagnostics`, holds the capturer's diagnostics per
+`(execution_id, record_ref)` (application/capture_diagnostics.py), with the same
+composite FOREIGN KEY, written by `capture_diagnostics=...` in that same
+transaction. It is independent of the financial table: a record with no
+scenario has diagnostics but no financial document. A run saved without them simply
 has no rows here: legacy runs are neither rewritten nor backfilled.
 
 Concurrency: not designed for multi-writer use. Each operation opens and
@@ -220,12 +225,32 @@ CREATE TABLE IF NOT EXISTS execution_run_financial_records (
 """
 
 
+_DIAGNOSTICS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS execution_run_capture_diagnostics (
+    execution_id TEXT NOT NULL,
+    record_ref TEXT NOT NULL,
+    format TEXT NOT NULL,
+    format_version INTEGER NOT NULL,
+    payload TEXT NOT NULL,
+    PRIMARY KEY (execution_id, record_ref),
+    FOREIGN KEY (execution_id, record_ref) REFERENCES execution_run_records (execution_id, record_ref)
+)
+"""
+
+
 def _financial_row(execution_id: str, payload: Mapping[str, Any]) -> tuple[str, str, str, int, str]:
     """Identity columns come from the payload itself; a payload of another run is refused."""
     evidence = payload["evidence"]
     if evidence["execution_id"] != execution_id:
         raise ValueError(f"financial record of execution {evidence['execution_id']!r} saved under {execution_id!r}")
     return (execution_id, evidence["record_reference"], payload["format"], payload["version"],
+            json.dumps(payload, sort_keys=True))
+
+
+def _diagnostics_row(execution_id: str, payload: Mapping[str, Any]) -> tuple[str, str, str, int, str]:
+    if payload["execution_id"] != execution_id:
+        raise ValueError(f"diagnostics of execution {payload['execution_id']!r} saved under {execution_id!r}")
+    return (execution_id, payload["record_ref"], payload["format"], payload["version"],
             json.dumps(payload, sort_keys=True))
 
 
@@ -288,6 +313,7 @@ class SqliteExecutionRunStore:
                 conn.execute(_BATCH_FILES_SCHEMA)
                 conn.execute(_BATCH_FILES_RUN_INDEX)
                 conn.execute(_FINANCIAL_SCHEMA)
+                conn.execute(_DIAGNOSTICS_SCHEMA)
                 _add_missing_columns(conn, "batch_files", _BATCH_FILE_COUNT_COLUMNS)
 
     def save_execution_run(
@@ -296,10 +322,11 @@ class SqliteExecutionRunStore:
         records: Sequence[Mapping[str, Any]] = (),
         *,
         financial_records: Sequence[Mapping[str, Any]] = (),
+        capture_diagnostics: Sequence[Mapping[str, Any]] = (),
     ) -> None:
-        """Run, record snapshots and (optionally) native financial payloads, all
-        in one transaction: any failure, including a financial one, rolls back
-        everything."""
+        """Run, record snapshots and (optionally) native financial payloads and
+        capture diagnostics, all in one transaction: any failure, including a
+        financial or diagnostics one, rolls back everything."""
         with closing(sqlite3.connect(self._db_path)) as conn:
             conn.execute("PRAGMA foreign_keys = ON")
             with conn:
@@ -331,6 +358,12 @@ class SqliteExecutionRunStore:
                         "(execution_id, record_ref, format, format_version, payload) VALUES (?, ?, ?, ?, ?)",
                         _financial_row(run.execution_id, payload),
                     )
+                for payload in capture_diagnostics:
+                    conn.execute(
+                        "INSERT INTO execution_run_capture_diagnostics "
+                        "(execution_id, record_ref, format, format_version, payload) VALUES (?, ?, ?, ?, ?)",
+                        _diagnostics_row(run.execution_id, payload),
+                    )
 
     def load_financial_record(self, execution_id: str, record_ref: str) -> Optional[tuple[str, int, str]]:
         """(format, format_version, payload JSON text) of one run's record, or None
@@ -338,6 +371,15 @@ class SqliteExecutionRunStore:
         with closing(sqlite3.connect(self._db_path)) as conn:
             row = conn.execute(
                 "SELECT format, format_version, payload FROM execution_run_financial_records "
+                "WHERE execution_id = ? AND record_ref = ?", (execution_id, record_ref)).fetchone()
+        return tuple(row) if row is not None else None
+
+    def load_capture_diagnostics(self, execution_id: str, record_ref: str) -> Optional[tuple[str, int, str]]:
+        """(format, format_version, payload JSON text) of one record's stored
+        diagnostics, or None when none were stored for it."""
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            row = conn.execute(
+                "SELECT format, format_version, payload FROM execution_run_capture_diagnostics "
                 "WHERE execution_id = ? AND record_ref = ?", (execution_id, record_ref)).fetchone()
         return tuple(row) if row is not None else None
 

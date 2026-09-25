@@ -16,6 +16,11 @@ Read outcomes stay distinct:
                                      format columns contradict where it was found;
   * sqlite3.Error                 -> storage failure, propagated untouched.
 
+Capture diagnostics (application/capture_diagnostics.py) are saved in the same
+transaction, one set per captured record, independent of any document: a
+record without a scenario has diagnostics and no financial document.
+load_capture_diagnostics follows the same outcome rules.
+
 A stored document is a faithful copy of what was serialized. It does not by
 itself make a calculation historically reproducible (ADR-047 §19): see the
 limits recorded in ADR-047.
@@ -36,6 +41,13 @@ from juval.application.financial_serialization_v2 import (
     FinancialRecordDocumentV2,
     read_financial_record,
     serialize_financial_record_v2,
+)
+from juval.application.capture_diagnostics import (
+    FORMAT as DIAGNOSTICS_FORMAT,
+    VERSION as DIAGNOSTICS_VERSION,
+    RecordCaptureDiagnostics,
+    deserialize_capture_diagnostics,
+    serialize_capture_diagnostics,
 )
 from juval.domain.execution_run import ExecutionRun
 
@@ -59,9 +71,12 @@ def _serialize(document: AnyFinancialRecord) -> dict[str, Any]:
 
 class FinancialRecordStore(Protocol):
     def save_execution_run(self, run: ExecutionRun, records: Sequence[Mapping[str, Any]] = (), *,
-                           financial_records: Sequence[Mapping[str, Any]] = ()) -> None: ...
+                           financial_records: Sequence[Mapping[str, Any]] = (),
+                           capture_diagnostics: Sequence[Mapping[str, Any]] = ()) -> None: ...
 
     def load_financial_record(self, execution_id: str, record_ref: str) -> Optional[tuple[str, int, str]]: ...
+
+    def load_capture_diagnostics(self, execution_id: str, record_ref: str) -> Optional[tuple[str, int, str]]: ...
 
 
 def save_run_with_financial_records(
@@ -69,11 +84,13 @@ def save_run_with_financial_records(
     run: ExecutionRun,
     snapshots: Sequence[Mapping[str, Any]],
     documents: Sequence[AnyFinancialRecord],
+    capture_diagnostics: Sequence[RecordCaptureDiagnostics] = (),
 ) -> None:
-    """Save run + snapshots + financial documents atomically.
+    """Save run + snapshots + financial documents + capture diagnostics atomically.
 
-    Every document must belong to `run` and to one of `snapshots`, at most once
-    per record. Records without a document are fine: absence is not an error.
+    Every document and diagnostics set must belong to `run` and to one of
+    `snapshots`, at most once per record. Records without a document are fine:
+    absence is not an error.
     """
     refs = {snapshot["record_ref"] for snapshot in snapshots}
     seen: set[str] = set()
@@ -89,7 +106,22 @@ def save_run_with_financial_records(
             raise FinancialRecordIntegrityError(f"{evidence.record_reference!r} has more than one document")
         seen.add(evidence.record_reference)
         payloads.append(_serialize(document))
-    store.save_execution_run(run, snapshots, financial_records=payloads)
+    diagnostics_payloads = []
+    seen.clear()
+    for item in capture_diagnostics:
+        if not isinstance(item, RecordCaptureDiagnostics):
+            raise FinancialRecordIntegrityError("capture diagnostics must be RecordCaptureDiagnostics")
+        if item.execution_id != run.execution_id:
+            raise FinancialRecordIntegrityError(
+                f"diagnostics of execution {item.execution_id!r} cannot be saved with {run.execution_id!r}")
+        if item.record_ref not in refs:
+            raise FinancialRecordIntegrityError(f"{item.record_ref!r} is not a record of this run")
+        if item.record_ref in seen:
+            raise FinancialRecordIntegrityError(f"{item.record_ref!r} has more than one diagnostics set")
+        seen.add(item.record_ref)
+        diagnostics_payloads.append(serialize_capture_diagnostics(item))
+    store.save_execution_run(run, snapshots, financial_records=payloads,
+                             capture_diagnostics=diagnostics_payloads)
 
 
 def load_financial_record(
@@ -113,3 +145,26 @@ def load_financial_record(
     if found != (execution_id, record_ref):
         raise FinancialRecordIntegrityError(f"payload identity {found} stored under {(execution_id, record_ref)}")
     return document
+
+
+def load_capture_diagnostics(
+    store: FinancialRecordStore, execution_id: str, record_ref: str
+) -> Optional[RecordCaptureDiagnostics]:
+    """None when no set was stored for that run/record (e.g. a legacy run)."""
+    row = store.load_capture_diagnostics(execution_id, record_ref)
+    if row is None:
+        return None
+    stored_format, stored_version, text = row
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError as error:
+        raise FinancialSerializationError(f"stored capture diagnostics are not JSON: {error}") from error
+    item = deserialize_capture_diagnostics(payload)
+    if (stored_format, stored_version) != (DIAGNOSTICS_FORMAT, DIAGNOSTICS_VERSION):
+        raise FinancialRecordIntegrityError(
+            f"stored columns declare {stored_format!r} v{stored_version}, "
+            f"payload is {DIAGNOSTICS_FORMAT!r} v{DIAGNOSTICS_VERSION}")
+    if (item.execution_id, item.record_ref) != (execution_id, record_ref):
+        raise FinancialRecordIntegrityError(
+            f"diagnostics identity {(item.execution_id, item.record_ref)} stored under {(execution_id, record_ref)}")
+    return item

@@ -408,12 +408,35 @@ Formato v2 (§19; serialización pura, sin persistencia ni consumidores):
     resolvedor y a `supplied_inputs.weight`.
   - No hay conversión kg→lb ni se usa el peso legacy. Una exclusión acreditada
     de `SHIPPING_PER_POUND` no exige peso.
+- Persistencia independiente de diagnósticos:
+  - Formato propio `juval.adr047.capture-diagnostics` v1
+    (`application/capture_diagnostics.py`), distinto de los formatos financieros.
+    Contiene `execution_id`, `record_ref` y, en orden, cada `CaptureDiagnostic`
+    con `subject`, `code`, `message`, `row`, y `column`/`raw_value` solo cuando el
+    capturador los fijó.
+  - Tabla SQLite aditiva `execution_run_capture_diagnostics`, con PK
+    `(execution_id, record_ref)` y FK compuesta a `execution_run_records`.
+  - Se escribe con `capture_diagnostics=` en la misma transacción que el run, los
+    snapshots y los documentos financieros; la atomicidad conjunta está probada
+    en el store.
+  - La CLI opt-in guarda un conjunto por registro capturado, tenga escenario
+    completo, parcial o ninguno; un conjunto vacío significa "sin diagnósticos".
+    No se fabrica ningún escenario ni `FinancialEvidenceSet`.
+  - `load_capture_diagnostics` distingue:
+    - `None`: no se guardó ningún conjunto (run legacy o registro no capturado);
+    - un conjunto válido;
+    - payload corrupto o formato/versión desconocidos
+      (`FinancialSerializationError`);
+    - identidad o columnas incoherentes (`FinancialRecordIntegrityError`).
+  - Este almacenamiento es la fuente completa de diagnósticos para ejecuciones
+    nuevas, incluido `code`. Los `capture_problems` de v2 no cambian y coinciden
+    con él (probado).
+  - Los documentos históricos con solo texto no reciben códigos, y v1/v2 no
+    cambian.
 - Pendiente:
-  - los diagnósticos de registros sin escenario completo o descartados por el
-    importer no tienen documento. El contrato mínimo sería un bloque de
-    diagnósticos por `(execution_id, record_ref)` independiente del set de
-    evidencia; en este loop no se creó ninguna tabla;
-  - persistir `code` (v3);
+  - las filas descartadas por el importer no tienen `record_ref`, así que quedan
+    fuera. Necesitarían una identidad por `(execution_id, número de fila de
+    origen)` en un contrato aparte;
   - una fuente verificable de `code_revision`.
 - §19 sigue PENDING.
 
