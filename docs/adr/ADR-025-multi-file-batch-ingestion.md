@@ -66,3 +66,45 @@ This keeps auditability, source-file traceability and adapter parity while
 leaving room for future source-level Catalog analytics and batch Run Detail.
 CSV ingestion, batch export, per-file retry UI and richer batch navigation are
 explicit follow-up work, not silently implied by this contract.
+
+## Security amendment — Gate B1, 2026-09-30
+
+**APPROVED by explicit user instruction:** preserve migrations
+`20260819000002_batches.sql` and `20260819000003_batch_file_counts.sql`
+byte-for-byte. Independent migration
+`20260928000006_batch_table_security.sql` enables RLS on `public.batches`
+and `public.batch_files`, without FORCE or policies, and revokes all table
+privileges from `PUBLIC`, `anon` and `authenticated`. The revocation explicitly
+covers `TRUNCATE`, which RLS does not protect. Ownership, backend/owner access
+and global default privileges stay unchanged. Backend access assumes the
+existing direct database owner path; no new backend role or grant is introduced.
+
+The future remote sequence must execute 000002 → 000003 → 000006 → verification
+→ COMMIT in one transaction, with rollback on failure. Applying 000002/000003
+alone would expose tables through inherited grants. Gate B0 is closed BLOCKED;
+Gate B1 prepares and validates local artifacts only. Remote deployment and
+migration-history handling require a separate review; this amendment authorizes
+neither remote writes nor history repair.
+
+Tests in `tests/integration/test_postgres_batch_security.py` use the existing
+disposable PostgreSQL 16 cluster fixture with a private Unix socket and no TCP.
+They apply the real migration files, reproduce permissive schema-scoped grants
+only in disposable databases, connect as non-superuser roles, distinguish
+privilege denial from RLS default-deny, verify backend round-trip access, and
+exercise pre-COMMIT verification and failure rollback. Their migration ledger
+is synthetic and local; it is not evidence of remote migration history.
+Measured local results and limitations are recorded in
+[the Gate B1 evidence record](../research/GATE_B1_BATCH_SECURITY_20260930.md).
+
+## Open discrepancy — aggregate status (PENDING DECISION)
+
+The original Decision paragraph says a `PARTIAL_SUCCESS` child without any
+failed/rejected sibling yields aggregate `SUCCESS`. Current
+`domain/batch.py::aggregate_batch_status` instead returns `PARTIAL_SUCCESS`
+whenever a non-failed batch contains any child that is not `SUCCESS`.
+For example, one `PARTIAL_SUCCESS` child alone yields `PARTIAL_SUCCESS`.
+That discrepancy remains explicit and unresolved; Gate B1 changes no status
+semantics. Resolving it requires a separate architectural decision. Native
+financial evidence for batches, per-file persistence/export failure isolation,
+additional SQL constraints for the ten-file limit and retry redesign also
+remain outside this security amendment.

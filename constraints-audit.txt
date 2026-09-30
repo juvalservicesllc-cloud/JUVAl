@@ -1,0 +1,3 @@
+# pip-audit -> requests -> urllib3: keep audit tooling above the security floor.
+# This constrains an existing transitive dependency, not JUVAl runtime imports.
+urllib3>=2.8.0
