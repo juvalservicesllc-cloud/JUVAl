@@ -1,5 +1,26 @@
 # Juval — Project Status
 
+## 2026-10-16 — ADR-050 unit 1: atomic batch persistence (store level)
+
+**IMPLEMENTED (unit 1); ADR-050 partially accepted; endpoint unchanged.** Starting
+HEAD `08c9ba1`, clean. Approved: all-or-nothing persistence of a batch with its
+child runs, records, financial documents, diagnostics and batch–run relation; no
+compensating deletes; a REJECTED file does not invalidate the batch; ADR-025
+kept. Implemented `application/batch_persistence.py::save_batch_with_runs`
+(validates that batch files and child runs name the same executions, reuses the
+extracted `financial_payloads`) and `save_batch_with_runs` in the SQLite and
+PostgreSQL stores (one transaction over the extracted `_write_run` /
+`_write_batch`, shared with `save_execution_run` / `save_batch`). No schema,
+status, HTTP, idempotency, frontend or formula change; `POST /api/v1/batches`
+does not call it yet.
+
+Tests: 7 shared scenarios on SQLite and on disposable PostgreSQL 16, plus
+validation and unchanged-writes tests (SQLite 9 passed; PostgreSQL suite 28
+passed). Splitting the transaction per child fails 4 scenarios on each engine.
+Full backend: **1701 passed, 129 skipped, 0 failed** with the disposable cluster
+(1660 passed, 170 skipped without it). Compliance 8 PASS / 2 WARN / 0 FAIL.
+
+
 ## 2026-10-16 — ADR-050 proposed: batch persistence atomicity and idempotency
 
 **PENDING DECISION.** Starting HEAD `8d53f37`, clean. ADR-025 leaves per-file

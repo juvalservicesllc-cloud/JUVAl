@@ -110,6 +110,8 @@ additional SQL constraints for the ten-file limit and retry redesign also
 remain outside this security amendment.
 
 Persistence/export failure isolation is analysed in
-[ADR-050](ADR-050-batch-persistence-atomicity-idempotency.md) (**Propuesta**,
-2026-10-16, not approved); until it is decided, the behavior above stands and is
-pinned by `tests/integration/test_api_batch_persistence_failures.py`.
+[ADR-050](ADR-050-batch-persistence-atomicity-idempotency.md) (partially
+accepted 2026-10-16: all-or-nothing batch persistence; its store mechanism is
+implemented but not used by the endpoint). Until the endpoint change is approved,
+the behavior above stands and is pinned by
+`tests/integration/test_api_batch_persistence_failures.py`.

@@ -105,6 +105,19 @@ def save_run_with_financial_records(
     `snapshots`, at most once per record. Records without a document are fine:
     absence is not an error.
     """
+    payloads, diagnostics_payloads = financial_payloads(run, snapshots, documents, capture_diagnostics)
+    store.save_execution_run(run, snapshots, financial_records=payloads,
+                             capture_diagnostics=diagnostics_payloads)
+
+
+def financial_payloads(
+    run: ExecutionRun,
+    snapshots: Sequence[Mapping[str, Any]],
+    documents: Sequence[AnyFinancialRecord],
+    capture_diagnostics: Sequence[RecordCaptureDiagnostics] = (),
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Validate that every document and diagnostics set belongs to `run` and to
+    one of `snapshots` (once per record) and serialize them; writes nothing."""
     refs = {snapshot["record_ref"] for snapshot in snapshots}
     seen: set[str] = set()
     payloads = []
@@ -133,8 +146,7 @@ def save_run_with_financial_records(
             raise FinancialRecordIntegrityError(f"{item.record_ref!r} has more than one diagnostics set")
         seen.add(item.record_ref)
         diagnostics_payloads.append(serialize_capture_diagnostics(item))
-    store.save_execution_run(run, snapshots, financial_records=payloads,
-                             capture_diagnostics=diagnostics_payloads)
+    return payloads, diagnostics_payloads
 
 
 def load_financial_record(

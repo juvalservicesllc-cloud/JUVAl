@@ -470,3 +470,27 @@ def test_batch_children_store_their_own_documents_on_postgres(tmp_path, dsn, sto
     assert store.load_execution_run("pg-batch-4") is not None                         # earlier child kept
     assert store.load_execution_run("pg-batch-5") is None and store.load_records("pg-batch-5") == []
     assert store.load_batch("pg-batch-3") is None                                     # no batch row
+
+
+# -- ADR-050 unit 1: atomic batch persistence, the SQLite scenarios on PostgreSQL ----------
+
+def _batch_rows(dsn):
+    def rows(table):
+        column = "batch_id" if table.startswith("batch") else "execution_id"
+        with psycopg.connect(dsn) as conn:
+            return [r[0] for r in conn.execute(
+                sql.SQL("select {} from {}").format(sql.Identifier(column), sql.Identifier(table)))]
+    return rows
+
+
+def _atomic_batch_scenarios():
+    from .test_batch_atomic_persistence import SCENARIOS
+    return SCENARIOS
+
+
+@pytest.mark.parametrize("scenario", _atomic_batch_scenarios(), ids=lambda s: s.__name__)
+def test_atomic_batch_persistence_on_postgres(scenario, tmp_path, dsn, store, monkeypatch):
+    from juval.infrastructure.persistence import supabase_execution_run_store as pg_module
+
+    from .test_batch_atomic_persistence import run_scenario
+    run_scenario(scenario, store, _batch_rows(dsn), pg_module, tmp_path, monkeypatch)

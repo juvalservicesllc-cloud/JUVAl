@@ -1,8 +1,20 @@
 # ADR-050 — Persistencia atómica e idempotente de batches
 
-- Estado: **Propuesta**. No aprobada; nada de su decisión está implementado.
+- Estado: **Parcialmente aceptada** (2026-10-16), por decisión explícita del
+  usuario:
+  - Aceptado: persistencia todo o nada de un batch, cuya transacción abarca
+    batch, runs hijos, records, documentos financieros, diagnósticos y
+    relación batch–runs (D2); sin borrados compensatorios (alternativa D
+    rechazada); un archivo `REJECTED` no invalida el batch; ADR-025 se
+    conserva (un run por archivo procesado, batch como agrupador). La
+    idempotencia (D5) se hará en una unidad posterior.
+  - Sigue **Propuesta**: D1 aplicado al endpoint, D3, D4, el detalle de D5
+    (cabecera, tabla, retención) y el texto de D6. Hasta su aprobación, el
+    contrato HTTP no cambia.
+- Estado de implementación: unidad 1 IMPLEMENTED (§10); el endpoint no la usa.
 - Fecha: 2026-10-16.
-- Autoridad solicitada: decisión explícita del usuario sobre §4 (D1–D6).
+- Autoridad solicitada para lo pendiente: decisión explícita del usuario sobre
+  D1 (endpoint), D3, D4, D5 y D6.
 - Relacionados: ADR-025 (batches, Aceptada para Wave A; deja abierto el
   aislamiento de fallos de persistencia/exportación por archivo), ADR-047
   (evidencia financiera, opt-in en batches desde 2026-10-16), ADR-013/017/019
@@ -193,3 +205,33 @@ en `batch_files` cuando el batch se guarda; en la respuesta de error, solo como
 
 Se pueden aprobar D1–D4 + D6 sin D5; en ese caso el reintento tras una
 respuesta perdida seguirá pudiendo duplicar.
+
+## 10. Implementación — unidad 1 (2026-10-16)
+
+- Puerto: `application/batch_store.py::AtomicBatchStore.save_batch_with_runs`
+  y `RunWrite` (los mismos argumentos que `save_execution_run`).
+- Aplicación: `application/batch_persistence.py::save_batch_with_runs(store,
+  batch, children)`. Antes de escribir comprueba que cada archivo con
+  `execution_id` tiene exactamente un hijo, que cada hijo está nombrado por
+  exactamente un archivo y que un `REJECTED` no nombra ninguno
+  (`BatchIntegrityError`). Documentos y diagnósticos se validan y serializan con
+  `financial_persistence.financial_payloads`, extraído sin cambios de
+  `save_run_with_financial_records`.
+- Stores: SQLite y PostgreSQL escriben todos los runs (con records, documentos y
+  diagnósticos) y el batch en una sola transacción con las mismas funciones que
+  `save_execution_run` y `save_batch`, ahora extraídas a `_write_run` y
+  `_write_batch` sobre la conexión del llamador. Sin esquema, estados ni
+  restricciones nuevos.
+- No conectado al endpoint: `POST /api/v1/batches` sigue guardando hijo por hijo,
+  y los tests de caracterización de `test_api_batch_persistence_failures.py`
+  siguen afirmando el comportamiento actual.
+- Verificado con los mismos 7 escenarios en SQLite
+  (`tests/integration/test_batch_atomic_persistence.py`) y en PostgreSQL 16
+  desechable (`test_postgres_financial_persistence.py`): todo guardado y
+  enlazado; `REJECTED` sin run; fallo real de PK en el 2.º hijo; fallo en un
+  documento financiero; fallo real de PK en el batch tras escribir todos los
+  hijos; hijo con `execution_id` ya existente (no se sobrescribe); mismo
+  `record_ref` en dos archivos como documentos separados. En los fallos no queda
+  ninguna fila nueva en ninguna de las seis tablas. Validación previa probada
+  sin escrituras. Partir la transacción por hijo hace fallar 4 escenarios en
+  cada motor.

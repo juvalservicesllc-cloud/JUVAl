@@ -65,6 +65,7 @@ from typing import Any, Mapping, Optional, Sequence
 
 from juval.domain.execution_run import ExecutionRun, ExecutionStatus
 from juval.domain.batch import Batch, BatchFile, BatchFileStatus, BatchStatus
+from juval.application.batch_store import RunWrite
 from juval.application.record_snapshot_store import RecordSnapshotPage, RecordSnapshotQuery
 from juval.application.run_analytics import brand_distribution, issue_types, numeric_summary, price_spread
 
@@ -254,6 +255,56 @@ def _diagnostics_row(execution_id: str, payload: Mapping[str, Any]) -> tuple[str
             json.dumps(payload, sort_keys=True))
 
 
+def _write_run(conn: sqlite3.Connection, run: ExecutionRun, records: Sequence[Mapping[str, Any]],
+               financial_records: Sequence[Mapping[str, Any]],
+               capture_diagnostics: Sequence[Mapping[str, Any]]) -> None:
+    """The run's inserts on `conn`, inside the caller's transaction."""
+    conn.execute(
+        _INSERT,
+        (
+            run.execution_id,
+            run.started_at.isoformat(),
+            run.finished_at.isoformat() if run.finished_at is not None else None,
+            run.status.value,
+            run.input_filename,
+            run.input_hash,
+            run.application_version,
+            run.records_total,
+            run.records_processed,
+            run.records_successful,
+            run.records_with_errors,
+            run.warnings,
+        ),
+    )
+    for ordinal, record in enumerate(records):
+        conn.execute(
+            _INSERT_RECORD,
+            (run.execution_id, ordinal, record["record_ref"], json.dumps(record)),
+        )
+    for payload in financial_records:
+        conn.execute(
+            "INSERT INTO execution_run_financial_records "
+            "(execution_id, record_ref, format, format_version, payload) VALUES (?, ?, ?, ?, ?)",
+            _financial_row(run.execution_id, payload),
+        )
+    for payload in capture_diagnostics:
+        conn.execute(
+            "INSERT INTO execution_run_capture_diagnostics "
+            "(execution_id, record_ref, format, format_version, payload) VALUES (?, ?, ?, ?, ?)",
+            _diagnostics_row(run.execution_id, payload),
+        )
+
+
+def _write_batch(conn: sqlite3.Connection, batch: Batch) -> None:
+    """The batch's inserts on `conn`, inside the caller's transaction."""
+    conn.execute("INSERT INTO batches (batch_id, created_at, status) VALUES (?, ?, ?)", (batch.batch_id, batch.created_at.isoformat(), batch.status.value))
+    for file in batch.files:
+        conn.execute(
+            f"INSERT INTO batch_files (batch_id, {_BATCH_FILE_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (batch.batch_id, file.ordinal, file.filename, file.content_type, file.size_bytes, file.status.value, file.execution_id, json.dumps(list(file.warnings)), json.dumps(list(file.errors)), file.records_total, file.records_processed, file.records_with_errors, file.warning_count),
+        )
+
+
 def _rows_by_ref(conn: sqlite3.Connection, table: str, execution_id: str,
                  record_refs: Optional[Sequence[str]]) -> dict[str, tuple[str, int, str]]:
     sql = f"SELECT record_ref, format, format_version, payload FROM {table} WHERE execution_id = ?"
@@ -342,40 +393,17 @@ class SqliteExecutionRunStore:
         with closing(sqlite3.connect(self._db_path)) as conn:
             conn.execute("PRAGMA foreign_keys = ON")
             with conn:
-                conn.execute(
-                    _INSERT,
-                    (
-                        run.execution_id,
-                        run.started_at.isoformat(),
-                        run.finished_at.isoformat() if run.finished_at is not None else None,
-                        run.status.value,
-                        run.input_filename,
-                        run.input_hash,
-                        run.application_version,
-                        run.records_total,
-                        run.records_processed,
-                        run.records_successful,
-                        run.records_with_errors,
-                        run.warnings,
-                    ),
-                )
-                for ordinal, record in enumerate(records):
-                    conn.execute(
-                        _INSERT_RECORD,
-                        (run.execution_id, ordinal, record["record_ref"], json.dumps(record)),
-                    )
-                for payload in financial_records:
-                    conn.execute(
-                        "INSERT INTO execution_run_financial_records "
-                        "(execution_id, record_ref, format, format_version, payload) VALUES (?, ?, ?, ?, ?)",
-                        _financial_row(run.execution_id, payload),
-                    )
-                for payload in capture_diagnostics:
-                    conn.execute(
-                        "INSERT INTO execution_run_capture_diagnostics "
-                        "(execution_id, record_ref, format, format_version, payload) VALUES (?, ?, ?, ?, ?)",
-                        _diagnostics_row(run.execution_id, payload),
-                    )
+                _write_run(conn, run, records, financial_records, capture_diagnostics)
+
+    def save_batch_with_runs(self, batch: Batch, runs: Sequence[RunWrite]) -> None:
+        """Every child run (records, financial documents, diagnostics) and the
+        batch in ONE transaction: any failure rolls back all of it (ADR-050)."""
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            conn.execute("PRAGMA foreign_keys = ON")
+            with conn:
+                for item in runs:
+                    _write_run(conn, item.run, item.records, item.financial_records, item.capture_diagnostics)
+                _write_batch(conn, batch)
 
     def load_financial_record(self, execution_id: str, record_ref: str) -> Optional[tuple[str, int, str]]:
         """(format, format_version, payload JSON text) of one run's record, or None
@@ -428,12 +456,7 @@ class SqliteExecutionRunStore:
     def save_batch(self, batch: Batch) -> None:
         with closing(sqlite3.connect(self._db_path)) as conn:
             with conn:
-                conn.execute("INSERT INTO batches (batch_id, created_at, status) VALUES (?, ?, ?)", (batch.batch_id, batch.created_at.isoformat(), batch.status.value))
-                for file in batch.files:
-                    conn.execute(
-                        f"INSERT INTO batch_files (batch_id, {_BATCH_FILE_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                        (batch.batch_id, file.ordinal, file.filename, file.content_type, file.size_bytes, file.status.value, file.execution_id, json.dumps(list(file.warnings)), json.dumps(list(file.errors)), file.records_total, file.records_processed, file.records_with_errors, file.warning_count),
-                    )
+                _write_batch(conn, batch)
 
     def load_batch(self, batch_id: str) -> Optional[Batch]:
         with closing(sqlite3.connect(self._db_path)) as conn:
