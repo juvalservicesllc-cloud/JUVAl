@@ -131,7 +131,7 @@ snapshots. Son las mismas funciones de aplicación que usa la CLI
   internal server error` y no queda nada del run: ni run, ni snapshots, ni
   documentos, ni diagnósticos (probado en SQLite y en PostgreSQL desechable).
 - Sin el opt-in, el comportamiento anterior no cambia. `POST /api/v1/batches`
-  no ofrece este flujo.
+  ofrece el mismo opt-in desde 2026-10-16 (§12).
 
 ## 2. `GET /api/v1/runs/{execution_id}/download`
 
@@ -525,6 +525,31 @@ Each `files` entry also carries its child run's own `records_total`,
 carries their sums. A `REJECTED` file never ran, so its counts stay `0`; that
 means "never processed", and the UI renders it as an em dash rather than a
 number that would read as a measurement.
+
+### Native financial evidence in batches (ADR-047, 2026-10-16)
+
+`POST /api/v1/batches` accepts the single-file opt-in with the same fields and
+rules (§1a): `native_financial_evidence` (requires `persist=true`),
+`financial_target_profit` + `financial_target_profit_currency` and
+`financial_target_roi`, validated before any file is processed (`422`, nothing
+processed or stored). Each processed child runs
+`run_pipeline_with_financial_evidence` and saves its run, snapshots, documents
+and diagnostics in its own transaction through the same functions as §1a, keyed
+by its own `execution_id`; nothing is shared between files, and a file that
+repeats another's `record_ref` is still a separate document of another run.
+
+- The response is unchanged: there is no per-file `financial` summary, because
+  `BatchFileOut` is shared with `GET /api/v1/batches/{batch_id}`. Documents are
+  read per child with §2e.
+- `REJECTED` files have no run; an unreadable (`FAILED`) file stores its run and
+  no financial rows.
+- A failing financial write keeps today's batch semantics for any persistence
+  failure: that child stores nothing, earlier children stay stored, the
+  response is a generic `500` and no batch row is written. Per-file isolation
+  of persistence failures remains an open ADR-025 decision.
+- Records and decisions of each child are identical to the same batch without
+  the opt-in (tested). Verified on SQLite and on a disposable PostgreSQL 16
+  cluster; not on a real Supabase project.
 
 ### Filenames and file types
 

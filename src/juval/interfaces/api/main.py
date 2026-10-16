@@ -404,6 +404,10 @@ async def create_batch(
     thresholds: str = Form(...),
     fees: str = Form(...),
     persist: bool = Form(False),
+    native_financial_evidence: bool = Form(False),
+    financial_target_profit: Optional[Decimal] = Form(None),
+    financial_target_profit_currency: Optional[str] = Form(None),
+    financial_target_roi: Optional[Decimal] = Form(None),
     _principal=Depends(require(RUNS_CREATE)),
     _csrf: None = Depends(bff.csrf_guard),
 ) -> JSONResponse:
@@ -414,6 +418,12 @@ async def create_batch(
 
     ExecutionRun remains one file/one deterministic execution. Batch only
     groups child outcomes; it does not merge snapshots or alter Catalog scope.
+
+    The ADR-047 opt-in (`native_financial_evidence` + `financial_target_*`)
+    has the single-file endpoint's fields, rules and functions. Each child's
+    documents and diagnostics are saved in that child's own run transaction,
+    keyed by its execution_id, so nothing is shared between files. The
+    response is unchanged; documents are read per child execution (§2e).
     """
     if not files:
         raise HTTPException(status_code=422, detail="at least one file is required")
@@ -426,6 +436,9 @@ async def create_batch(
         domain_fees = service.fees_from_in(fees_in)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    _check_financial_options(persist, native_financial_evidence, financial_target_profit,
+                             financial_target_profit_currency, financial_target_roi)
+    pipeline = run_pipeline_with_financial_evidence if native_financial_evidence else run_pipeline
 
     batch_id = service.new_execution_id()
     created_at = service.now_utc()
@@ -461,16 +474,23 @@ async def create_batch(
         now = service.now_utc()
         try:
             try:
-                run, records = run_pipeline(input_path, domain_thresholds, fees=domain_fees, application_version=juval.__version__, execution_id=execution_id, now=now)
+                outcome = pipeline(input_path, domain_thresholds, fees=domain_fees, application_version=juval.__version__, execution_id=execution_id, now=now)
             except _UNREADABLE_INPUT as exc:
                 run, records = _failed_run(execution_id=execution_id, input_path=input_path, application_version=juval.__version__, now=now), ()
                 if persist and store is not None:
                     store.save_execution_run(run, ())
                 results.append(BatchFile(ordinal, filename, upload.content_type, len(body), BatchFileStatus.FAILED, execution_id, errors=(_unreadable_input_detail(filename, exc),)))
                 continue
+            run, records = (outcome.run, outcome.records) if native_financial_evidence else outcome
             snapshots = [record_to_snapshot(record) for record in records]
             if persist and store is not None:
-                store.save_execution_run(run, snapshots)
+                if native_financial_evidence:
+                    # The single-file transaction: run, snapshots, documents and
+                    # diagnostics of this child only, or nothing of it.
+                    _persist_native_financial(store, outcome, snapshots, now, financial_target_profit,
+                                              financial_target_profit_currency, financial_target_roi)
+                else:
+                    store.save_execution_run(run, snapshots)
             if run.status != ExecutionStatus.FAILED:
                 export_excel(records, service.output_path(execution_id))
             file_status = BatchFileStatus.PARTIAL_SUCCESS if run.status == ExecutionStatus.PARTIAL_SUCCESS else BatchFileStatus.SUCCESS if run.status == ExecutionStatus.SUCCESS else BatchFileStatus.FAILED

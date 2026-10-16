@@ -1,5 +1,34 @@
 # Juval — Project Status
 
+## 2026-10-16 — ADR-047 financial opt-in on POST /api/v1/batches
+
+**IMPLEMENTED; ADR-047 remains PARTIALLY IMPLEMENTED.** Starting HEAD `9b5ffb5`,
+clean. `POST /api/v1/batches` accepts the approved single-file opt-in
+(`native_financial_evidence`, `financial_target_*`; ADR-047 §22 step 7, which
+listed batches as PENDING) with the same validation (`_check_financial_options`)
+and the same write (`_persist_native_financial`): each child stores its own run,
+snapshots, documents and diagnostics in one transaction keyed by its own
+`execution_id` (ADR-025: one ExecutionRun per file, Batch as grouping). Without
+the opt-in the response and records are unchanged (tested). No response field,
+formula, migration, Decision Score, frontend or server change.
+
+Not decided, so not implemented: per-file isolation of *persistence* failures
+(ADR-025 leaves it open; a failing child write keeps today's generic `500`, the
+child stores nothing, earlier children stay, no batch row) and a per-file
+financial summary in the response (`BatchFileOut` is shared with the GET).
+
+Tests: new `tests/integration/test_api_batch_financial.py` 11 passed (disabling
+the financial write made 5 fail); one new disposable-PostgreSQL test, and the
+whole `test_postgres_financial_persistence.py` 21 passed with
+`JUVAL_POSTGRES_BIN=/usr/lib/postgresql/16/bin` (initdb in a temp dir, Unix
+socket only; no real Supabase). The declared `postgres` extra (`psycopg`) was
+installed into the clone's `.venv` for this; no new dependency.
+Full backend: **1679 passed, 129 skipped, 0 failed** with the disposable cluster;
+1645 passed, 163 skipped without it (with `psycopg` installed the PostgreSQL tests
+skip one by one). Remaining skips: no live Supabase, no disposable session
+database, no nginx binary. Compliance 8 PASS / 2 WARN / 0 FAIL, secret scan clean.
+
+
 ## 2026-10-16 — Recalculation check in the financial report CLI
 
 **IMPLEMENTED; ADR-047 remains PARTIALLY IMPLEMENTED.** Starting HEAD `e321f42`,

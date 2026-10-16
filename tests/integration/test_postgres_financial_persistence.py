@@ -418,3 +418,55 @@ def test_api_writes_and_batch_reads_financial_documents_on_postgres(tmp_path, ds
     monkeypatch.setattr(pg_module, "_diagnostics_row", fail)
     assert post(path, **NATIVE).status_code == 500
     assert store.load_execution_run("pg-api-2") is None and store.load_records("pg-api-2") == []
+
+
+def test_batch_children_store_their_own_documents_on_postgres(tmp_path, dsn, store, monkeypatch):
+    """POST /api/v1/batches with the ADR-047 opt-in -> PostgreSQL: each child run
+    holds only its own documents, the batch groups them, and a failing financial
+    write of one child leaves nothing of that child (today's batch semantics)."""
+    from fastapi.testclient import TestClient
+    from juval.infrastructure.persistence import supabase_execution_run_store as pg_module
+    from juval.interfaces.api import service
+    from juval.interfaces.api.main import app
+
+    from .test_api_batch_financial import XLSX
+    from .test_api_financial_flow import FEES, NATIVE, ROWS, THRESHOLDS
+    from .test_cli_native_financial import row
+
+    monkeypatch.setenv("JUVAL_RUN_STORAGE_DIR", str(tmp_path / "runs"))
+    monkeypatch.setenv("JUVAL_EXECUTION_STORE", "supabase")
+    monkeypatch.setenv("JUVAL_SUPABASE_DB_URL", dsn)                                   # the disposable schema
+    monkeypatch.delenv("JUVAL_MAX_UPLOAD_BYTES", raising=False)
+    ids = iter(f"pg-batch-{n}" for n in range(10))
+    monkeypatch.setattr(service, "new_execution_id", lambda: next(ids))
+    client = TestClient(app, raise_server_exceptions=False)
+    files = [("files", ("a.xlsx", xlsx(tmp_path, *ROWS, name="a.xlsx").read_bytes(), XLSX)),
+             ("files", ("b.xlsx", xlsx(tmp_path, row("B"), name="b.xlsx").read_bytes(), XLSX))]
+    data = {"thresholds": THRESHOLDS, "fees": FEES, **NATIVE}
+
+    response = client.post("/api/v1/batches", data=data, files=files)
+    assert response.status_code == 200, response.text
+    first, second = (item["execution_id"] for item in response.json()["files"])
+    assert (first, second) == ("pg-batch-1", "pg-batch-2")
+    with psycopg.connect(dsn) as conn:
+        documents = sorted(r[0] for r in conn.execute(sql.SQL("select execution_id from {}").format(sql.Identifier(DOC))))
+        diagnostics = sorted(r[0] for r in conn.execute(sql.SQL("select execution_id from {}").format(sql.Identifier(DIAG))))
+    assert documents == [first] * 3 + [second] and diagnostics == [first] * 4 + [second]
+    for execution_id in (first, second):
+        for ref in (r["record_ref"] for r in store.load_records(execution_id)):
+            row_ = store.load_financial_record(execution_id, ref)
+            if row_ is not None:
+                assert json.loads(row_[2])["evidence"]["execution_id"] == execution_id
+    assert store.load_batch_for_run(first).batch_id == store.load_batch_for_run(second).batch_id == "pg-batch-0"
+
+    original = pg_module._diagnostics_row
+
+    def fail_second_child(execution_id, payload):
+        if execution_id == "pg-batch-5":
+            raise ValueError("simulated failure after the run and snapshot inserts")
+        return original(execution_id, payload)
+    monkeypatch.setattr(pg_module, "_diagnostics_row", fail_second_child)
+    assert client.post("/api/v1/batches", data=data, files=files).status_code == 500
+    assert store.load_execution_run("pg-batch-4") is not None                         # earlier child kept
+    assert store.load_execution_run("pg-batch-5") is None and store.load_records("pg-batch-5") == []
+    assert store.load_batch("pg-batch-3") is None                                     # no batch row
