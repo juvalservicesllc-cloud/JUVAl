@@ -28,8 +28,13 @@ and validation contract support it.
 > and `.xlsx` files. Nothing else in this ADR changes — one `ExecutionRun`
 > per file, the ten-file limit and the aggregate status rules all stand.
 
-Batch files are processed sequentially. Each child is persisted independently
-when `persist=true`, so a bad workbook cannot invalidate successful siblings.
+Batch files are processed sequentially. Each child keeps its own
+`ExecutionRun`, so a bad workbook cannot invalidate successful siblings: it is a
+`REJECTED` or `FAILED` outcome of the same batch.
+
+> **Amendment 2026-10-16 — ADR-050 D6.** With `persist=true` the batch and its
+> children are stored together or not at all, in one transaction; exports run
+> after that commit. Isolation from *import* failures is unchanged.
 Aggregate status is deterministic: all children successful (including a
 child `PARTIAL_SUCCESS` only when no file failed/rejected) is `SUCCESS`; at
 least one success/partial plus any failure/rejection is `PARTIAL_SUCCESS`; no
@@ -111,7 +116,7 @@ remain outside this security amendment.
 
 Persistence/export failure isolation is analysed in
 [ADR-050](ADR-050-batch-persistence-atomicity-idempotency.md) (partially
-accepted 2026-10-16: all-or-nothing batch persistence; its store mechanism is
-implemented but not used by the endpoint). Until the endpoint change is approved,
-the behavior above stands and is pinned by
-`tests/integration/test_api_batch_persistence_failures.py`.
+accepted 2026-10-16) and implemented in `POST /api/v1/batches`: all-or-nothing
+batch persistence and exports after the commit, pinned by
+`tests/integration/test_api_batch_persistence_failures.py`. Idempotency and new
+error codes/bodies remain open there.

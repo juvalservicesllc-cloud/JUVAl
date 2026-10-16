@@ -1,5 +1,25 @@
 # Juval — Project Status
 
+## 2026-10-16 — ADR-050 unit 2: POST /api/v1/batches persists atomically
+
+**IMPLEMENTED; ADR-050 partially accepted (D1, D2, D3, D4 provisional, D6; D5
+deferred).** Starting HEAD `9e9cb4d`, clean. The endpoint now processes every
+file without writing, stores the batch with every child run, records, financial
+documents and diagnostics through one `save_batch_with_runs` call, and exports
+XLSX only after the commit. A write failure is still the generic 500 but leaves
+no row (no unlinked child runs; a retry of the same request stores each file
+once). A failed export keeps the committed batch, answers 200 and adds the D3
+warning to that file in the POST response only. Success body, limits, statuses,
+schema, formulas, Decision Score and frontend unchanged; no idempotency.
+The former characterization tests now assert the approved contract.
+
+Tests: 11 endpoint scenarios on SQLite and on disposable PostgreSQL 16, plus a
+test that the endpoint calls `save_batch_with_runs` once and never the per-child
+or separate batch saves; restoring per-child saving fails 5 tests.
+Full backend: **1718 passed, 129 skipped, 0 failed** with the disposable cluster
+(1666 passed, 181 skipped without it).
+
+
 ## 2026-10-16 — ADR-050 unit 1: atomic batch persistence (store level)
 
 **IMPLEMENTED (unit 1); ADR-050 partially accepted; endpoint unchanged.** Starting

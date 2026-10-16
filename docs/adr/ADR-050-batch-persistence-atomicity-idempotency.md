@@ -6,15 +6,16 @@
     batch, runs hijos, records, documentos financieros, diagnósticos y
     relación batch–runs (D2); sin borrados compensatorios (alternativa D
     rechazada); un archivo `REJECTED` no invalida el batch; ADR-025 se
-    conserva (un run por archivo procesado, batch como agrupador). La
-    idempotencia (D5) se hará en una unidad posterior.
-  - Sigue **Propuesta**: D1 aplicado al endpoint, D3, D4, el detalle de D5
-    (cabecera, tabla, retención) y el texto de D6. Hasta su aprobación, el
-    contrato HTTP no cambia.
-- Estado de implementación: unidad 1 IMPLEMENTED (§10); el endpoint no la usa.
+    conserva (un run por archivo procesado, batch como agrupador).
+  - Aceptado después (unidad 2): D1 en el endpoint; D3, exportar tras el
+    commit; D4 **provisional**, conservar el 500 genérico y sus cuerpos ante
+    fallos de persistencia (los 503/500 con `persisted`/`retry_safe` siguen
+    propuestos); D6, solo con lo aprobado (enmienda en ADR-025).
+  - Diferido: D5 (idempotencia: cabecera, tabla y retención), en una unidad
+    posterior.
+- Estado de implementación: unidades 1 y 2 IMPLEMENTED (§10, §11).
 - Fecha: 2026-10-16.
-- Autoridad solicitada para lo pendiente: decisión explícita del usuario sobre
-  D1 (endpoint), D3, D4, D5 y D6.
+- Autoridad solicitada para lo pendiente: D4 definitivo y D5.
 - Relacionados: ADR-025 (batches, Aceptada para Wave A; deja abierto el
   aislamiento de fallos de persistencia/exportación por archivo), ADR-047
   (evidencia financiera, opt-in en batches desde 2026-10-16), ADR-013/017/019
@@ -30,7 +31,7 @@ procesarse**, se exporta a XLSX y, solo al final, se guarda el batch
 (`batches` + `batch_files`). Con el opt-in de ADR-047, la transacción de cada
 hijo incluye sus documentos financieros y diagnósticos.
 
-Comportamiento actual medido en
+Comportamiento medido antes de la unidad 2 (histórico; el actual está en §11) en
 `tests/integration/test_api_batch_persistence_failures.py` (SQLite temporal,
 datos sintéticos):
 
@@ -222,9 +223,7 @@ respuesta perdida seguirá pudiendo duplicar.
   `save_execution_run` y `save_batch`, ahora extraídas a `_write_run` y
   `_write_batch` sobre la conexión del llamador. Sin esquema, estados ni
   restricciones nuevos.
-- No conectado al endpoint: `POST /api/v1/batches` sigue guardando hijo por hijo,
-  y los tests de caracterización de `test_api_batch_persistence_failures.py`
-  siguen afirmando el comportamiento actual.
+- Conectado al endpoint en la unidad 2 (§11).
 - Verificado con los mismos 7 escenarios en SQLite
   (`tests/integration/test_batch_atomic_persistence.py`) y en PostgreSQL 16
   desechable (`test_postgres_financial_persistence.py`): todo guardado y
@@ -235,3 +234,25 @@ respuesta perdida seguirá pudiendo duplicar.
   ninguna fila nueva en ninguna de las seis tablas. Validación previa probada
   sin escrituras. Partir la transacción por hijo hace fallar 4 escenarios en
   cada motor.
+
+## 11. Implementación — unidad 2: endpoint (2026-10-16)
+
+- `POST /api/v1/batches` procesa todos los archivos sin escribir, construye por
+  hijo su `BatchChild` (run, snapshots y, con el opt-in de ADR-047, documentos y
+  diagnósticos mediante `_native_financial_parts`, la misma construcción que
+  `POST /api/v1/runs`), guarda todo con una sola llamada a
+  `save_batch_with_runs` y solo entonces exporta los XLSX.
+- Un fallo de escritura sigue siendo el 500 genérico (D4 provisional) y no deja
+  filas. Un fallo de exportación tras el commit no deshace nada: la respuesta es
+  200 y ese archivo añade a `warnings` el texto de D3,
+  `"download unavailable: export failed"`. Ese aviso solo existe en la
+  respuesta del POST; el batch guardado no se modifica, así que el GET no lo
+  muestra. Persistirlo exigiría escribir el aviso antes del commit (exportando
+  antes) o mutar el batch después, y ninguna de las dos está aprobada.
+- Memoria: los records de hasta diez archivos se mantienen hasta el commit
+  (antes se liberaban hijo a hijo).
+- Verificado con los mismos 11 escenarios del endpoint en SQLite y en
+  PostgreSQL 16 desechable (`test_api_batch_persistence_failures.py`), más un
+  test que exige una única llamada a `save_batch_with_runs` y ninguna a
+  `save_execution_run` ni `save_batch`. Volver a guardar hijo a hijo hace fallar
+  5 tests.

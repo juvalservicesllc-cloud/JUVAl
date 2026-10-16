@@ -513,7 +513,8 @@ contains an ordered `files` array with `ordinal`, basename-only `filename`,
 content type, byte size, `status`, optional child `execution_id`, warnings and
 errors. Aggregate status is `SUCCESS`, `PARTIAL_SUCCESS` or `FAILED` and is
 computed from those child outcomes. Successful siblings persist even when
-another file is invalid. `persist=true` also stores the batch in the
+another file is invalid (an invalid file is a `REJECTED` or `FAILED` outcome of
+the same batch). `persist=true` also stores the batch in the
 `batches`/`batch_files` tables; `GET /api/v1/batches/{batch_id}` returns that
 summary, and `GET /api/v1/runs/{execution_id}/batch` returns the batch a child
 run belongs to (`404` when the run was submitted on its own -- a normal
@@ -543,13 +544,34 @@ repeats another's `record_ref` is still a separate document of another run.
   read per child with §2e.
 - `REJECTED` files have no run; an unreadable (`FAILED`) file stores its run and
   no financial rows.
-- A failing financial write keeps today's batch semantics for any persistence
-  failure: that child stores nothing, earlier children stay stored, the
-  response is a generic `500` and no batch row is written. Per-file isolation
-  of persistence failures remains an open ADR-025 decision.
+- A failing financial write is a persistence failure like any other (see
+  "Persistence and export" below): nothing of the batch is stored.
 - Records and decisions of each child are identical to the same batch without
   the opt-in (tested). Verified on SQLite and on a disposable PostgreSQL 16
   cluster; not on a real Supabase project.
+
+### Persistence and export (ADR-050, 2026-10-16)
+
+With `persist=true` every file is processed first and nothing is written while
+processing. Then the batch, every child `ExecutionRun`, its record snapshots
+and, with the financial opt-in, its documents and diagnostics are stored in
+**one transaction** (`save_batch_with_runs`): all of it or nothing.
+
+- Any write failure is the existing generic `500 {"detail": "internal server
+  error"}` (ADR-050 D4, provisional) and leaves no row: no child run without its
+  batch, no records, documents or diagnostics, no batch. Retrying the same
+  request therefore stores each file once; a retry after a *lost successful*
+  response still creates a second batch (idempotency is ADR-050 D5, deferred).
+- XLSX exports run only after the commit. A failed export does not undo the
+  stored batch: the response is still `200`, and that file's `warnings` gains
+  `"download unavailable: export failed"`; `GET /api/v1/runs/{id}/download`
+  answers `404` for it. The warning exists only in the POST response -- the
+  committed batch is not mutated, so `GET /api/v1/batches/{id}` does not show it.
+- `REJECTED` files have no run; an unreadable (`FAILED`) file's run is stored in
+  the same transaction, with no records.
+- With `persist=false` nothing is stored and exports run after processing, as
+  before.
+- The successful response body is unchanged.
 
 ### Filenames and file types
 

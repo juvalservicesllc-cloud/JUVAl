@@ -29,6 +29,7 @@ import logging
 import os
 import re
 import zipfile
+from dataclasses import replace
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -42,6 +43,7 @@ from pydantic import ValidationError
 
 import juval
 import openpyxl
+from juval.application.batch_persistence import BatchChild, save_batch_with_runs
 from juval.application.record_snapshot import record_to_snapshot
 from juval.application.run_pipeline import run_pipeline, run_pipeline_with_financial_evidence
 from juval.domain.execution_run import ExecutionStatus
@@ -94,6 +96,9 @@ _RECORDS_LIST_MAX_LIMIT = 100
 _EXPORT_MAX_RECORDS = 100_000
 
 logger = logging.getLogger("juval.interfaces.api")
+
+#: ADR-050 D3: the batch was stored, only this file's XLSX download is missing.
+EXPORT_FAILED_WARNING = "download unavailable: export failed"
 
 
 @contextlib.asynccontextmanager
@@ -377,8 +382,16 @@ def _check_financial_options(persist, native, target_profit, target_profit_curre
 
 def _persist_native_financial(store, outcome, snapshots, now, target_profit, target_profit_currency,
                               target_roi) -> RunFinancialSummaryOut:
-    """Build the ADR-047 documents with the CLI's own application functions and
-    save them atomically with the run. Never changes records or decisions."""
+    """Build the ADR-047 documents and save them atomically with the run."""
+    documents, diagnostics, summary = _native_financial_parts(outcome, now, target_profit, target_profit_currency,
+                                                              target_roi)
+    save_run_with_financial_records(store, outcome.run, snapshots, documents, diagnostics)
+    return summary
+
+
+def _native_financial_parts(outcome, now, target_profit, target_profit_currency, target_roi):
+    """The ADR-047 documents and diagnostics of one run, built with the CLI's own
+    application functions; writes nothing and never changes records or decisions."""
     def declared(value, unit, field):
         return declared_financial_target(value, unit, source="juval-api", method=f"request field {field}",
                                          retrieved_at=now)
@@ -388,8 +401,7 @@ def _persist_native_financial(store, outcome, snapshots, now, target_profit, tar
     documents = build_financial_documents(outcome, calculated_at=now, target_profit=profit, target_roi=roi,
                                           application_version=outcome.run.application_version)
     diagnostics = capture_diagnostics_sets(outcome)
-    save_run_with_financial_records(store, outcome.run, snapshots, documents, diagnostics)
-    return RunFinancialSummaryOut(
+    return documents, diagnostics, RunFinancialSummaryOut(
         captures=len(outcome.financial_evidence),
         documents=len(documents),
         without_scenario=sum(1 for item in outcome.financial_evidence if item.evidence is None),
@@ -443,11 +455,14 @@ async def create_batch(
     batch_id = service.new_execution_id()
     created_at = service.now_utc()
     results: list[BatchFile] = []
+    children: list[BatchChild] = []
+    exports: list[tuple[int, str, tuple]] = []      # (index in results, execution_id, records) to export after commit
     max_bytes = service.max_upload_bytes()
     store = _execution_run_store() if persist else None
     if persist and store is None:
         raise HTTPException(status_code=500, detail="persist=true was requested but the execution store is not configured")
 
+    # 1. Process every file; nothing is written to the store here (ADR-050 D1).
     for ordinal, upload in enumerate(files):
         raw_name = Path(upload.filename or "").name
         body = await upload.read()
@@ -476,42 +491,52 @@ async def create_batch(
             try:
                 outcome = pipeline(input_path, domain_thresholds, fees=domain_fees, application_version=juval.__version__, execution_id=execution_id, now=now)
             except _UNREADABLE_INPUT as exc:
-                run, records = _failed_run(execution_id=execution_id, input_path=input_path, application_version=juval.__version__, now=now), ()
-                if persist and store is not None:
-                    store.save_execution_run(run, ())
+                children.append(BatchChild(_failed_run(execution_id=execution_id, input_path=input_path, application_version=juval.__version__, now=now)))
                 results.append(BatchFile(ordinal, filename, upload.content_type, len(body), BatchFileStatus.FAILED, execution_id, errors=(_unreadable_input_detail(filename, exc),)))
                 continue
-            run, records = (outcome.run, outcome.records) if native_financial_evidence else outcome
-            snapshots = [record_to_snapshot(record) for record in records]
-            if persist and store is not None:
-                if native_financial_evidence:
-                    # The single-file transaction: run, snapshots, documents and
-                    # diagnostics of this child only, or nothing of it.
-                    _persist_native_financial(store, outcome, snapshots, now, financial_target_profit,
-                                              financial_target_profit_currency, financial_target_roi)
-                else:
-                    store.save_execution_run(run, snapshots)
-            if run.status != ExecutionStatus.FAILED:
-                export_excel(records, service.output_path(execution_id))
-            file_status = BatchFileStatus.PARTIAL_SUCCESS if run.status == ExecutionStatus.PARTIAL_SUCCESS else BatchFileStatus.SUCCESS if run.status == ExecutionStatus.SUCCESS else BatchFileStatus.FAILED
-            results.append(
-                BatchFile(
-                    ordinal, filename, upload.content_type, len(body), file_status, execution_id,
-                    warnings=(f"{run.warnings} warning(s) reported by processing",) if run.warnings else (),
-                    errors=("import produced no usable records",) if run.status == ExecutionStatus.FAILED else (),
-                    records_total=run.records_total, records_processed=run.records_processed,
-                    records_with_errors=run.records_with_errors, warning_count=run.warnings,
-                )
-            )
         finally:
             input_path.unlink(missing_ok=True)
+        run, records = (outcome.run, outcome.records) if native_financial_evidence else outcome
+        snapshots = [record_to_snapshot(record) for record in records]
+        documents, diagnostics = (), ()
+        if native_financial_evidence:
+            documents, diagnostics, _ = _native_financial_parts(outcome, now, financial_target_profit,
+                                                                financial_target_profit_currency, financial_target_roi)
+        children.append(BatchChild(run, snapshots, documents, diagnostics))
+        if run.status != ExecutionStatus.FAILED:
+            exports.append((len(results), execution_id, records))
+        file_status = BatchFileStatus.PARTIAL_SUCCESS if run.status == ExecutionStatus.PARTIAL_SUCCESS else BatchFileStatus.SUCCESS if run.status == ExecutionStatus.SUCCESS else BatchFileStatus.FAILED
+        results.append(
+            BatchFile(
+                ordinal, filename, upload.content_type, len(body), file_status, execution_id,
+                warnings=(f"{run.warnings} warning(s) reported by processing",) if run.warnings else (),
+                errors=("import produced no usable records",) if run.status == ExecutionStatus.FAILED else (),
+                records_total=run.records_total, records_processed=run.records_processed,
+                records_with_errors=run.records_with_errors, warning_count=run.warnings,
+            )
+        )
 
     batch = Batch(batch_id=batch_id, created_at=created_at, status=aggregate_batch_status(tuple(results)), files=tuple(results))
+
+    # 2. One transaction for every child run, its records, documents and
+    #    diagnostics, and the batch: all of it or nothing (ADR-050 D2). A
+    #    failure is the existing generic 500 (D4 provisional) and leaves no row.
     if persist and store is not None:
-        if not hasattr(store, "save_batch"):
+        if not hasattr(store, "save_batch_with_runs"):
             raise HTTPException(status_code=500, detail="configured execution store does not support batch persistence")
-        store.save_batch(batch)
-    return JSONResponse(status_code=200, content=_batch_response(batch, persisted=persist).model_dump(mode="json"))
+        save_batch_with_runs(store, batch, children)
+
+    # 3. Exports only after the commit (D3). A failed export never undoes what
+    #    was stored; it is reported as a warning on that file in this response.
+    response_files = list(results)
+    for index, execution_id, records in exports:
+        try:
+            export_excel(records, service.output_path(execution_id))
+        except Exception:
+            logger.exception("batch %s: XLSX export failed for %s", batch_id, execution_id)
+            item = response_files[index]
+            response_files[index] = replace(item, warnings=(*item.warnings, EXPORT_FAILED_WARNING))
+    return JSONResponse(status_code=200, content=_batch_response(replace(batch, files=tuple(response_files)), persisted=persist).model_dump(mode="json"))
 
 
 def _batch_response(batch: Batch, *, persisted: bool) -> BatchResponse:

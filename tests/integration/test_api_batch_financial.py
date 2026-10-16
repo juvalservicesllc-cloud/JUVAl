@@ -192,11 +192,10 @@ def test_invalid_financial_options_are_422_and_process_nothing(env, data, detail
     assert not (env / "runs").exists() or not any((env / "runs").rglob("*.xlsx"))
 
 
-def test_a_failing_financial_write_keeps_the_existing_batch_failure_semantics(env, monkeypatch):
-    """ADR-025 leaves per-file isolation of *persistence* failures undecided, so the
-    opt-in keeps today's semantics: the failing child persists nothing (its own
-    transaction rolls back), earlier children stay, the request is a generic 500
-    and no batch row is written."""
+def test_a_failing_financial_write_stores_nothing_of_the_batch(env, monkeypatch):
+    """ADR-050 D2: the batch and all its children share one transaction, so a
+    failing financial write of the second child leaves no row of any child or
+    of the batch; the response is still the generic 500 (D4 provisional)."""
     original = sqlite_module._diagnostics_row
 
     def fail_second_child(execution_id, payload):
@@ -206,7 +205,6 @@ def test_a_failing_financial_write_keeps_the_existing_batch_failure_semantics(en
     monkeypatch.setattr(sqlite_module, "_diagnostics_row", fail_second_child)
     response = post_batch(workbook(env, "a.xlsx", row("A")), workbook(env, "b.xlsx", row("B")), **NATIVE)
     assert response.status_code == 500 and response.json() == {"detail": "internal server error"}
-    assert rows_of(env, "execution_runs") == ["api-run-1"]
-    assert rows_of(env, DOC) == rows_of(env, DIAG) == ["api-run-1"]
-    assert rows_of(env, "execution_run_records") == ["api-run-1"]
-    assert rows_of(env, "batches", "batch_id") == []
+    assert rows_of(env, "execution_runs") == rows_of(env, "execution_run_records") == []
+    assert rows_of(env, DOC) == rows_of(env, DIAG) == []
+    assert rows_of(env, "batches", "batch_id") == rows_of(env, "batch_files", "batch_id") == []

@@ -423,7 +423,7 @@ def test_api_writes_and_batch_reads_financial_documents_on_postgres(tmp_path, ds
 def test_batch_children_store_their_own_documents_on_postgres(tmp_path, dsn, store, monkeypatch):
     """POST /api/v1/batches with the ADR-047 opt-in -> PostgreSQL: each child run
     holds only its own documents, the batch groups them, and a failing financial
-    write of one child leaves nothing of that child (today's batch semantics)."""
+    write of one child leaves nothing of the whole batch (ADR-050 D2)."""
     from fastapi.testclient import TestClient
     from juval.infrastructure.persistence import supabase_execution_run_store as pg_module
     from juval.interfaces.api import service
@@ -467,7 +467,7 @@ def test_batch_children_store_their_own_documents_on_postgres(tmp_path, dsn, sto
         return original(execution_id, payload)
     monkeypatch.setattr(pg_module, "_diagnostics_row", fail_second_child)
     assert client.post("/api/v1/batches", data=data, files=files).status_code == 500
-    assert store.load_execution_run("pg-batch-4") is not None                         # earlier child kept
+    assert store.load_execution_run("pg-batch-4") is None                             # earlier child rolled back
     assert store.load_execution_run("pg-batch-5") is None and store.load_records("pg-batch-5") == []
     assert store.load_batch("pg-batch-3") is None                                     # no batch row
 
@@ -494,3 +494,26 @@ def test_atomic_batch_persistence_on_postgres(scenario, tmp_path, dsn, store, mo
 
     from .test_batch_atomic_persistence import run_scenario
     run_scenario(scenario, store, _batch_rows(dsn), pg_module, tmp_path, monkeypatch)
+
+
+# -- ADR-050 D1-D4: POST /api/v1/batches persists atomically, same scenarios as SQLite ----------
+
+def _endpoint_scenarios():
+    from .test_api_batch_persistence_failures import SCENARIOS
+    return SCENARIOS
+
+
+@pytest.mark.parametrize("scenario", _endpoint_scenarios(), ids=lambda s: s.__name__)
+def test_batch_endpoint_atomicity_on_postgres(scenario, tmp_path, dsn, store, monkeypatch):
+    from datetime import datetime, timezone
+
+    from juval.infrastructure.persistence import supabase_execution_run_store as pg_module
+    from juval.interfaces.api import service
+
+    monkeypatch.setenv("JUVAL_RUN_STORAGE_DIR", str(tmp_path / "runs"))
+    monkeypatch.setenv("JUVAL_EXECUTION_STORE", "supabase")
+    monkeypatch.setenv("JUVAL_SUPABASE_DB_URL", dsn)                                   # the disposable schema
+    monkeypatch.delenv("JUVAL_MAX_UPLOAD_BYTES", raising=False)
+    monkeypatch.setattr(service, "now_utc", lambda: datetime(2026, 3, 1, 12, tzinfo=timezone.utc))
+    monkeypatch.setattr(service, "new_execution_id", iter(f"api-run-{n}" for n in range(100)).__next__)
+    scenario(tmp_path, _batch_rows(dsn), pg_module, monkeypatch)

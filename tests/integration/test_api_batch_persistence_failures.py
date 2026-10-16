@@ -1,105 +1,217 @@
-"""Characterization of POST /api/v1/batches when *persistence* fails (ADR-025 open item).
+"""POST /api/v1/batches persists atomically through save_batch_with_runs (ADR-050 D1-D4).
 
-These tests pin today's behavior -- they do not endorse it. ADR-050 (Propuesta)
-analyses it; if that ADR is approved, the assertions marked CURRENT change with
-the contract. Temporary SQLite only, synthetic workbooks only.
+Every file is processed first; then the batch, every child run, its records,
+financial documents and diagnostics are written in one transaction; XLSX
+exports run only after that commit. A failed write is still the existing
+generic 500 (D4 provisional) but now leaves no row at all.
+
+The scenarios are functions of (env, rows, store_module, monkeypatch) so the
+PostgreSQL suite runs the same ones against a disposable cluster. Failures are
+injected into the store module's own write helpers, the ones the endpoint's
+atomic path really calls. Synthetic workbooks only.
 """
 from __future__ import annotations
 
 import sqlite3
 
+import pytest
 from fastapi.testclient import TestClient
 
-from juval.infrastructure.logging.sqlite_execution_run_store import SqliteExecutionRunStore
+from juval.domain.financial_evidence import FinancialTerm as T
+from juval.infrastructure.logging import sqlite_execution_run_store as sqlite_module
 from juval.interfaces.api import main as api
-from juval.interfaces.api.main import app
+from juval.interfaces.api.main import EXPORT_FAILED_WARNING, app
 
-from .test_api_batch_financial import post_batch, rows_of, workbook
-from .test_api_financial_flow import DIAG, DOC, NATIVE, ROWS, count, env  # noqa: F401 (fixture)
+from .test_api_batch_financial import post_batch, workbook
+from .test_api_financial_flow import NATIVE, ROWS, env  # noqa: F401 (fixture)
 from .test_cli_native_financial import row
+from .test_native_financial_capture import declared
 
 client = TestClient(app, raise_server_exceptions=False)
-
-
-def failing_save(monkeypatch, fail_on):
-    """Make SqliteExecutionRunStore.save_execution_run raise for the given child ids."""
-    original = SqliteExecutionRunStore.save_execution_run
-
-    def save(self, run, *args, **kwargs):
-        if fail_on(run.execution_id):
-            raise sqlite3.OperationalError("simulated database failure")
-        return original(self, run, *args, **kwargs)
-    monkeypatch.setattr(SqliteExecutionRunStore, "save_execution_run", save)
+DOC, DIAG = "execution_run_financial_records", "execution_run_capture_diagnostics"
+TABLES = ("execution_runs", "execution_run_records", DOC, DIAG, "batches", "batch_files")
+GENERIC_500 = {"detail": "internal server error"}
 
 
 def files(env):
     return workbook(env, "a.xlsx", *ROWS), workbook(env, "b.xlsx", row("B"))
 
 
-def test_all_files_succeed_and_the_batch_links_every_child(env):
+def nothing_stored(rows):
+    return all(rows(table) == [] for table in TABLES)
+
+
+def fail_in(monkeypatch, store_module, helper, when):
+    original = getattr(store_module, helper)
+
+    def failing(*args):
+        if when(*args):
+            raise RuntimeError(f"simulated {helper} failure")
+        return original(*args)
+    monkeypatch.setattr(store_module, helper, failing)
+
+
+def exported(execution_id):
+    return client.get(f"/api/v1/runs/{execution_id}/download").status_code == 200
+
+
+# -- Scenarios shared with the PostgreSQL suite ---------------------------------------------
+
+def every_file_stored_and_linked_with_its_documents(env, rows, store_module, monkeypatch):
     body = post_batch(*files(env), **NATIVE).json()
     children = [f["execution_id"] for f in body["files"]]
     assert body["status"] == "SUCCESS" and body["persisted"] is True
-    assert rows_of(env, "execution_runs") == sorted(children)
-    assert all(client.get(f"/api/v1/runs/{c}/batch").json()["batch_id"] == body["batch_id"] for c in children)
+    assert sorted(rows("execution_runs")) == sorted(children)
+    assert sorted(rows(DOC)) == sorted([children[0]] * 3 + [children[1]])
+    assert sorted(rows(DIAG)) == sorted([children[0]] * 4 + [children[1]])
+    assert rows("batches") == [body["batch_id"]] and len(rows("batch_files")) == 2
+    for execution_id in children:
+        assert client.get(f"/api/v1/runs/{execution_id}/batch").json()["batch_id"] == body["batch_id"]
+        assert exported(execution_id)
 
 
-def test_a_rejected_file_is_stored_as_a_batch_outcome_without_a_run(env):
-    body = post_batch(("notes.txt", b"plain text"), workbook(env, "a.xlsx", row("A")), persist="true").json()
+def a_batch_without_the_opt_in_stores_no_financial_rows(env, rows, store_module, monkeypatch):
+    body = post_batch(*files(env), persist="true").json()
+    assert body["status"] == "SUCCESS" and len(rows("execution_runs")) == 2
+    assert rows(DOC) == [] and rows(DIAG) == []
+
+
+def a_rejected_file_is_an_outcome_without_a_run(env, rows, store_module, monkeypatch):
+    body = post_batch(("notes.txt", b"plain text"), workbook(env, "a.xlsx", row("A")), **NATIVE).json()
     rejected, good = body["files"]
+    assert body["status"] == "PARTIAL_SUCCESS"
     assert rejected["status"] == "REJECTED" and rejected["execution_id"] is None
-    assert client.get(f"/api/v1/batches/{body['batch_id']}").json()["files"][0]["status"] == "REJECTED"
-    assert rows_of(env, "execution_runs") == [good["execution_id"]]
+    assert rows("execution_runs") == [good["execution_id"]] and len(rows("batch_files")) == 2
 
 
-def test_current_second_file_failure_leaves_an_unlinked_first_child(env, monkeypatch):
-    """CURRENT: generic 500; child 1 stays stored with its documents, child 2
-    stores nothing, no batch row -- so child 1 belongs to no batch and the
-    client was never told its execution_id."""
-    failing_save(monkeypatch, lambda execution_id: execution_id == "api-run-2")
+def a_failing_second_child_write_stores_nothing_and_exports_nothing(env, rows, store_module, monkeypatch):
+    fail_in(monkeypatch, store_module, "_write_run", lambda conn, run, *rest: run.execution_id == "api-run-2")
     response = post_batch(*files(env), **NATIVE)
-    assert response.status_code == 500 and response.json() == {"detail": "internal server error"}
-    assert "api-run-1" not in response.text
-    assert rows_of(env, "execution_runs") == ["api-run-1"]
-    assert set(rows_of(env, DOC)) == set(rows_of(env, DIAG)) == {"api-run-1"}        # no orphan documents
-    assert rows_of(env, "batches", "batch_id") == []
-    assert client.get("/api/v1/runs/api-run-1/batch").status_code == 404           # reads as "submitted alone"
+    assert response.status_code == 500 and response.json() == GENERIC_500
+    assert nothing_stored(rows)                                       # no unlinked first child any more
+    assert not exported("api-run-1") and not exported("api-run-2")     # exports wait for the commit
 
 
-def test_current_retry_after_a_partial_failure_duplicates_the_stored_child(env, monkeypatch):
-    """CURRENT: there is no idempotency key; the retry creates new runs, so the
-    first file is now stored twice under different execution_ids."""
-    request = files(env)                                    # the same bytes are re-sent, as a real retry does
-    original = SqliteExecutionRunStore.save_execution_run
-    failing_save(monkeypatch, lambda execution_id: execution_id == "api-run-2")
+def a_failing_financial_document_write_stores_nothing(env, rows, store_module, monkeypatch):
+    fail_in(monkeypatch, store_module, "_financial_row", lambda execution_id, payload: execution_id == "api-run-2")
+    response = post_batch(*files(env), **NATIVE)
+    assert response.status_code == 500 and response.json() == GENERIC_500
+    assert nothing_stored(rows)
+
+
+def a_failing_batch_write_after_every_child_stores_nothing(env, rows, store_module, monkeypatch):
+    fail_in(monkeypatch, store_module, "_write_batch", lambda conn, batch: True)
+    response = post_batch(*files(env), **NATIVE)
+    assert response.status_code == 500 and response.json() == GENERIC_500
+    assert nothing_stored(rows)
+
+
+def a_global_database_failure_stores_nothing(env, rows, store_module, monkeypatch):
+    fail_in(monkeypatch, store_module, "_write_run", lambda *args: True)
+    assert post_batch(*files(env), persist="true").status_code == 500
+    assert nothing_stored(rows)
+
+
+def a_retry_after_a_failure_stores_each_file_once(env, rows, store_module, monkeypatch):
+    request = files(env)                                      # the same bytes are re-sent, as a real retry does
+    original = store_module._write_batch
+    fail_in(monkeypatch, store_module, "_write_batch", lambda conn, batch: True)
     assert post_batch(*request, **NATIVE).status_code == 500
-    monkeypatch.setattr(SqliteExecutionRunStore, "save_execution_run", original)    # the database recovers
-    monkeypatch.setattr(api.service, "new_execution_id", iter(f"retry-{n}" for n in range(10)).__next__)
+    monkeypatch.setattr(store_module, "_write_batch", original)   # the database recovers
     retry = post_batch(*request, **NATIVE)
     assert retry.status_code == 200
-    with sqlite3.connect(env / "api.db") as conn:
-        by_hash = conn.execute("SELECT input_hash, COUNT(*) FROM execution_runs GROUP BY input_hash "
-                               "ORDER BY COUNT(*) DESC").fetchall()
-    assert by_hash[0][1] == 2                                                        # a.xlsx stored twice
-    assert rows_of(env, "batches", "batch_id") == ["retry-0"]
+    assert len(rows("execution_runs")) == 2 and rows("batches") == [retry.json()["batch_id"]]
 
 
-def test_current_global_database_failure_stores_nothing(env, monkeypatch):
-    """CURRENT: a database that fails for every write is a generic 500 and
-    nothing is stored; the response does not say a retry is safe."""
-    failing_save(monkeypatch, lambda execution_id: True)
+def files_repeating_a_record_ref_keep_separate_documents(env, rows, store_module, monkeypatch):
+    body = post_batch(workbook(env, "a.xlsx", row("SAME", **declared(T.COG, "1.00"))),
+                      workbook(env, "b.xlsx", row("SAME", **declared(T.COG, "7.00"))), **NATIVE).json()
+    first, second = (f["execution_id"] for f in body["files"])
+    a, b = (client.get(f"/api/v1/runs/{run}/financial").json()["records"] for run in (first, second))
+    assert [e["record_ref"] for e in a] == [e["record_ref"] for e in b]
+    assert a[0]["financial_document"]["payload"]["evidence"]["execution_id"] == first
+    assert b[0]["financial_document"]["payload"]["evidence"]["execution_id"] == second
+    assert '"7.00"' not in str(a) and '"1.00"' not in str(b)
+
+
+def exports_run_only_after_the_commit(env, rows, store_module, monkeypatch):
+    seen = []
+    original = api.export_excel
+
+    def spy(records, path):
+        seen.append(rows("batches"))                           # what is committed when the export starts
+        return original(records, path)
+    monkeypatch.setattr(api, "export_excel", spy)
+    body = post_batch(*files(env), persist="true").json()
+    assert seen == [[body["batch_id"]]] * 2
+
+
+def a_failed_export_keeps_the_stored_batch_and_reports_a_warning(env, rows, store_module, monkeypatch):
+    original = api.export_excel
+
+    def fail_first(records, path):
+        if "api-run-1" in str(path):
+            raise OSError("simulated disk failure")
+        return original(records, path)
+    monkeypatch.setattr(api, "export_excel", fail_first)
     response = post_batch(*files(env), **NATIVE)
-    assert response.status_code == 500 and response.json() == {"detail": "internal server error"}
-    assert rows_of(env, "execution_runs") == [] and count(env, DOC) == count(env, DIAG) == 0
-    assert rows_of(env, "batches", "batch_id") == []
+    assert response.status_code == 200                             # the data was committed; no misleading 500
+    first, second = response.json()["files"]
+    assert first["status"] == "SUCCESS" and EXPORT_FAILED_WARNING in first["warnings"]
+    assert EXPORT_FAILED_WARNING not in second["warnings"]
+    assert len(rows("execution_runs")) == 2 and rows("batches") == [response.json()["batch_id"]]
+    assert not exported("api-run-1") and exported("api-run-2")
+    stored = client.get(f"/api/v1/batches/{response.json()['batch_id']}").json()["files"][0]
+    assert EXPORT_FAILED_WARNING not in stored["warnings"]         # the committed batch is not mutated
 
 
-def test_current_export_failure_after_a_saved_child_is_also_a_500(env, monkeypatch):
-    """CURRENT: the per-child XLSX export runs after that child was saved; if
-    it fails the child stays stored and unlinked, as with a save failure."""
-    def failing_export(records, path):
-        raise OSError("simulated disk failure")
-    monkeypatch.setattr(api, "export_excel", failing_export)
-    response = post_batch(*files(env), persist="true")
-    assert response.status_code == 500
-    assert rows_of(env, "execution_runs") == ["api-run-1"] and rows_of(env, "batches", "batch_id") == []
+SCENARIOS = [every_file_stored_and_linked_with_its_documents,
+             a_batch_without_the_opt_in_stores_no_financial_rows,
+             a_rejected_file_is_an_outcome_without_a_run,
+             a_failing_second_child_write_stores_nothing_and_exports_nothing,
+             a_failing_financial_document_write_stores_nothing,
+             a_failing_batch_write_after_every_child_stores_nothing,
+             a_global_database_failure_stores_nothing,
+             a_retry_after_a_failure_stores_each_file_once,
+             files_repeating_a_record_ref_keep_separate_documents,
+             exports_run_only_after_the_commit,
+             a_failed_export_keeps_the_stored_batch_and_reports_a_warning]
+
+
+# -- SQLite ---------------------------------------------------------------------------------
+
+@pytest.fixture
+def sqlite_rows(env):
+    def rows(table):
+        if not (env / "api.db").exists():
+            return []
+        column = "batch_id" if table.startswith("batch") else "execution_id"
+        with sqlite3.connect(env / "api.db") as conn:
+            return [value for (value,) in conn.execute(f"SELECT {column} FROM {table}")]
+    return rows
+
+
+@pytest.mark.parametrize("scenario", SCENARIOS, ids=lambda s: s.__name__)
+def test_sqlite(scenario, env, sqlite_rows, monkeypatch):
+    scenario(env, sqlite_rows, sqlite_module, monkeypatch)
+
+
+def test_the_endpoint_persists_through_save_batch_with_runs_only(env, monkeypatch):
+    """The real atomic path is used: one save_batch_with_runs call per request,
+    and neither a per-child save nor a separate batch save."""
+    from juval.infrastructure.logging.sqlite_execution_run_store import SqliteExecutionRunStore
+    calls = []
+    original = SqliteExecutionRunStore.save_batch_with_runs
+
+    def spy(self, batch, runs):
+        calls.append((batch.batch_id, [item.run.execution_id for item in runs]))
+        return original(self, batch, runs)
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("the batch endpoint must not save child by child")
+    monkeypatch.setattr(SqliteExecutionRunStore, "save_batch_with_runs", spy)
+    monkeypatch.setattr(SqliteExecutionRunStore, "save_execution_run", forbidden)
+    monkeypatch.setattr(SqliteExecutionRunStore, "save_batch", forbidden)
+    body = post_batch(("notes.txt", b"x"), *files(env), ("broken.xlsx", b"not a zip"), **NATIVE).json()
+    assert body["persisted"] is True
+    assert calls == [("api-run-0", ["api-run-1", "api-run-2", "api-run-3"])]   # REJECTED has no run; FAILED does
