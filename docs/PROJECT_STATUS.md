@@ -1,5 +1,20 @@
 # Juval — Project Status
 
+## 2026-10-16 — ADR-050 proposed: batch persistence atomicity and idempotency
+
+**PENDING DECISION.** Starting HEAD `8d53f37`, clean. ADR-025 leaves per-file
+persistence/export failure isolation open. New characterization tests
+(`tests/integration/test_api_batch_persistence_failures.py`, 6 passed) pin the
+current behavior: a failing second child leaves the first stored but in no batch
+and unknown to the client (generic 500); a retry stores that file twice; a global
+database failure and an export failure are generic 500s. No orphan financial
+documents and no cross-run mixing were observed. ADR-050 (Propuesta) recommends
+process-then-save in one batch transaction, export after commit, 503/500 bodies
+with `persisted`/`retry_safe`, and an optional `Idempotency-Key`. Nothing of it is
+implemented; no contract, schema, migration or frontend change. ADR-050 is
+numbered 050 because ADR-049 is used outside this repository.
+
+
 ## 2026-10-16 — ADR-047 financial opt-in on POST /api/v1/batches
 
 **IMPLEMENTED; ADR-047 remains PARTIALLY IMPLEMENTED.** Starting HEAD `9b5ffb5`,
