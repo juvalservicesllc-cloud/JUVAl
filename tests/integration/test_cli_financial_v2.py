@@ -8,6 +8,7 @@ import pytest
 import juval
 from juval.application import financial_persistence
 from juval.application.financial_persistence import load_financial_record, save_run_with_financial_records
+from juval.application.financial_recalculation import check_recalculation
 from juval.application.financial_serialization import FinancialRecordDocument
 from juval.application.financial_serialization_v2 import (
     FinancialRecordDocumentV2, assess_reproducibility, current_dependency_matrix_digest,
@@ -161,3 +162,11 @@ def test_snapshots_written_with_v2_documents_are_the_commercial_ones(tmp_path):
     _, records = run_pipeline(path, thresholds, fees=fees, application_version=juval.__version__,
                               execution_id="run-A", now=NOW)
     assert store.load_records("run-A") == [record_to_snapshot(r) for r in records]
+
+
+@pytest.mark.parametrize("args", [FINANCIAL, ("--native-financial-evidence",)], ids=["targets", "no-targets"])
+def test_documents_read_back_from_sqlite_recalculate_exactly_under_the_current_code(tmp_path, args):
+    _, _, store = cli_run(tmp_path, [row("A"), row("B")], *args)
+    for index in range(2):
+        check = check_recalculation(load_v2(store, index=index))
+        assert check.matches, check

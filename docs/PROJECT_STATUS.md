@@ -1,5 +1,31 @@
 # Juval — Project Status
 
+## 2026-10-16 — ADR-047 §19: recalculation check of stored financial records
+
+**IMPLEMENTED (one §19 unit); ADR-047 remains PARTIALLY IMPLEMENTED.** Starting
+HEAD `a174825`, clean, isolated clone. Steps 8-9 were inspected and remain
+BLOCKED: step 8 needs business approval of Decision Score D1/D2/D3 (ADR-045,
+ADR-047 §23), step 9 a separate reviewed activation (§24). The independent unit
+implemented is `application/financial_recalculation.py::check_recalculation`:
+it re-runs the existing resolver and calculator on what a stored format-v2
+document recorded and reports, part by part, whether the current code produces
+the stored resolution and results; it refuses v1, missing calculations,
+different tables or decimal policy, and mixed calculation instants. It is pure
+and read-only, has no CLI/API/persistence consumer, and does not assert
+historical reproduction (guarantee C). No formula, contract, migration,
+dependency, frontend or server change. APPROVED scope: ADR-047 §19 (Aceptada)
+and the operator's 2026-10-16 instruction.
+
+Tests (new `.venv` in the clone with the declared `.[dev]` extra only):
+baseline financial selection 315 passed; new unit file 17 passed; CLI v2 file
+15 passed; full backend `pytest -q`: **1627 passed, 126 skipped, 0 failed**.
+Skips: no disposable session PostgreSQL, no nginx binary, no `psycopg`; the
+PostgreSQL financial persistence tests were therefore not run (persistence is
+unchanged). Mutating the comparison or the calculation instant made 2 and 9 of
+the new tests fail. ADR-040 metrics were not re-measured; the last recorded
+values (44/68, 17/68, 0/12, 5/16, 0/18) are historical.
+
+
 ## 2026-09-21 — Risk severity equality policy
 
 **IMPLEMENTED, APPROVED by explicit user decision (ADR-043).** Starting HEAD

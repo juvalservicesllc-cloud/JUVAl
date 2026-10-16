@@ -74,6 +74,7 @@ Implementado como contrato de dominio, sin acreditar dato alguno por sí mismo:
 | `FinancialRecordDocument` / `serialize_financial_record` / `deserialize_financial_record` (application) | Formato `juval.adr047.financial-record` v1: serialización pura, JSON-compatible, determinista y reversible de evidencia, precio declarado, resolución y cálculos; sin I/O ni persistencia |
 | `save_run_with_financial_records` / `load_financial_record` (application) + `execution_run_financial_records` (SQLite y PostgreSQL) | Persistencia aditiva del payload v1 por `(execution_id, record_ref)`, atómica con run y snapshots; lectura que distingue ausencia, payload corrupto o versión desconocida, e identidad incoherente |
 | `FinancialRecordDocumentV2` / `serialize_financial_record_v2` / `deserialize_financial_record_v2` / `read_financial_record` / `assess_reproducibility` (application) | Formato v2 puro: núcleo v1 idéntico más inputs suministrados, problemas de captura e identidad de implementación; lectura v1/v2 discriminada por versión; evaluación separada de las garantías A/B/C de §19; sin I/O ni consumidores |
+| `check_recalculation` / `RecalculationCheck` (application) | Recalcula con el código actual un documento v2 guardado (resolvedor y calculador existentes, mismos inputs suministrados, instante de cálculo y resultados solicitados) y compara por partes su serialización canónica; rechaza, sin aproximar, lo que no puede recalcular fielmente; no escribe ni produce un resultado nuevo |
 | `FeeEvidenceState` / `accredited_fee_evidence` (domain) | Vista acreditada por registro de los cuatro términos de fee: DECLARED/OBSERVED/INFERRED/DERIVED frente a ausente, NOT_FOUND, INVALID, excluido o aplicabilidad no resuelta; sin derivación ni defaults |
 | `DeclaredSellingPrice` (domain) | Precio declarado por registro con moneda propia en `amount.unit` y `EffectiveContext`; no es `PriceObservation` |
 | `FINANCIAL_EVIDENCE_COLUMN_SPECS` / `NativeFinancialCapture` / `capture_native_financial_evidence` (infrastructure/excel) | Captura nativa (§22 paso 3): lo que una fila declara explícitamente se convierte en `FinancialScenario`/`FinancialTermEvidence`; lo no representable se omite con motivo, nunca se completa con defaults |
@@ -408,6 +409,31 @@ Formato v2 (§19; serialización pura, sin persistencia ni consumidores):
     filas v2. Las filas v1 existentes no se convierten ni se rellenan.
   - Probado con la CLI: A y B se cumplen; C no, porque falta `code_revision` y
     porque el código y el runtime nombrados no se pueden verificar.
+- Comprobación de recalculación (§19, 2026-10-16):
+  - `application/financial_recalculation.py::check_recalculation` vuelve a
+    ejecutar `resolve_financial_dependencies` y `calculate_financial_results`,
+    sin copiar fórmulas, matriz ni política decimal, sobre lo que un documento v2
+    guardó: su `FinancialEvidenceSet`, sus `supplied_inputs`, el instante de
+    cálculo común de sus resultados y el mismo conjunto de resultados
+    solicitados. Compara la serialización canónica de la resolución y de cada
+    resultado con lo almacenado y devuelve las partes que difieren, sin
+    repararlas ni sustituirlas.
+  - Rechaza, en lugar de aproximar: v1 (no guarda los inputs suministrados), un
+    documento sin resolución o sin cálculos, una tabla de expresiones, una
+    matriz de dependencias o una política decimal distintas de las del código
+    actual, y cálculos con instantes distintos.
+  - Una coincidencia prueba que este código produce lo almacenado a partir de
+    los inputs almacenados. No es la garantía C: `assess_reproducibility` sigue
+    sin afirmarla, porque el código y el runtime que construyeron el documento
+    siguen sin poder verificarse desde el documento.
+  - Pura y de solo lectura: no escribe, no crea un resultado enlazado (§20) y no
+    tiene consumidores en CLI, API ni persistencia.
+  - Probado: `tests/unit/test_financial_recalculation.py` (17, fixtures
+    sintéticos tras JSON real: VERIFIED, INFERRED, NOT_FOUND, INVALID, moneda
+    incompatible, resultados no solicitados, valores, exactitud, operandos de
+    precondición y resolución manipulados, y cada rechazo) y documentos v2
+    escritos por la CLI en SQLite y leídos de vuelta
+    (`tests/integration/test_cli_financial_v2.py`, con y sin objetivos).
 - Captura estructurada y peso nativo:
   - El capturador emite `CaptureDiagnostic` en origen: `subject`, `CaptureCode`,
     mensaje, fila, y columna y valor original solo cuando una celda concreta es la
@@ -557,7 +583,9 @@ Formato v2 (§19; serialización pura, sin persistencia ni consumidores):
     fuera. Necesitarían una identidad por `(execution_id, número de fila de
     origen)` en un contrato aparte;
   - una fuente verificable de `code_revision`.
-- §19 sigue PENDING.
+- §19 sigue PENDING. Existe la comprobación de recalculación con el código actual
+  (`check_recalculation`); faltan el resultado de recalculación enlazado al
+  anterior, una fuente verificable de `code_revision` y la garantía C.
 
 Precio declarado: `DeclaredSellingPrice(amount, context)` conserva la moneda en
 `amount.unit`, validada como código de 3 letras. No la toma del escenario, del
