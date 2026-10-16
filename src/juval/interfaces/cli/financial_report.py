@@ -2,10 +2,19 @@
 stored for one execution (ADR-047).
 
     python -m juval.interfaces.cli.financial_report --persist-db runs.db --execution-id <id>
+        [--check-recalculation]
 
 It opens the database read-only (SQLite `mode=ro`): no file is created, no
 DDL runs, nothing is recalculated. It never imports a file or runs the
 pipeline, and there is no default database or "latest run".
+
+`--check-recalculation` (opt-in) adds, under each stored document, the result
+of application/financial_recalculation.py::check_recalculation: whether the
+current code recalculates the stored v2 resolution and results from the
+stored inputs (MATCHES / DIFFERS), or why it cannot (NOT CHECKED, e.g. v1 or
+no calculation). The values shown are always the stored ones; the
+recalculation is only compared, never shown, written or substituted. A match
+is not a historical reproduction. The flag does not change the exit code.
 
 Exit codes: 0 report printed; 2 database file not found (or bad arguments);
 4 execution_id not stored; 5 integrity error (corrupt payload, unknown format
@@ -23,6 +32,7 @@ from pathlib import Path
 from typing import Optional, Sequence
 
 from juval.application.financial_persistence import FinancialRecordIntegrityError
+from juval.application.financial_recalculation import check_recalculation
 from juval.application.financial_report import (
     ExecutionNotFound,
     FinancialRunReport,
@@ -42,6 +52,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--persist-db", type=Path, required=True, help="Existing SQLite file to read")
     parser.add_argument("--execution-id", required=True, help="Execution to report; never inferred")
+    parser.add_argument("--check-recalculation", action="store_true",
+                        help="Also compare each stored v2 document with a recalculation by the current code "
+                             "(read-only; a match is not a historical reproduction)")
     return parser
 
 
@@ -70,6 +83,15 @@ def _document_lines(document) -> list[str]:
     return lines
 
 
+def _recalculation_line(document) -> str:
+    check = check_recalculation(document)
+    if check.refused:
+        return f"    recalculation: NOT CHECKED - {'; '.join(check.refused)}"
+    if check.differing:
+        return f"    recalculation: DIFFERS from the current code in {', '.join(check.differing)}"
+    return "    recalculation: MATCHES the current code (not a historical reproduction)"
+
+
 def _diagnostics_lines(diagnostics) -> list[str]:
     if diagnostics is None:
         return ["  capture diagnostics: not stored"]
@@ -81,20 +103,23 @@ def _diagnostics_lines(diagnostics) -> list[str]:
     return lines
 
 
-def _record_lines(record: RecordFinancialReport) -> list[str]:
+def _record_lines(record: RecordFinancialReport, recalculation: bool) -> list[str]:
     snapshot = record.snapshot
     asin = (snapshot.get("asin") or {}).get("value")
     lines = [f"record {record.record_ref} sku={snapshot.get('supplier_sku')} asin={asin}"]
-    lines += _document_lines(record.document) + _diagnostics_lines(record.diagnostics)
+    lines += _document_lines(record.document)
+    if recalculation and record.document is not None:
+        lines.append(_recalculation_line(record.document))
+    lines += _diagnostics_lines(record.diagnostics)
     lines += [f"  integrity: INCONSISTENT - {issue}" for issue in record.inconsistencies]
     return lines
 
 
-def format_report(report: FinancialRunReport) -> str:
+def format_report(report: FinancialRunReport, *, recalculation: bool = False) -> str:
     lines = [f"execution_id={report.run.execution_id} status={report.run.status.value} "
              f"records={len(report.records)}"]
     for record in report.records:
-        lines += _record_lines(record)
+        lines += _record_lines(record, recalculation)
     return "\n".join(lines)
 
 
@@ -114,7 +139,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     except sqlite3.Error as error:
         print(f"error: not a readable SQLite database: {error}", file=sys.stderr)
         return 6
-    print(format_report(report))
+    print(format_report(report, recalculation=args.check_recalculation))
     if report.inconsistencies:
         for issue in report.inconsistencies:
             print(f"error: integrity: {issue}", file=sys.stderr)

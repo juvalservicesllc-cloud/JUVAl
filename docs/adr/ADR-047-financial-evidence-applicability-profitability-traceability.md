@@ -426,8 +426,9 @@ Formato v2 (§19; serialización pura, sin persistencia ni consumidores):
     los inputs almacenados. No es la garantía C: `assess_reproducibility` sigue
     sin afirmarla, porque el código y el runtime que construyeron el documento
     siguen sin poder verificarse desde el documento.
-  - Pura y de solo lectura: no escribe, no crea un resultado enlazado (§20) y no
-    tiene consumidores en CLI, API ni persistencia.
+  - Pura y de solo lectura: no escribe y no crea un resultado enlazado (§20). Su
+    único consumidor es el opt-in `--check-recalculation` del reporte CLI (ver
+    "Consulta de solo lectura"); no la usan la API ni la persistencia.
   - Probado: `tests/unit/test_financial_recalculation.py` (17, fixtures
     sintéticos tras JSON real: VERIFIED, INFERRED, NOT_FOUND, INVALID, moneda
     incompatible, resultados no solicitados, valores, exactitud, operandos de
@@ -486,6 +487,18 @@ Formato v2 (§19; serialización pura, sin persistencia ni consumidores):
   - Corrupción, versión desconocida o identidad incoherente abortan sin reporte.
   - Una base anterior a las tablas financieras se lee como "nada guardado", sin
     crear esas tablas.
+  - `--check-recalculation` (opt-in, 2026-10-16) añade bajo cada documento
+    guardado una línea `recalculation:` con el resultado de
+    `check_recalculation`: `MATCHES the current code (not a historical
+    reproduction)`, `DIFFERS from the current code in <partes>` o `NOT CHECKED -
+    <motivos>` (v1, sin cálculo, otra tabla de expresiones, matriz o política
+    decimal, instantes distintos). Los valores mostrados siguen siendo los
+    guardados; la recalculación solo se compara, nunca se muestra, escribe ni
+    sustituye. Sin el flag la salida es idéntica a la anterior, y el flag no
+    cambia el código de salida: una diferencia no es hoy un error de integridad.
+    Probado en `tests/integration/test_financial_report_cli.py` (coincidencia,
+    diferencia con valor manipulado, implementación distinta, v2 sin cálculo,
+    v1, salida por defecto sin cambios, determinismo y base sin escrituras).
 - Persistencia PostgreSQL (2026-09-25):
   - Implementado: migración aditiva
     `supabase/migrations/20260925000005_execution_run_financial_records.sql`

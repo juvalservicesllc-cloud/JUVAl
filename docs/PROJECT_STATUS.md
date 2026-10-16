@@ -1,5 +1,24 @@
 # Juval — Project Status
 
+## 2026-10-16 — Recalculation check in the financial report CLI
+
+**IMPLEMENTED; ADR-047 remains PARTIALLY IMPLEMENTED.** Starting HEAD `e321f42`,
+clean. `python -m juval.interfaces.cli.financial_report` gains the opt-in
+`--check-recalculation`, which adds one `recalculation:` line under each stored
+document (MATCHES / DIFFERS / NOT CHECKED with reasons) by calling the existing
+`check_recalculation`. Without the flag the output is unchanged (tested), the
+documented "nothing is recalculated" default holds, and the exit codes are the
+same with or without it. Shown values remain the stored ones. Only the CLI
+interface layer changed; `application/financial_report.py`, the HTTP API,
+formulas, persistence, frontend and servers did not. APPROVED scope: the
+operator's 2026-10-16 authorization of an additive financial-report CLI output.
+
+Tests: `tests/integration/test_financial_report_cli.py` 26 passed (7 new);
+forcing the line to always read MATCHES made 4 of them fail. Full backend
+`pytest -q`: **1634 passed, 126 skipped, 0 failed** (same skip causes as the
+previous unit: no disposable PostgreSQL, nginx binary or `psycopg`).
+
+
 ## 2026-10-16 — ADR-047 §19: recalculation check of stored financial records
 
 **IMPLEMENTED (one §19 unit); ADR-047 remains PARTIALLY IMPLEMENTED.** Starting
