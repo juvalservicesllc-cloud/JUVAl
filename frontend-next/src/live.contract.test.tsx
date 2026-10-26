@@ -12,7 +12,10 @@
 import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeAll, describe, expect, it, vi } from "vitest"
+import { BatchPage } from "./pages/BatchPage"
 import { CatalogPage } from "./pages/CatalogPage"
+import { DashboardPage } from "./pages/DashboardPage"
+import { ProductDetailPage } from "./pages/ProductDetailPage"
 import { RunsPage } from "./pages/RunsPage"
 import { UploadPage } from "./pages/UploadPage"
 
@@ -124,4 +127,35 @@ describe.skipIf(!API)("live API contract", () => {
     expect(within(panel).getByRole("heading", { name: /^Recognized columns/ })).toBeInTheDocument()
     expect((await json("/api/v1/runs")).items.length).toBe(before)
   })
+
+  it("Dashboard shows the run's real analytics", async () => {
+    const analytics = await json(`/api/v1/runs/${runId}/analytics`)
+    render(<DashboardPage initialRunId={runId} go={vi.fn()} />)
+    const figures = await screen.findByLabelText("Key figures", {}, { timeout: 5000 })
+    expect(within(figures).getByText("Records").closest("article")).toHaveTextContent(String(analytics.records.total_records))
+    expect(within(figures).getByText("Sum of verified unit profit").closest("article")).toHaveTextContent(`${analytics.profitability.profit.count} of ${analytics.records.total_records} records`)
+  })
+
+  it("Product Detail renders a real snapshot with its source file from stored provenance", async () => {
+    const { records } = await json(`/api/v1/runs/${runId}/records?limit=1&confidence=INCLUDE_INFERRED`)
+    const ref = records[0].record_ref
+    render(<ProductDetailPage executionId={runId} recordRef={ref} go={vi.fn()} />)
+    expect(await screen.findByLabelText("Source", {}, { timeout: 5000 })).toHaveTextContent("sample.xlsx")
+    expect(await screen.findByText(/no financial document was stored/i)).toBeInTheDocument()
+  })
+
+  it("Batch Detail lists each child run's real analytics", async () => {
+    const form = new FormData()
+    form.append("files", fixture())
+    form.append("thresholds", JSON.stringify({ target_profit: "5", target_roi: "0.3", minimum_estimated_monthly_sales: 0, maximum_risk_severity: "LOW" }))
+    form.append("fees", JSON.stringify({ referral_fee: "3", referral_fee_rate: "0.15", fulfillment_fee: "2" }))
+    form.append("persist", "true")
+    const created = await json("/api/v1/batches", { method: "POST", body: form })
+    const child = created.files[0].execution_id
+    const analytics = await json(`/api/v1/runs/${child}/analytics`)
+    render(<BatchPage batchId={created.batch_id} go={vi.fn()} />)
+    const table = await screen.findByRole("table", { name: "Per-file analytics" }, { timeout: 5000 })
+    await waitFor(() => expect(within(table).getByText("sample.xlsx").closest("tr")!.querySelectorAll("td")[1]).toHaveTextContent(String(analytics.records.total_records)))
+  })
 })
+

@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react"
+import { getRunAnalytics } from "../api/analytics"
 import { getBatch } from "../api/batches"
-import { apiErrorMessage } from "../api/client"
-import type { BatchResponse } from "../api/types"
+import { ApiError, apiErrorMessage } from "../api/client"
+import type { BatchResponse, RunAnalyticsOut } from "../api/types"
+import { count, fieldMoney, fieldPercent } from "../format"
 import { Badge } from "./shared"
 
 /**
@@ -17,6 +19,66 @@ import { Badge } from "./shared"
  * which is "never processed", not a measured zero.
  */
 type State = { kind: "loading" } | { kind: "error"; message: string } | { kind: "ready"; batch: BatchResponse }
+type FileAnalytics = { kind: "loading" } | { kind: "missing" } | { kind: "error" } | { kind: "ready"; analytics: RunAnalyticsOut }
+
+/**
+ * Golden's multi-source analytics table, rebuilt from each child run's own
+ * `GET /analytics` (at most ten files, so at most ten requests). One row per
+ * file, side by side; nothing is summed across files and no record is matched
+ * between them -- that would be Compare, which needs an identity ADR.
+ */
+function PerFileAnalytics({ batch }: { batch: BatchResponse }) {
+  const [rows, setRows] = useState<Record<string, FileAnalytics>>({})
+
+  useEffect(() => {
+    const controller = new AbortController()
+    const ids = batch.files.flatMap((file) => file.execution_id ? [file.execution_id] : [])
+    setRows(Object.fromEntries(ids.map((id) => [id, { kind: "loading" } as FileAnalytics])))
+    for (const id of ids) {
+      getRunAnalytics(id, controller.signal)
+        .then((analytics) => setRows((current) => ({ ...current, [id]: { kind: "ready", analytics } })))
+        .catch((error: unknown) => {
+          if (controller.signal.aborted) return
+          const kind = error instanceof ApiError && error.status === 404 ? "missing" : "error"
+          setRows((current) => ({ ...current, [id]: { kind } }))
+        })
+    }
+    return () => controller.abort()
+  }, [batch])
+
+  return <section className="panel">
+    <h2>Per-file analytics</h2>
+    <p>Each file is its own run, summarised by the backend. Profit, ROI and the profit-status columns count VERIFIED values only where stated; files are shown side by side, never merged.</p>
+    <div className="table"><table aria-label="Per-file analytics">
+      <thead><tr><th>File</th><th>Records</th><th>BUY</th><th>REVIEW</th><th>PASS</th><th>Avg profit (verified)</th><th>Avg ROI (verified)</th><th>With issues</th><th>Profit inferred</th><th>Profit not found / invalid</th></tr></thead>
+      <tbody>{batch.files.map((file) => {
+        const row = file.execution_id ? rows[file.execution_id] ?? { kind: "loading" } : null
+        const cells = (text: string) => <td colSpan={9} className="local-note">{text}</td>
+        return <tr key={file.ordinal}>
+          <td>{file.execution_id ? <a href={`/?run=${encodeURIComponent(file.execution_id)}`}>{file.filename}</a> : file.filename}</td>
+          {row === null ? cells("Never ran — no analytics")
+            : row.kind === "loading" ? cells("Loading…")
+            : row.kind === "missing" ? cells("Not stored — analytics exist only for persisted runs")
+            : row.kind === "error" ? cells("Analytics could not be loaded for this file")
+            : (() => {
+              const a = row.analytics
+              const profit = a.provenance.profit ?? {}
+              return <>
+                <td>{count(a.records.total_records)}</td>
+                {(["BUY", "REVIEW", "PASS"] as const).map((d) => <td key={d}>{count(a.decisions[d] ?? 0)}</td>)}
+                <td>{fieldMoney(a.profitability.profit.average)} <small>({count(a.profitability.profit.count)})</small></td>
+                <td>{fieldPercent(a.profitability.roi.average)} <small>({count(a.profitability.roi.count)})</small></td>
+                <td>{count(a.data_quality.records_with_issues)}</td>
+                <td>{count(profit.INFERRED ?? 0)}</td>
+                <td>{count((profit.NOT_FOUND ?? 0) + (profit.INVALID ?? 0))}</td>
+              </>
+            })()}
+        </tr>
+      })}</tbody>
+    </table></div>
+    <p className="local-note">The number in brackets is how many records the average covers. Profit with no status recorded is in neither status column.</p>
+  </section>
+}
 
 export function BatchPage({ batchId, go }: { batchId: string; go: (path: string) => void }) {
   const [state, setState] = useState<State>({ kind: "loading" })
@@ -51,7 +113,7 @@ export function BatchPage({ batchId, go }: { batchId: string; go: (path: string)
     </section>
 
     <h2>Included files</h2>
-    <div className="table"><table>
+    <div className="table"><table aria-label="Included files">
       <thead><tr><th>#</th><th>File</th><th>Status</th><th>Records</th><th>With errors</th><th>Notes</th><th>Run</th></tr></thead>
       <tbody>
         {batch.files.map((file) => <tr key={file.ordinal}>
@@ -67,6 +129,8 @@ export function BatchPage({ batchId, go }: { batchId: string; go: (path: string)
         </tr>)}
       </tbody>
     </table></div>
+
+    {batch.persisted && <PerFileAnalytics batch={batch} />}
 
     {batch.failed_files > 0 && <section className="panel">
       <h2>Retrying a failed file</h2>

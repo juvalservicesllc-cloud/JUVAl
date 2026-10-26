@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react"
+import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { BatchPage } from "./BatchPage"
@@ -21,6 +21,10 @@ const batch = {
     { ordinal: 2, filename: "notes.pdf", content_type: null, size_bytes: 30, status: "REJECTED", execution_id: null, warnings: [], errors: ["unsupported input suffix"], records_total: 0, records_processed: 0, records_with_errors: 0, warning_count: 0 },
   ],
 }
+
+// The per-file analytics table repeats file names; these assertions are about
+// the included-files table.
+const included = () => within(screen.getByRole("table", { name: "Included files" }))
 
 const okJson = (body: unknown) => vi.fn(() => Promise.resolve({ ok: true, status: 200, json: async () => body }))
 
@@ -100,20 +104,20 @@ describe("BatchPage", () => {
     render(<BatchPage batchId="batch-1" go={vi.fn()} />)
 
     expect(await screen.findByText("PARTIAL_SUCCESS")).toBeInTheDocument()
-    expect(screen.getByText("good.csv")).toBeInTheDocument()
+    expect(included().getByText("good.csv")).toBeInTheDocument()
     // A failed or rejected file stays visible and named -- it is never hidden
     // behind the batch's aggregate status.
-    expect(screen.getByText("broken.xlsx")).toBeInTheDocument()
-    expect(screen.getByText("notes.pdf")).toBeInTheDocument()
+    expect(included().getByText("broken.xlsx")).toBeInTheDocument()
+    expect(included().getByText("notes.pdf")).toBeInTheDocument()
     expect(screen.getByText(/could not be read as a workbook/i)).toBeInTheDocument()
   })
 
   it("reports a rejected file's counts as never processed, not as zero", async () => {
     vi.stubGlobal("fetch", okJson(batch))
     render(<BatchPage batchId="batch-1" go={vi.fn()} />)
-    await screen.findByText("notes.pdf")
+    await screen.findByRole("table", { name: "Included files" })
 
-    const row = screen.getByText("notes.pdf").closest("tr") as HTMLElement
+    const row = included().getByText("notes.pdf").closest("tr") as HTMLElement
     expect(row.textContent).toContain("—")
     expect(row.textContent).toContain("never ran")
   })
@@ -121,7 +125,7 @@ describe("BatchPage", () => {
   it("links only the files that actually produced a run", async () => {
     vi.stubGlobal("fetch", okJson(batch))
     render(<BatchPage batchId="batch-1" go={vi.fn()} />)
-    await screen.findByText("good.csv")
+    await screen.findByRole("table", { name: "Included files" })
 
     const links = screen.getAllByRole("link", { name: /open run/i })
     expect(links).toHaveLength(1)
@@ -133,7 +137,7 @@ describe("BatchPage", () => {
   it("describes retry as a new batch, never as an in-place mutation", async () => {
     vi.stubGlobal("fetch", okJson(batch))
     render(<BatchPage batchId="batch-1" go={vi.fn()} />)
-    await screen.findByText("good.csv")
+    await screen.findByRole("table", { name: "Included files" })
 
     expect(screen.getByText(/retrying creates a new batch rather than changing this one/i)).toBeInTheDocument()
   })
