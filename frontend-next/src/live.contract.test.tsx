@@ -12,9 +12,11 @@
 import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeAll, describe, expect, it, vi } from "vitest"
+import { favoriteKey, loadFavorites } from "./favorites"
 import { BatchPage } from "./pages/BatchPage"
 import { CatalogPage } from "./pages/CatalogPage"
 import { DashboardPage } from "./pages/DashboardPage"
+import { FavoritesPage } from "./pages/FavoritesPage"
 import { ProductDetailPage } from "./pages/ProductDetailPage"
 import { RunsPage } from "./pages/RunsPage"
 import { UploadPage } from "./pages/UploadPage"
@@ -156,6 +158,18 @@ describe.skipIf(!API)("live API contract", () => {
     render(<BatchPage batchId={created.batch_id} go={vi.fn()} />)
     const table = await screen.findByRole("table", { name: "Per-file analytics" }, { timeout: 5000 })
     await waitFor(() => expect(within(table).getByText("sample.xlsx").closest("tr")!.querySelectorAll("td")[1]).toHaveTextContent(String(analytics.records.total_records)))
+  })
+
+  it("Favorites resolves a real starred record of the run and removes it", async () => {
+    const { records } = await json(`/api/v1/runs/${runId}/records?limit=1&confidence=INCLUDE_INFERRED`)
+    const title = String(records[0].title.value)
+    localStorage.setItem("juval.catalog.favorites.v1", JSON.stringify([favoriteKey(runId, records[0].record_ref)]))
+    const user = userEvent.setup()
+    render(<FavoritesPage initialRunId={runId} go={vi.fn()} />)
+    expect(await screen.findByRole("link", { name: title }, { timeout: 5000 })).toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: `Remove ${title} from favorites` }))
+    expect(loadFavorites()).toEqual([])
+    localStorage.clear()
   })
 })
 

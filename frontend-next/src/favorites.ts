@@ -28,3 +28,11 @@ export function saveFavorites(favorites: string[]): void {
 
 export const toggleFavorite = (favorites: string[], key: string): string[] =>
   favorites.includes(key) ? favorites.filter((x) => x !== key) : [...favorites, key]
+
+/** Inverse of `favoriteKey`. Splits at the *first* colon: execution ids never
+ *  contain one, record refs often do (`row_2:SUP-001`). Malformed keys -> null. */
+export function parseFavoriteKey(key: string): { executionId: string; recordRef: string } | null {
+  const at = key.indexOf(":")
+  if (at <= 0 || at === key.length - 1) return null
+  return { executionId: key.slice(0, at), recordRef: key.slice(at + 1) }
+}
