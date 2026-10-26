@@ -133,6 +133,38 @@ snapshots. Son las mismas funciones de aplicación que usa la CLI
 - Sin el opt-in, el comportamiento anterior no cambia. `POST /api/v1/batches`
   ofrece el mismo opt-in desde 2026-10-16 (§12).
 
+## 1b. `POST /api/v1/runs/preview` — validación sin ejecución (2026-10-26)
+
+Multipart con un único `file`. Mismas reglas de subida que §1 (tipo `.xlsx`/`.csv`,
+nombre saneado, `JUVAL_MAX_UPLOAD_BYTES` → 413) y el mismo importer
+(`import_file`): la respuesta es el veredicto del importer, no una segunda
+validación. **No** procesa, no calcula profitability, riesgo ni decisión, no
+crea `ExecutionRun` y no persiste nada; la subida vive en un directorio
+temporal bajo `JUVAL_RUN_STORAGE_DIR` que se borra antes de responder.
+Procesar sin guardar sigue siendo §1 con `persist=false`. Permiso
+`runs:create` y guard CSRF, como §1.
+
+- 200 `ImportPreviewResponse`: `input_filename`, `input_hash` (SHA-256 de los
+  bytes), `fatal`, `rows_scanned`, `rows_skipped_blank`, `records_importable`
+  (records que construiría el importer; un record con un campo INVALID cuenta,
+  con su `RECORD_ERROR`), `columns`, `missing_required_columns`
+  (`canonical`, `target`, tomados de los issues `MISSING_REQUIRED_COLUMN`),
+  `issue_counts` (`level`, `code`, `count` de **todos** los issues), `issues`
+  (los primeros 100, en orden del importer), `issues_total`, `issues_truncated`.
+- `columns`: una entrada por celda de header, en orden de hoja: `position`
+  (1-based), `header` (texto original), `normalized`, `status`
+  (`MAPPED` | `UNKNOWN` | `DUPLICATE` | `BLANK`), `canonical`, `alias_of`
+  (canónico cuando el header es un alias), y solo para `MAPPED`: `target`,
+  `required` y `group` (`core` | `native_financial_evidence`; las columnas
+  `fin_*` nunca alimentan profitability ni decisiones, ADR-047). Un `DUPLICATE`
+  conserva `canonical` pero no `target`, porque se ignora.
+- Headers fatales (falta una columna requerida) o archivo vacío: **200** con
+  `fatal: true`; informarlo es el propósito del endpoint. Un archivo vacío
+  informa `EMPTY_FILE` y ninguna columna evaluada.
+- 422: tipo no soportado o bytes ilegibles (mismo mensaje que §1). 413: límite.
+- No hay porcentaje de "confianza de formato": JUVAl tiene un único contrato
+  tabular (ADR-026), no formatos de proveedor detectados.
+
 ## 2. `GET /api/v1/runs/{execution_id}/download`
 
 Devuelve el `.xlsx` generado por `export_excel()` (sin cambios, sin

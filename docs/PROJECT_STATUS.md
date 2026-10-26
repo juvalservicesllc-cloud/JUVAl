@@ -1,5 +1,29 @@
 # Juval — Project Status
 
+## 2026-10-26 — Validate-only import preview: POST /api/v1/runs/preview (GOLDEN C4, items 15-16)
+
+**IMPLEMENTED (backend contract); GOLDEN items 15-16 still missing in the UI
+(frontend frozen, untouched).** Starting HEAD `b9651c9`, clean. The importer now
+records how it resolved each header (`importer.py::classify_headers`,
+`ImportResult.columns`, additive); `_resolve_headers` derives the column index
+and the same issues from that record, so there is one header rule.
+`application/import_preview.py::preview_import` runs the real `import_file` and
+reports columns (MAPPED/UNKNOWN/DUPLICATE/BLANK, canonical, alias, target,
+required, core vs native financial evidence), missing required columns (from the
+importer's own issues), rows scanned/importable, issue counts and the first 100
+issues. The endpoint has the upload rules of POST /runs, `runs:create` + CSRF,
+and a temporary directory removed before responding. No processing, decision,
+ExecutionRun, persistence, schema, formula, dependency or frontend change.
+ADR-040 unchanged (44/68, 17/68).
+
+Tests: `tests/integration/test_api_import_preview.py`, 14 (classification of
+every header kind, same verdict as `import_file`, CSV = XLSX, fatal headers as
+200, empty file, bounded issue list with complete counts, nothing stored and no
+upload left behind, 422/413, filename sanitizing, 401/403/200). Existing
+importer tests unchanged and passing. Full backend: **1740 passed, 129 skipped,
+0 failed** with the disposable PostgreSQL 16 cluster.
+
+
 ## 2026-10-26 — Exact brand filter on run records and filtered export (GOLDEN C4, item 10)
 
 **IMPLEMENTED (backend contract); GOLDEN item 10 still missing in the product

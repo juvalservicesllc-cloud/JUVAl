@@ -28,6 +28,7 @@ import json
 import logging
 import os
 import re
+import tempfile
 import zipfile
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -44,6 +45,7 @@ from pydantic import ValidationError
 import juval
 import openpyxl
 from juval.application.batch_persistence import BatchChild, save_batch_with_runs
+from juval.application.import_preview import preview_import
 from juval.application.record_snapshot import record_to_snapshot
 from juval.application.run_pipeline import run_pipeline, run_pipeline_with_financial_evidence
 from juval.domain.execution_run import ExecutionStatus
@@ -72,6 +74,7 @@ from . import bff, service
 from .auth import RUNS_CREATE, RUNS_EXPORT, RUNS_READ, auth_mode, require, set_session_resolver
 from .models import (
     FeesIn,
+    ImportPreviewResponse,
     RecordFinancialOut,
     RunFinancialSummaryOut,
     RecordOut,
@@ -362,6 +365,52 @@ async def create_run(
         persisted=persisted,
         records=[RecordOut(**s) for s in record_snapshots],
         financial=financial,
+    )
+    return JSONResponse(status_code=200, content=response.model_dump(mode="json"))
+
+
+@app.post("/api/v1/runs/preview", response_model=ImportPreviewResponse)
+async def preview_run_input(
+    file: UploadFile = File(...),
+    _principal=Depends(require(RUNS_CREATE)),
+    _csrf: None = Depends(bff.csrf_guard),
+) -> JSONResponse:
+    """Validate-only: how the importer reads this file, before any run.
+
+    Same upload rules as POST /api/v1/runs (type, sanitized name, size) and the
+    same importer. No processing, decision, ExecutionRun or persistence; the
+    upload lives in a temporary directory removed before the response. A file
+    whose headers are fatally wrong is a 200 with `fatal: true` -- reporting
+    that is the purpose of a preview -- while an unreadable file is a 422.
+    """
+    filename = safe_input_filename(file.filename)
+    body = await file.read()
+    max_bytes = service.max_upload_bytes()
+    if max_bytes is not None and len(body) > max_bytes:
+        raise HTTPException(status_code=413,
+                            detail=f"uploaded file exceeds the configured limit of {max_bytes} bytes (JUVAL_MAX_UPLOAD_BYTES)")
+    service.storage_dir().mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=service.storage_dir(), prefix="preview-") as scratch:
+        input_path = Path(scratch) / filename
+        input_path.write_bytes(body)
+        try:
+            preview = preview_import(input_path, now=service.now_utc())
+        except _UNREADABLE_INPUT as exc:
+            raise HTTPException(status_code=422, detail=_unreadable_input_detail(filename, exc)) from exc
+    response = ImportPreviewResponse(
+        input_filename=preview.input_filename,
+        input_hash=preview.input_hash,
+        fatal=preview.fatal,
+        rows_scanned=preview.rows_scanned,
+        rows_skipped_blank=preview.rows_skipped_blank,
+        records_importable=preview.records_importable,
+        columns=[vars(column) for column in preview.columns],
+        missing_required_columns=[{"canonical": s.canonical, "target": s.target} for s in preview.missing_required_columns],
+        issue_counts=[{"level": level, "code": code, "count": n} for level, code, n in preview.issue_counts],
+        issues=[{"level": i.level.value, "code": i.code, "message": i.message, "field": i.field, "record_ref": i.record_ref}
+                for i in preview.issues],
+        issues_total=preview.issues_total,
+        issues_truncated=preview.issues_total > len(preview.issues),
     )
     return JSONResponse(status_code=200, content=response.model_dump(mode="json"))
 

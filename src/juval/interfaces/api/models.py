@@ -138,6 +138,54 @@ class RunFinancialSummaryOut(BaseModel):
     capture_problems: int
 
 
+class PreviewColumnOut(BaseModel):
+    position: int
+    header: str
+    normalized: str
+    status: Literal["MAPPED", "UNKNOWN", "DUPLICATE", "BLANK"]
+    canonical: Optional[str] = None
+    alias_of: Optional[str] = None
+    target: Optional[str] = None
+    required: bool
+    group: Optional[Literal["core", "native_financial_evidence"]] = None
+
+
+class PreviewMissingColumnOut(BaseModel):
+    canonical: str
+    target: str
+
+
+class PreviewIssueCountOut(BaseModel):
+    level: str
+    code: str
+    count: int
+
+
+class PreviewIssueOut(BaseModel):
+    level: str
+    code: str
+    message: str
+    field: Optional[str] = None
+    record_ref: Optional[str] = None
+
+
+class ImportPreviewResponse(BaseModel):
+    """Importer verdict for one file; nothing was processed or stored."""
+
+    input_filename: str
+    input_hash: str
+    fatal: bool
+    rows_scanned: int
+    rows_skipped_blank: int
+    records_importable: int
+    columns: list[PreviewColumnOut]
+    missing_required_columns: list[PreviewMissingColumnOut]
+    issue_counts: list[PreviewIssueCountOut]
+    issues: list[PreviewIssueOut]
+    issues_total: int
+    issues_truncated: bool
+
+
 class RunFailedResponse(BaseModel):
     execution_id: str
     status: str

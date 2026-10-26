@@ -78,6 +78,13 @@ ese índice es el que se usa para leer cada fila de datos. Reordenar
 columnas no rompe nada; un header no reconocido genera un `WARNING`
 (`UNKNOWN_COLUMN`), nunca un error silencioso.
 
+`importer.py::classify_headers` registra esa resolución por celda de header,
+en orden de hoja (`MAPPED`, `UNKNOWN`, `DUPLICATE` —gana la primera aparición—
+o `BLANK`), y `ImportResult.columns` la conserva (2026-10-26, aditivo). Es la
+misma decisión de la que `_resolve_headers` deriva el índice de columnas y los
+issues, no una segunda clasificación. La expone `POST /api/v1/runs/preview`
+(`API_CONTRACT.md` §1b).
+
 | Header canónico | Alias aceptados | Destino en el dominio | Requerido | Tipo |
 |---|---|---|---|---|
 | `supplier_sku` | `sku` | `product.identification.supplier_sku` | no | str |

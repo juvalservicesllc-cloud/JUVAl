@@ -65,6 +65,23 @@ SUPPORTED_INPUT_SUFFIXES: frozenset[str] = frozenset({".xlsx", ".csv"})
 
 
 @dataclass(frozen=True)
+class HeaderResolution:
+    """How the importer resolved one header cell, in sheet order.
+
+    `status` is MAPPED (read into `canonical`), UNKNOWN (not in the column
+    mapping, ignored), DUPLICATE (a later occurrence of an already mapped
+    column, ignored) or BLANK (no header text, ignored). This is the record of
+    the decision `_resolve_headers` acts on, not a second classification.
+    """
+
+    position: int              # 1-based column number in the sheet
+    header: str                # header cell as text ("" when empty)
+    normalized: str
+    canonical: Optional[str]   # None for UNKNOWN and BLANK
+    status: str
+
+
+@dataclass(frozen=True)
 class ImportResult:
     records: tuple[SourcingRecord, ...]
     issues: tuple[ProcessingIssue, ...]
@@ -75,6 +92,8 @@ class ImportResult:
     # in record order -- and only when the file has at least one `fin_*`
     # column. Additive: records, issues and every legacy value are unaffected.
     financial_captures: tuple[NativeFinancialCapture, ...] = ()
+    # One entry per header cell of the file (empty when the file has no rows).
+    columns: tuple[HeaderResolution, ...] = ()
 
 
 def normalize_header(raw: Any) -> str:
@@ -85,15 +104,33 @@ def normalize_header(raw: Any) -> str:
     return text
 
 
-def _resolve_headers(normalized_headers: list[str]) -> tuple[dict[str, int], list[ProcessingIssue]]:
+def classify_headers(raw_headers) -> tuple[HeaderResolution, ...]:
+    """Resolve every header by name; the first occurrence of a column wins."""
+    resolutions: list[HeaderResolution] = []
+    seen: set[str] = set()
+    for position, raw in enumerate(raw_headers, start=1):
+        normalized = normalize_header(raw)
+        canonical = ALIAS_TO_CANONICAL.get(normalized) if normalized else None
+        if not normalized:
+            status = "BLANK"
+        elif canonical is None:
+            status = "UNKNOWN"
+        elif canonical in seen:
+            status = "DUPLICATE"
+        else:
+            status = "MAPPED"
+            seen.add(canonical)
+        resolutions.append(HeaderResolution(position, "" if raw is None else str(raw), normalized,
+                                            canonical, status))
+    return tuple(resolutions)
+
+
+def _resolve_headers(resolutions: tuple[HeaderResolution, ...]) -> tuple[dict[str, int], list[ProcessingIssue]]:
     issues: list[ProcessingIssue] = []
     column_index: dict[str, int] = {}
-    seen: set[str] = set()
-    for idx, header in enumerate(normalized_headers):
-        if not header:
-            continue
-        canonical = ALIAS_TO_CANONICAL.get(header)
-        if canonical is None:
+    for resolution in resolutions:
+        header, canonical = resolution.normalized, resolution.canonical
+        if resolution.status == "UNKNOWN":
             issues.append(
                 ProcessingIssue(
                     level=IssueLevel.WARNING,
@@ -102,8 +139,7 @@ def _resolve_headers(normalized_headers: list[str]) -> tuple[dict[str, int], lis
                     field=header,
                 )
             )
-            continue
-        if canonical in seen:
+        elif resolution.status == "DUPLICATE":
             issues.append(
                 ProcessingIssue(
                     level=IssueLevel.WARNING,
@@ -112,9 +148,8 @@ def _resolve_headers(normalized_headers: list[str]) -> tuple[dict[str, int], lis
                     field=canonical,
                 )
             )
-            continue
-        column_index[canonical] = idx
-        seen.add(canonical)
+        elif resolution.status == "MAPPED":
+            column_index[canonical] = resolution.position - 1
 
     for spec in COLUMN_SPECS:
         if spec.required and spec.canonical not in column_index:
@@ -601,11 +636,12 @@ def _import_rows(rows_iter, path: Path, *, now: datetime) -> ImportResult:
             rows_skipped_blank=0,
         )
 
-    normalized_headers = [normalize_header(h) for h in raw_headers]
-    column_index, header_issues = _resolve_headers(normalized_headers)
+    columns = classify_headers(raw_headers)
+    column_index, header_issues = _resolve_headers(columns)
     if any(issue.level == IssueLevel.FATAL for issue in header_issues):
         return ImportResult(
             records=(), issues=tuple(header_issues), fatal=True, rows_scanned=0, rows_skipped_blank=0,
+            columns=columns,
         )
 
     issues: list[ProcessingIssue] = list(header_issues)
@@ -637,5 +673,5 @@ def _import_rows(rows_iter, path: Path, *, now: datetime) -> ImportResult:
     return ImportResult(
         records=tuple(records), issues=tuple(issues), fatal=False,
         rows_scanned=rows_scanned, rows_skipped_blank=rows_skipped_blank,
-        financial_captures=tuple(captures),
+        financial_captures=tuple(captures), columns=columns,
     )

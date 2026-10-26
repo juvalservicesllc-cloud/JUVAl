@@ -101,8 +101,8 @@ label intact; its *values* stay blocked until an authorized source exists.
 | Queue counter | `n / MAX_FILES` | `n of MAX_FILES queued` | n/a | equivalent | `PRODUCTION_EQUIVALENT` | — |
 | Rejected-file feedback | names overflow + unsupported type | names overflow | n/a | near-equivalent | `PRODUCTION_EQUIVALENT` | — |
 | CSV + XLSX | Papa Parse / `xlsx` in browser | server-side importer (ADR-026) | yes | production authoritative | `PRODUCTION_ALREADY_SUPERIOR` | — |
-| **Pre-submit preview** | parses in-browser and previews rows/warnings **before** processing | absent | would need a dry-run endpoint | **missing** | `REQUIRES_BACKEND_CONTRACT` | a `validate-only` mode |
-| **Column classification preview** | `classifyColumns()` — USED / OPTIONAL / IGNORED + canonical name + rationale; `detectWestMarine()` gives format + confidence % + missing columns | absent | `column_mapping.py` has the specs but nothing surfaces them | **missing** | `REQUIRES_BACKEND_CONTRACT` | high audit value; expose the mapping the importer already computes |
+| **Pre-submit preview** | parses in-browser and previews rows/warnings **before** processing | absent | `POST /api/v1/runs/preview` (2026-10-26): importer verdict, rows scanned/importable, issues | **missing in UI** | `GOLDEN_CAPABILITY_MISSING` | frontend only; Golden's row preview is not copied, the server importer is the authority |
+| **Column classification preview** | `classifyColumns()` — USED / OPTIONAL / IGNORED + canonical name + rationale; `detectWestMarine()` gives format + confidence % + missing columns | absent | `POST /api/v1/runs/preview` (2026-10-26) returns each header's importer decision (MAPPED/UNKNOWN/DUPLICATE/BLANK), canonical, alias, target, required, group and the missing required columns | **missing in UI** | `GOLDEN_CAPABILITY_MISSING` | frontend only; no format "confidence %" is produced -- JUVAl has one tabular contract, not detected supplier formats |
 | Processing stages | 12 named stages, all flipped to COMPLETE | honest indeterminate status naming every submitted file | API has no granular progress | Golden's is decorative | `OBSOLETE` | do **not** copy fake stages |
 | Per-file result / partial success | ✓ | ✓ `BatchFileOut` with per-file status, counts, errors | yes | equivalent | `PRODUCTION_EQUIVALENT` | — |
 | Thresholds / fees at submit | local policy | real submitted configuration | yes | production authoritative | `PRODUCTION_ALREADY_SUPERIOR` | — |
@@ -379,8 +379,8 @@ bottom mobile nav · collapsible sidebar.
 | 12 | Supplier source URL + external link | `REQUIRES_BACKEND_CONTRACT` | URL field + rights policy |
 | 13 | Raw source row disclosure | `REQUIRES_BACKEND_CONTRACT` | raw row not persisted |
 | 14 | Process trace | `REQUIRES_BACKEND_CONTRACT` | trace not persisted |
-| 15 | Column classification / format-detection preview | `REQUIRES_BACKEND_CONTRACT` | expose importer mapping + a dry-run endpoint |
-| 16 | Pre-submit file preview | `REQUIRES_BACKEND_CONTRACT` | validate-only mode |
+| 15 | Column classification / format-detection preview | `GOLDEN_CAPABILITY_MISSING` | backend delivered 2026-10-26 (`POST /api/v1/runs/preview`, API_CONTRACT §1b); UI waits for the frontend freeze; format detection with a confidence % is not reproduced |
+| 16 | Pre-submit file preview | `GOLDEN_CAPABILITY_MISSING` | backend delivered 2026-10-26 (same endpoint); UI waits for the frontend freeze |
 | 17 | Suggested/list price field | `REQUIRES_BACKEND_CONTRACT` | importer column + `RecordOut` field |
 | 18 | Multi-source analytics table | `REQUIRES_PRODUCTIONIZATION` | batch-scoped aggregation |
 | 19 | Compare | `REQUIRES_ADR` + `REQUIRES_BACKEND_CONTRACT` | identity ADR + cross-run query |
