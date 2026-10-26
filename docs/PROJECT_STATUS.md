@@ -1,5 +1,17 @@
 # Juval — Project Status
 
+## 2026-10-26 — ADR-052 proposed: declared demand observations (D7-B)
+
+**PENDING DECISION.** `docs/adr/ADR-052-declared-demand-observations-ingestion.md`
+(Propuesta) drafts an additive Amendment 1 to ADR-046 (ADR-046 itself unchanged)
+and the D7-B import contract: explicit `demand_*` columns with mandatory window,
+`observed_at`, population and method; INFERRED-only usable values with
+file/row/column provenance; NOT_CAPTURED / NOT_DECLARED / NOT_FOUND kept
+distinct; a `SourcingRecord.market_evidence` component the engine never reads;
+snapshot key `demand_evidence` v1; read-only API/export/UI. Includes the
+mandatory test that high declared demand leaves REVIEW unchanged. Decisions
+E1–E8 await approval. No code changed; GOLDEN and ADR-040 unchanged.
+
 ## 2026-10-26 — D7-D: informative "pending demand verification" for REVIEW
 
 **IMPLEMENTED (approved D7-D).** New snapshots store `decision_reason_codes`
