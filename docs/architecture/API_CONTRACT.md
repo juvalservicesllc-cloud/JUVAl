@@ -155,8 +155,9 @@ Procesar sin guardar sigue siendo §1 con `persist=false`. Permiso
   (1-based), `header` (texto original), `normalized`, `status`
   (`MAPPED` | `UNKNOWN` | `DUPLICATE` | `BLANK`), `canonical`, `alias_of`
   (canónico cuando el header es un alias), y solo para `MAPPED`: `target`,
-  `required` y `group` (`core` | `native_financial_evidence`; las columnas
-  `fin_*` nunca alimentan profitability ni decisiones, ADR-047). Un `DUPLICATE`
+  `required` y `group` (`core` | `native_financial_evidence` |
+  `declared_demand`; las columnas `fin_*` nunca alimentan profitability ni
+  decisiones, ADR-047, y las de demanda declarada tampoco, ADR-052). Un `DUPLICATE`
   conserva `canonical` pero no `target`, porque se ignora.
 - Headers fatales (falta una columna requerida) o archivo vacío: **200** con
   `fatal: true`; informarlo es el propósito del endpoint. Un archivo vacío

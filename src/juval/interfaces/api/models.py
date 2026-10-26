@@ -157,7 +157,7 @@ class PreviewColumnOut(BaseModel):
     alias_of: Optional[str] = None
     target: Optional[str] = None
     required: bool
-    group: Optional[Literal["core", "native_financial_evidence"]] = None
+    group: Optional[Literal["core", "native_financial_evidence", "declared_demand"]] = None
 
 
 class PreviewMissingColumnOut(BaseModel):

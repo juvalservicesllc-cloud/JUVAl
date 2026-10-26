@@ -316,6 +316,15 @@ def upload(client, path):
     return response.json()["execution_id"]
 
 
+def test_the_preview_endpoint_serves_the_declared_demand_group(client, tmp_path):
+    # Found by the frontend-next E2E: the response model refused the group and the endpoint answered 500.
+    path = write_csv(tmp_path, [{**BASE, "demand_estimated_sales": "1000000", **CONTEXT}])
+    response = client.post("/api/v1/runs/preview", files={"file": (path.name, path.read_bytes(), "text/csv")})
+    assert response.status_code == 200, response.text
+    groups = {c["header"]: c["group"] for c in response.json()["columns"] if c["status"] == "MAPPED"}
+    assert {groups[h] for h in ("demand_estimated_sales", *CONTEXT)} == {"declared_demand"}
+
+
 def test_api_and_filtered_export_expose_the_stored_document(client, tmp_path):
     path = write_csv(tmp_path, [{**BASE, "demand_estimated_sales": "1000000", **CONTEXT},
                                 {**BASE, "asin": "B000000002", "demand_estimated_sales": "approx", **CONTEXT},
