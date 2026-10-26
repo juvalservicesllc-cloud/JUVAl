@@ -67,6 +67,7 @@ from juval.domain.execution_run import ExecutionRun, ExecutionStatus
 from juval.domain.batch import Batch, BatchFile, BatchFileStatus, BatchStatus
 from juval.application.batch_store import RunWrite
 from juval.application.record_snapshot_store import RecordSnapshotPage, RecordSnapshotQuery
+from juval.application.review_classification import PENDING_DEMAND_VERIFICATION
 from juval.application.run_analytics import brand_distribution, decision_counts_by_run, issue_types, numeric_summary, price_spread
 
 _SCHEMA = """
@@ -85,6 +86,19 @@ CREATE TABLE IF NOT EXISTS execution_runs (
     warnings INTEGER NOT NULL
 )
 """
+
+# SQL mirror of application/review_classification.py (tests hold them equal):
+# REVIEW whose stored codes are exactly ["DEMAND_UNKNOWN"]; a snapshot without
+# `decision_reason_codes` yields NULL here and is never counted as pending.
+_PENDING_DEMAND_SQL = (
+    "(json_extract(snapshot, '$.decision') = 'REVIEW' "
+    "AND json_array_length(snapshot, '$.decision_reason_codes') = 1 "
+    "AND json_extract(snapshot, '$.decision_reason_codes[0]') = 'DEMAND_UNKNOWN')"
+)
+_REVIEW_NOT_CLASSIFIABLE_SQL = (
+    "(json_extract(snapshot, '$.decision') = 'REVIEW' "
+    "AND json_type(snapshot, '$.decision_reason_codes') IS NULL)"
+)
 
 _RECORDS_SCHEMA = """
 CREATE TABLE IF NOT EXISTS execution_run_records (
@@ -504,6 +518,8 @@ class SqliteExecutionRunStore:
         if query.provenance_field is not None and query.provenance_status is not None:
             clauses.append(f"json_extract(snapshot, '$.{query.provenance_field}.status') = ?")
             params.append(query.provenance_status)
+        if query.review_classification == PENDING_DEMAND_VERIFICATION:
+            clauses.append(_PENDING_DEMAND_SQL)
         where = " AND ".join(clauses)
         expression = _SORT_EXPRESSIONS[query.sort]
         order = query.direction.upper()
@@ -543,4 +559,6 @@ class SqliteExecutionRunStore:
             # does not contribute, it is never guessed at.
             codes = issue_types(conn.execute("SELECT code.value, COUNT(*) FROM execution_run_records r, json_each(r.snapshot, '$.issue_codes') code WHERE r.execution_id=? GROUP BY 1", (execution_id,)).fetchall())
             spread = price_spread(conn.execute("SELECT record_ref, json_extract(snapshot, '$.title.value'), json_extract(snapshot, '$.selling_price.value'), json_extract(snapshot, '$.cog') FROM execution_run_records WHERE execution_id=? AND json_extract(snapshot, '$.selling_price.status')='VERIFIED' AND json_extract(snapshot, '$.cog') IS NOT NULL", (execution_id,)).fetchall())
-        return {"records": {"total_records": total}, "decisions": decisions, "risks": risks, "provenance": provenance, "data_quality": {"records_with_issues": quality[0], "total_issue_count": quality[1]}, "profitability": profitability, "brands": brands, "issue_types": codes, "price_spread": spread}
+            classification = conn.execute(f"SELECT COALESCE(SUM(CASE WHEN {_PENDING_DEMAND_SQL} THEN 1 ELSE 0 END),0), COALESCE(SUM(CASE WHEN {_REVIEW_NOT_CLASSIFIABLE_SQL} THEN 1 ELSE 0 END),0) FROM execution_run_records WHERE execution_id=?", (execution_id,)).fetchone()
+        return {"records": {"total_records": total}, "decisions": decisions, "risks": risks, "provenance": provenance, "data_quality": {"records_with_issues": quality[0], "total_issue_count": quality[1]}, "profitability": profitability, "brands": brands, "issue_types": codes, "price_spread": spread,
+                "review_classification": {"pending_demand_verification": classification[0], "review_not_classifiable": classification[1]}}

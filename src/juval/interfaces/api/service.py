@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Optional
 
 from juval.application.record_snapshot import record_to_snapshot
+from juval.application.review_classification import review_classification
 from juval.domain.costs import FeeInputs
 from juval.domain.decision import Thresholds
 from juval.domain.execution_run import ExecutionRun, ExecutionStatus
@@ -56,7 +57,13 @@ def record_to_json(record: SourcingRecord) -> RecordOut:
     shared with the record-snapshot persistence adapters -- never two
     implementations of the same mapping."""
 
-    return RecordOut(**record_to_snapshot(record))
+    return record_out(record_to_snapshot(record))
+
+
+def record_out(snapshot: dict) -> RecordOut:
+    """A stored snapshot as the API shows it, plus the informative REVIEW
+    sub-classification -- computed in one place, never stored, never a decision."""
+    return RecordOut(**{**snapshot, "review_classification": review_classification(snapshot)})
 
 
 def run_to_summary(run: ExecutionRun, decisions: Optional[dict[str, int]] = None) -> RunSummaryOut:

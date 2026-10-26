@@ -51,6 +51,9 @@ class RecordSnapshotQuery:
     bulky: str | None = None
     provenance_field: ProvenanceField | None = None
     provenance_status: str | None = None
+    # Informative REVIEW sub-classification (application/review_classification.py).
+    # Only PENDING_DEMAND_VERIFICATION is filterable; it never alters a decision.
+    review_classification: str | None = None
 
 
 @dataclass(frozen=True)

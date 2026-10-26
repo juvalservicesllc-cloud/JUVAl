@@ -58,6 +58,7 @@ from juval.domain.batch import Batch, BatchFile, BatchFileStatus, BatchStatus
 from juval.application.batch_store import RunWrite
 from juval.application.financial_persistence import FinancialStorageUnavailable
 from juval.application.record_snapshot_store import RecordSnapshotPage, RecordSnapshotQuery
+from juval.application.review_classification import PENDING_DEMAND_VERIFICATION
 from juval.application.run_analytics import brand_distribution, decision_counts_by_run, issue_types, numeric_summary, price_spread
 from juval.infrastructure.logging.sqlite_execution_run_store import _diagnostics_row, _financial_row
 
@@ -226,6 +227,13 @@ def _write_batch(conn, batch: Batch) -> None:
         )
 
 
+# SQL mirror of application/review_classification.py (tests hold them equal).
+# JSONB equality: the stored codes array is exactly ["DEMAND_UNKNOWN"]; a
+# snapshot without `decision_reason_codes` never matches.
+_PENDING_DEMAND_SQL = "(snapshot->>'decision' = 'REVIEW' AND snapshot->'decision_reason_codes' = '[\"DEMAND_UNKNOWN\"]'::jsonb)"
+_REVIEW_NOT_CLASSIFIABLE_SQL = "(snapshot->>'decision' = 'REVIEW' AND NOT (snapshot ? 'decision_reason_codes'))"
+
+
 class SupabaseExecutionRunStore:
     """Same contract as `SqliteExecutionRunStore` (ADR-013/ADR-019),
     backed by a Postgres connection string (`postgresql://...`) -- Supabase
@@ -380,6 +388,8 @@ class SupabaseExecutionRunStore:
         if query.provenance_field is not None and query.provenance_status is not None:
             clauses.append(f"snapshot->'{query.provenance_field}'->>'status' = %s")
             params.append(query.provenance_status)
+        if query.review_classification == PENDING_DEMAND_VERIFICATION:
+            clauses.append(_PENDING_DEMAND_SQL)
         where = " AND ".join(clauses)
         expression = _SORT_EXPRESSIONS[query.sort]
         order = query.direction.upper()
@@ -417,4 +427,6 @@ class SupabaseExecutionRunStore:
             # inventing a code for them.
             codes = issue_types(conn.execute("SELECT code, COUNT(*) FROM execution_run_records r CROSS JOIN LATERAL jsonb_array_elements_text(r.snapshot->'issue_codes') AS code WHERE r.execution_id=%s GROUP BY 1", (execution_id,)).fetchall())
             spread = price_spread(conn.execute("SELECT record_ref, snapshot->'title'->>'value', snapshot->'selling_price'->>'value', snapshot->>'cog' FROM execution_run_records WHERE execution_id=%s AND snapshot->'selling_price'->>'status'='VERIFIED' AND snapshot->>'cog' IS NOT NULL", (execution_id,)).fetchall())
-        return {"records": {"total_records": total}, "decisions": decisions, "risks": risks, "provenance": provenance, "data_quality": {"records_with_issues": quality[0], "total_issue_count": quality[1]}, "profitability": profitability, "brands": brands, "issue_types": codes, "price_spread": spread}
+            classification = conn.execute(f"SELECT COUNT(*) FILTER (WHERE {_PENDING_DEMAND_SQL}), COUNT(*) FILTER (WHERE {_REVIEW_NOT_CLASSIFIABLE_SQL}) FROM execution_run_records WHERE execution_id=%s", (execution_id,)).fetchone()
+        return {"records": {"total_records": total}, "decisions": decisions, "risks": risks, "provenance": provenance, "data_quality": {"records_with_issues": quality[0], "total_issue_count": quality[1]}, "profitability": profitability, "brands": brands, "issue_types": codes, "price_spread": spread,
+                "review_classification": {"pending_demand_verification": classification[0], "review_not_classifiable": classification[1]}}

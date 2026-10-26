@@ -106,6 +106,12 @@ class RecordOut(BaseModel):
     bulky_severity: Optional[str] = None
     decision: Optional[str] = None
     decision_reasons: list[str] = []
+    # Structured reason codes; None on snapshots written before they existed.
+    decision_reason_codes: Optional[list[str]] = None
+    # Informative only, never a decision: PENDING_DEMAND_VERIFICATION (REVIEW
+    # whose only code is DEMAND_UNKNOWN), NOT_CLASSIFIABLE (REVIEW without
+    # stored codes) or None. Computed by application/review_classification.py.
+    review_classification: Optional[str] = None
     issue_count: int = 0
     issues: list[str] = []
     issue_codes: list[str] = []
@@ -302,6 +308,11 @@ class PriceSpreadOut(BaseModel):
     largest: list[PriceSpreadEntryOut] = []
 
 
+class ReviewClassificationOut(BaseModel):
+    pending_demand_verification: int = 0
+    review_not_classifiable: int = 0
+
+
 class RunAnalyticsOut(BaseModel):
     execution_id: str
     records: dict[str, int]
@@ -313,6 +324,9 @@ class RunAnalyticsOut(BaseModel):
     brands: BrandDistributionOut = BrandDistributionOut()
     issue_types: list[IssueTypeOut] = []
     price_spread: PriceSpreadOut = PriceSpreadOut()
+    # REVIEW records pending only demand evidence, and REVIEW records written
+    # before reason codes were stored (which cannot be classified).
+    review_classification: ReviewClassificationOut = ReviewClassificationOut()
 
 
 class StoredPayloadOut(BaseModel):

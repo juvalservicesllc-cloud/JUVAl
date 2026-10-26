@@ -124,9 +124,11 @@ def record_to_snapshot(record: SourcingRecord) -> dict[str, Any]:
     if record.decision is not None:
         decision = record.decision.decision.value
         decision_reasons = [f"{r.code}: {r.message}" for r in record.decision.reasons]
+        decision_reason_codes = [r.code for r in record.decision.reasons]
     else:
         decision = None
         decision_reasons = []
+        decision_reason_codes = []
 
     return {
         "record_ref": record.record_ref,
@@ -159,6 +161,11 @@ def record_to_snapshot(record: SourcingRecord) -> dict[str, Any]:
         "bulky_severity": _severity_value(bulky_flag),
         "decision": decision,
         "decision_reasons": decision_reasons,
+        # The engine's DecisionReason codes, in order, beside the rendered
+        # `decision_reasons` text (same reasoning as `issue_codes` below).
+        # Absent on snapshots written before 2026-10-26; never reconstructed
+        # from the text (application/review_classification.py).
+        "decision_reason_codes": decision_reason_codes,
         "issue_count": len(record.issues),
         "issues": [f"[{i.level.value}] {i.code}: {i.message}" for i in record.issues],
         # Canonical ProcessingIssue codes, kept separately from the rendered

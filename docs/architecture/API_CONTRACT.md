@@ -275,6 +275,30 @@ export registra `brand` en `filters`. El download completo del run permanece
 separado. Las imágenes no forman parte de `RecordOut`; no se copian URLs del
 demo.
 
+### Clasificación informativa de REVIEW: pendiente de verificar demanda (D7-D, 2026-10-26)
+
+Los snapshots nuevos guardan `decision_reason_codes` (los códigos de
+`DecisionReason`, en orden) junto al texto `decision_reasons`, que no cambia.
+Los snapshots anteriores no tienen la clave y nunca se reconstruye desde el
+texto. `RecordOut` expone `decision_reason_codes` (`null` si no se guardó) y
+`review_classification`, calculado en un solo lugar
+(`application/review_classification.py`):
+
+- `PENDING_DEMAND_VERIFICATION`: `decision == REVIEW` y los códigos son
+  exactamente `["DEMAND_UNKNOWN"]`. Economía y riesgo superaron las reglas;
+  solo falta evidencia de demanda.
+- `NOT_CLASSIFIABLE`: REVIEW sin códigos guardados (snapshot histórico).
+- `null`: cualquier otro caso (BUY, PASS o REVIEW con otros bloqueos).
+
+Es informativa: **la decisión oficial sigue siendo REVIEW**, el motor no
+cambia y no es una señal de BUY. `review_classification=PENDING_DEMAND_VERIFICATION`
+filtra `/records` y `/records/export` con la misma condición en SQLite y en
+PostgreSQL (cualquier otro valor da 422); el export añade la columna
+`review_classification` y registra el filtro en `filters`. `GET /analytics`
+añade `review_classification: {pending_demand_verification,
+review_not_classifiable}`. No requiere migración: es una clave más del JSON del
+snapshot.
+
 ## 2d. `GET /api/v1/runs/{execution_id}/records/{record_ref}` (F1)
 
 Returns exactly one immutable persisted snapshot using the composite identity
@@ -652,6 +676,8 @@ an external provider:
 - `issue_types`: `[{code, count}]` grouped by canonical `ProcessingIssue`
   code. A snapshot written before `issue_codes` existed contributes nothing
   rather than being back-filled.
+- `review_classification`: REVIEW records pending only demand evidence and
+  REVIEW records without stored reason codes (§2c, D7-D).
 - `price_spread`: selling price minus COG across records that have **both** a
   `VERIFIED` selling price and a recorded COG -- `count`, `average_amount`,
   `at_or_below_cog`, and the five `largest` entries with `amount` and

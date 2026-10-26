@@ -549,3 +549,23 @@ def test_decision_counts_on_postgres_match_sqlite(tmp_path, store):
     assert store.decision_counts(ids) == sqlite.decision_counts(ids)
     assert store.decision_counts(["run-page"])["run-page"] == store.get_run_analytics("run-page")["decisions"]
     assert store.decision_counts([]) == {}
+
+
+def test_pending_demand_classification_on_postgres_matches_sqlite(tmp_path, store):
+    from juval.application.record_snapshot_store import RecordSnapshotQuery
+    from juval.application.review_classification import PENDING_DEMAND_VERIFICATION
+
+    from .test_record_snapshot_pagination import run as page_run
+    from .test_review_classification import EXPECTED_PENDING, classification_records
+
+    sqlite = SqliteExecutionRunStore(tmp_path / "runs.db")
+    for backend in (store, sqlite):
+        backend.save_execution_run(page_run(), classification_records())
+
+    for query in (dict(review_classification=PENDING_DEMAND_VERIFICATION), dict(review_classification=PENDING_DEMAND_VERIFICATION, search="Widget 6"),
+                  dict(review_classification=PENDING_DEMAND_VERIFICATION, decision="BUY"), dict()):
+        postgres, local = (backend.list_records("run-page", RecordSnapshotQuery(limit=50, **query)) for backend in (store, sqlite))
+        assert [item["record_ref"] for item in postgres.items] == [item["record_ref"] for item in local.items]
+        assert postgres.total == local.total
+    assert [i["record_ref"] for i in store.list_records("run-page", RecordSnapshotQuery(limit=50, review_classification=PENDING_DEMAND_VERIFICATION)).items] == EXPECTED_PENDING
+    assert store.get_run_analytics("run-page")["review_classification"] == sqlite.get_run_analytics("run-page")["review_classification"] == {"pending_demand_verification": 2, "review_not_classifiable": 1}
