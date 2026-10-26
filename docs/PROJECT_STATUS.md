@@ -1,5 +1,28 @@
 # Juval — Project Status
 
+## 2026-10-26 — frontend-next shell overflow and favicon fixed
+
+**IMPLEMENTED (UX stabilization; no functional change).** Both shell findings
+from the E2E validation are fixed.
+
+**Overflow.** The shell rule was `main{max-width:1560px;width:100%;margin:auto;padding:0 36px 48px}`
+with `content-box`: the 1184px grid cell plus 72px of padding made a 1256px box,
+so every page was 64px wider than a 1440px viewport and clipped the Light/Dark
+switch. The fix adds `box-sizing:border-box` to that rule. `overflow` is not
+hidden, and the layout, tokens and navigation are unchanged.
+
+**Favicon.** `public/icon.svg` is a byte-identical copy of the project icon
+`frontend/public/icon.svg`, linked from `index.html`. `public/favicon.ico` holds
+the same SVG rasterized by Chromium at 16, 32 and 48px. `/favicon.ico` now
+answers 200.
+
+The E2E suite now asserts zero page overflow, an unclipped theme switch and no
+HTTP errors at all (the favicon allowance is removed).
+
+Gates: Playwright 12/12 in two runs; vitest 169 passed + 10 skipped; tsc,
+oxlint and build clean. `demo/` keeps the original Golden CSS as the protected
+reference.
+
 ## 2026-10-26 — frontend-next real-browser E2E for D7-D and D7-B
 
 **IMPLEMENTED (validation; no decision rule changed).** `frontend-next/e2e/`

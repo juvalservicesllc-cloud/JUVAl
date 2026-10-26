@@ -21,8 +21,7 @@ const DEMAND_HEADERS = ["demand_evidence_state", "demand_declared_units", "deman
 /** Fails a test on any console error, uncaught exception or HTTP >= 400 it did not declare as expected. */
 const test = base.extend<{ watch: { allow: (pattern: RegExp) => void } }>({
   watch: [async ({ page }, use) => {
-    // Known, reported finding: index.html declares no icon, so the browser's own favicon request 404s.
-    const allowed: RegExp[] = [/\/favicon\.ico$/]
+    const allowed: RegExp[] = []
     const seen: string[] = []
     page.on("console", (m) => { if (m.type() === "error") seen.push(`console: ${m.text()} @ ${m.location().url}`) })
     page.on("pageerror", (e) => seen.push(`pageerror: ${e.message}`))
@@ -291,6 +290,7 @@ test("desktop visual and basic accessibility of the D7 screens", async ({ page }
     ["detail-valid", `/run/${runs["demand-valid.xlsx"]}/product/row_2`],
     ["detail-invalid", `/run/${runs["demand-invalid.xlsx"]}/product/row_2`],
     ["detail-incomplete", `/run/${runs["demand-incomplete.xlsx"]}/product/row_2`],
+    ["import", "/import"],
   ]
   for (const [name, path] of screens) {
     await page.goto(path)
@@ -303,12 +303,9 @@ test("desktop visual and basic accessibility of the D7 screens", async ({ page }
       unnamedButtons: [...document.querySelectorAll("button")].filter((b) => !(b.getAttribute("aria-label") || b.textContent?.trim())).length,
       unlabelledControls: [...document.querySelectorAll("input, select")].filter((c) => !(c.getAttribute("aria-label") || c.closest("label"))).length,
       pageOverflow: document.documentElement.scrollWidth - innerWidth,
+      themeSwitchClipped: document.querySelector('header [role="switch"]')!.getBoundingClientRect().right > innerWidth,
     }))
-    const { pageOverflow, ...checked } = audit
-    expect(checked, name).toEqual({ d7Overflow: 0, unnamedButtons: 0, unlabelledControls: 0 })
-    // Known, pre-D7 finding kept visible rather than asserted: Golden's shell CSS (identical in demo/)
-    // gives <main> width:100% plus padding without border-box, so every page is wider than the viewport.
-    if (pageOverflow > 0) info.annotations.push({ type: "known-issue", description: `${name}: page ${pageOverflow}px wider than the viewport (shell CSS)` })
+    expect(audit, name).toEqual({ d7Overflow: 0, unnamedButtons: 0, unlabelledControls: 0, pageOverflow: 0, themeSwitchClipped: false })
     await page.screenshot({ path: info.outputPath(`${name}.png`), fullPage: true })
   }
 })
