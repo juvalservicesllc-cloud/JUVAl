@@ -65,6 +65,29 @@ HEADERS: tuple[str, ...] = (
     "issues",
 )
 
+#: Declared demand evidence (ADR-052), appended to both exports. Evidence only:
+#: never a decision input. An absent value is an empty cell, never 0.
+DEMAND_EXPORT_HEADERS: tuple[str, ...] = (
+    "demand_evidence_state", "demand_declared_units", "demand_status", "demand_raw_value",
+    "demand_window_start", "demand_window_end", "demand_observed_at", "demand_population",
+    "demand_method", "demand_source_reference", "demand_diagnostics",
+)
+HEADERS = HEADERS + DEMAND_EXPORT_HEADERS
+
+
+def demand_cells_from_capture(capture) -> tuple[Any, ...]:
+    """Export cells for one record's DeclaredDemandCapture (None = NOT_DECLARED)."""
+    if capture is None:
+        return ("NOT_DECLARED",) + (None,) * (len(DEMAND_EXPORT_HEADERS) - 1)
+    diagnostics = "; ".join(d.code for d in capture.diagnostics) or None
+    if not capture.observations:
+        return ("DECLARED",) + (None,) * (len(DEMAND_EXPORT_HEADERS) - 2) + (diagnostics,)
+    item = capture.observations[0]
+    observation, value = item.observation, item.observation.value
+    return ("DECLARED", value.value, value.status.value, value.raw_value,
+            observation.window.start.isoformat(), observation.window.end.isoformat(), observation.observed_at.isoformat(),
+            observation.population_definition, value.provenance.method, value.provenance.source_reference, diagnostics)
+
 
 def _value_and_status(fv: Optional[FieldValue]) -> tuple[Any, Any]:
     if fv is None:
@@ -169,7 +192,7 @@ def _row_for_record(record: SourcingRecord) -> tuple[Any, ...]:
         decision_reasons,
         len(record.issues),
         issues_text,
-    )
+    ) + demand_cells_from_capture(record.market_evidence)
 
 
 def append_literal_row(sheet: Worksheet, values: Sequence[Any]) -> None:

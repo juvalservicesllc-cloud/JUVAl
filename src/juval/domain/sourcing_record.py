@@ -27,6 +27,7 @@ from typing import Any, Optional
 
 from .costs import CostInputs, FeeInputs
 from .decision import DecisionResult
+from .declared_demand import DeclaredDemandCapture
 from .issues import IssueLevel, ProcessingIssue
 from .product import Product
 from .risk import RiskProfile
@@ -51,6 +52,10 @@ class SourcingRecord:
     score: Optional[Any] = None
     decision: Optional[DecisionResult] = None
     issues: tuple[ProcessingIssue, ...] = ()
+    # Declared demand evidence (ADR-052). None = the file declared no demand
+    # columns. Evidence only: processing/ never reads it and it never reaches
+    # Product.demand or DecisionInputs.
+    market_evidence: Optional[DeclaredDemandCapture] = None
 
     def __post_init__(self) -> None:
         if not self.record_ref:

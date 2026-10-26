@@ -112,6 +112,10 @@ class RecordOut(BaseModel):
     # whose only code is DEMAND_UNKNOWN), NOT_CLASSIFIABLE (REVIEW without
     # stored codes) or None. Computed by application/review_classification.py.
     review_classification: Optional[str] = None
+    # Declared demand evidence (ADR-052), exactly as stored; never used for the
+    # decision. `demand_evidence_state`: DECLARED | NOT_DECLARED | NOT_CAPTURED.
+    demand_evidence: Optional[dict[str, Any]] = None
+    demand_evidence_state: Optional[str] = None
     issue_count: int = 0
     issues: list[str] = []
     issue_codes: list[str] = []

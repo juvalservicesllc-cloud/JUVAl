@@ -137,9 +137,28 @@ FINANCIAL_EVIDENCE_COLUMN_SPECS: tuple[ColumnSpec, ...] = (
 )
 
 
+# -- Declared demand evidence (ADR-052, amendment to ADR-046) ---------------
+#
+# Optional columns that let a file *declare* an estimated-sales observation.
+# They never feed Product.demand or any decision; a file without any of them
+# imports exactly as before. `monthly_sales` is deliberately not an alias (v1).
+DEMAND_EVIDENCE_COLUMN_SPECS: tuple[ColumnSpec, ...] = (
+    ColumnSpec("demand_estimated_sales", "declared_demand.estimated_sales", False, "int",
+               aliases=("estimated_monthly_sales", "estimated_sales")),
+    ColumnSpec("demand_window_start", "declared_demand.window.start", False, "datetime"),
+    ColumnSpec("demand_window_end", "declared_demand.window.end", False, "datetime"),
+    ColumnSpec("demand_month", "declared_demand.month", False, "str"),
+    ColumnSpec("demand_observed_at", "declared_demand.observed_at", False, "datetime"),
+    ColumnSpec("demand_timezone", "declared_demand.timezone", False, "str"),
+    ColumnSpec("demand_population", "declared_demand.population_definition", False, "str"),
+    ColumnSpec("demand_method", "declared_demand.method", False, "str"),
+)
+DEMAND_EVIDENCE_COLUMNS: frozenset[str] = frozenset(spec.canonical for spec in DEMAND_EVIDENCE_COLUMN_SPECS)
+
+
 def _build_alias_index() -> dict[str, str]:
     index: dict[str, str] = {}
-    for spec in (*COLUMN_SPECS, *FINANCIAL_EVIDENCE_COLUMN_SPECS):
+    for spec in (*COLUMN_SPECS, *FINANCIAL_EVIDENCE_COLUMN_SPECS, *DEMAND_EVIDENCE_COLUMN_SPECS):
         index[spec.canonical] = spec.canonical
         for alias in spec.aliases:
             index[alias] = spec.canonical

@@ -569,3 +569,20 @@ def test_pending_demand_classification_on_postgres_matches_sqlite(tmp_path, stor
         assert postgres.total == local.total
     assert [i["record_ref"] for i in store.list_records("run-page", RecordSnapshotQuery(limit=50, review_classification=PENDING_DEMAND_VERIFICATION)).items] == EXPECTED_PENDING
     assert store.get_run_analytics("run-page")["review_classification"] == sqlite.get_run_analytics("run-page")["review_classification"] == {"pending_demand_verification": 2, "review_not_classifiable": 1}
+
+
+def test_declared_demand_evidence_round_trips_on_postgres_like_sqlite(tmp_path, store):
+    from juval.application.record_snapshot import record_to_snapshot
+
+    from .test_declared_demand import BASE, CONTEXT, records, write_csv
+    from .test_record_snapshot_pagination import run as page_run
+
+    rows = [{**BASE, "demand_estimated_sales": "420", **CONTEXT}, {**BASE, "asin": "B000000002", "demand_estimated_sales": "bad", **CONTEXT},
+            {**BASE, "asin": "B000000003"}]
+    snapshots = [record_to_snapshot(r) for r in records(write_csv(tmp_path, rows))]
+    sqlite = SqliteExecutionRunStore(tmp_path / "runs.db")
+    for backend in (store, sqlite):
+        backend.save_execution_run(page_run(), snapshots)
+    for snapshot in snapshots:
+        postgres, local = (backend.load_record("run-page", snapshot["record_ref"]) for backend in (store, sqlite))
+        assert postgres["demand_evidence"] == local["demand_evidence"] == snapshot["demand_evidence"]

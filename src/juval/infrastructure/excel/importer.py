@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import csv
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -39,7 +39,8 @@ from juval.domain.risk import RiskFlag, RiskProfile, RiskStatus, RiskType, Sever
 from juval.domain.sourcing_record import SourcingRecord
 from juval.domain.units import CANONICAL_LENGTH_UNIT, CANONICAL_WEIGHT_UNIT, UnsupportedUnitError, to_inches, to_pounds
 
-from .column_mapping import ALIAS_TO_CANONICAL, COLUMN_SPECS
+from .column_mapping import ALIAS_TO_CANONICAL, COLUMN_SPECS, DEMAND_EVIDENCE_COLUMNS
+from .demand_capture import capture_declared_demand
 from .financial_capture import (
     NativeFinancialCapture,
     capture_native_financial_evidence,
@@ -556,6 +557,20 @@ def _build_record(
     return record, issues
 
 
+def _with_declared_demand(record: SourcingRecord, cells: dict[str, Any], headers: dict[str, str], row_number: int,
+                          source: str, now: datetime, issues: list[ProcessingIssue]) -> SourcingRecord:
+    """Attach declared demand evidence (ADR-052). Product -- and so every
+    decision input -- is left exactly as built; diagnostics become WARNINGs."""
+    capture = capture_declared_demand(cells, headers, subject=record.product.identification, record_ref=record.record_ref,
+                                      row_number=row_number, source=source, captured_at=now)
+    warnings = tuple(
+        ProcessingIssue(level=IssueLevel.WARNING, code=d.code, message=d.message, field=d.column, record_ref=record.record_ref)
+        for d in capture.diagnostics
+    )
+    issues.extend(warnings)
+    return replace(record, market_evidence=capture, issues=record.issues + warnings)
+
+
 class UnsupportedInputFormat(ValueError):
     """Raised for a file whose suffix is not an accepted tabular format."""
 
@@ -648,6 +663,8 @@ def _import_rows(rows_iter, path: Path, *, now: datetime) -> ImportResult:
     records: list[SourcingRecord] = []
     captures: list[NativeFinancialCapture] = []
     native = has_native_financial_columns(column_index)
+    # Declared demand (ADR-052): canonical -> original header, for provenance.
+    demand_headers = {r.canonical: r.header for r in columns if r.status == "MAPPED" and r.canonical in DEMAND_EVIDENCE_COLUMNS}
     rows_scanned = 0
     rows_skipped_blank = 0
 
@@ -663,6 +680,8 @@ def _import_rows(rows_iter, path: Path, *, now: datetime) -> ImportResult:
         record, row_issues = _build_record(row_number, cells, now, source=path.name)
         issues.extend(row_issues)
         if record is not None:
+            if demand_headers:
+                record = _with_declared_demand(record, cells, demand_headers, row_number, path.name, now, issues)
             records.append(record)
             if native:
                 captures.append(capture_native_financial_evidence(

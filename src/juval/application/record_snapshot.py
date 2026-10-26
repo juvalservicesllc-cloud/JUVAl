@@ -25,6 +25,7 @@ from enum import Enum
 from typing import Any, Optional
 
 from juval.domain.provenance import FieldValue
+from juval.application.demand_evidence import serialize_demand_evidence
 from juval.domain.risk import RiskFlag, RiskType
 from juval.domain.sourcing_record import SourcingRecord
 
@@ -173,4 +174,8 @@ def record_to_snapshot(record: SourcingRecord) -> dict[str, Any]:
         # never parse a display string back into one. Absent on snapshots
         # written before this field existed -- never reconstructed at read time.
         "issue_codes": [i.code for i in record.issues],
+        # Declared demand evidence (ADR-052): null = the file declared no demand
+        # columns; absent on snapshots written before it existed. Never read
+        # by decisions.
+        "demand_evidence": serialize_demand_evidence(record.market_evidence),
     }
