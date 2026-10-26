@@ -3,7 +3,7 @@ import { catalogSearchParams, filteredExportUrl } from "./catalog"
 import type { CatalogQuery } from "./types"
 
 const base: CatalogQuery = {
-  limit: 20, offset: 0, search: "", decision: "ALL", sort: "profit", direction: "desc",
+  limit: 20, offset: 0, search: "", brand: "", decision: "ALL", sort: "profit", direction: "desc",
   minRoi: "", minProfit: "", minMargin: "", confidence: "VERIFIED_ONLY",
   hazmat: "", bulky: "", provenanceField: "", provenanceStatus: "",
 }
@@ -49,11 +49,18 @@ describe("catalog query contract", () => {
     expect(p.get("bulky")).toBe("ABSENT")
   })
 
+  it("sends a brand exactly as chosen and never an empty one", () => {
+    expect(catalogSearchParams(base).has("brand")).toBe(false)
+    // Case and spacing are part of the stored value; nothing is trimmed or lowered.
+    expect(catalogSearchParams({ ...base, brand: "Acme Co " }).get("brand")).toBe("Acme Co ")
+  })
+
   it("exports the identical query the table is showing, minus pagination", () => {
-    const query = { ...base, search: "anchor", decision: "BUY", minRoi: "30", hazmat: "ABSENT", offset: 40 }
+    const query = { ...base, search: "anchor", brand: "Acme", decision: "BUY", minRoi: "30", hazmat: "ABSENT", offset: 40 }
     const url = new URL(filteredExportUrl("run-1", query))
     expect(url.pathname).toContain("/records/export")
     expect(url.searchParams.get("search")).toBe("anchor")
+    expect(url.searchParams.get("brand")).toBe("Acme")
     expect(url.searchParams.get("decision")).toBe("BUY")
     expect(url.searchParams.get("min_roi")).toBe("0.3")
     expect(url.searchParams.get("hazmat")).toBe("ABSENT")

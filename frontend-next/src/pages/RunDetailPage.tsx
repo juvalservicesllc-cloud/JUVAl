@@ -3,15 +3,15 @@ import { apiErrorMessage, ApiError } from "../api/client"
 import { getRun } from "../api/runs"
 import type { RunSummaryOut } from "../api/types"
 import { count } from "../format"
-import { Badge } from "./shared"
+import { Badge, DecisionCounts } from "./shared"
 
 /**
  * Minimum run detail needed to close the navigation loop
  * Import → Batch → Runs → Run Detail → Catalog scoped to that run.
  *
- * Only ExecutionRun's own persisted fields are shown. Decision outcomes and
- * analytics belong to the analytics endpoint and arrive with the Dashboard
- * migration; nothing is derived here to fill the gap.
+ * ExecutionRun's own persisted fields plus the stored-snapshot decision counts
+ * the same endpoint returns (`decisions`). Further analytics arrive with the
+ * Dashboard migration; nothing is derived here to fill the gap.
  */
 type State =
   | { kind: "loading" }
@@ -59,6 +59,8 @@ export function RunDetailPage({ executionId, go }: { executionId: string; go: (p
         <article><small>With errors</small><strong>{count(run.records_with_errors)}</strong></article>
         <article><small>Warnings</small><strong>{count(run.warnings)}</strong></article>
       </div>
+      <h2>Decisions</h2>
+      <p><DecisionCounts decisions={run.decisions} /></p>
       <p><small>Input hash <span className="mono">{run.input_hash}</span></small></p>
     </section>
     <section className="panel">

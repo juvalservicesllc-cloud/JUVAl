@@ -370,17 +370,17 @@ bottom mobile nav · collapsible sidebar.
 | 3 | Catalog filter persistence across navigation | **RECOVERED** (C1.3) | — |
 | 4 | Explainable metric cards on Product Detail | **RECOVERED** (C1.4) | — |
 | 5 | Provenance-grouped data quality on Product Detail | **RECOVERED** (C1.5) | — |
-| 6 | Per-run decision counts in the Runs list | `GOLDEN_UX_SUPERIOR` | list projection delivered 2026-10-26 (`decisions` on `GET /api/v1/runs`, API_CONTRACT §2b); Runs row waits for the frontend freeze |
+| 6 | Per-run decision counts in the Runs list | **RECOVERED** (§22, `frontend-next/`) | — |
 | 7 | Favorites page | `REQUIRES_PRODUCTIONIZATION` | cross-run record lookup for the multi-run view |
 | 8 | Dashboard KPI density (11 vs 4) | **PARTIALLY_RECOVERED** (C1.6) — 8 of 11; Golden's file counts are batch-level and its profit *total* has no production equivalent | run-scoped analytics exposes an average, not a sum |
 | 9 | Price history KPI tiles | `FIXTURE_PRESENTATION_ONLY` | must keep the fixture label |
-| 10 | Brand filter dropdown | `GOLDEN_CAPABILITY_MISSING` | backend delivered 2026-10-26 (`brand` on `/records` and `/records/export`, API_CONTRACT §2c); dropdown waits for the frontend freeze to lift |
+| 10 | Brand filter dropdown | **RECOVERED** (§22, `frontend-next/`) — options limited to the run's top 10 brands | listing every brand needs the analytics `brands` limit reviewed |
 | 11 | Product image | `REQUIRES_BACKEND_CONTRACT` | image field + rights/caching policy |
 | 12 | Supplier source URL + external link | `REQUIRES_BACKEND_CONTRACT` | URL field + rights policy |
 | 13 | Raw source row disclosure | `REQUIRES_BACKEND_CONTRACT` | raw row not persisted |
 | 14 | Process trace | `REQUIRES_BACKEND_CONTRACT` | trace not persisted |
-| 15 | Column classification / format-detection preview | `GOLDEN_CAPABILITY_MISSING` | backend delivered 2026-10-26 (`POST /api/v1/runs/preview`, API_CONTRACT §1b); UI waits for the frontend freeze; format detection with a confidence % is not reproduced |
-| 16 | Pre-submit file preview | `GOLDEN_CAPABILITY_MISSING` | backend delivered 2026-10-26 (same endpoint); UI waits for the frontend freeze |
+| 15 | Column classification / format-detection preview | **RECOVERED** (§22, `frontend-next/`) — column classification; format detection with a confidence % deliberately not reproduced | — |
+| 16 | Pre-submit file preview | **RECOVERED** (§22, `frontend-next/`) — importer verdict per file, not a browser row preview | — |
 | 17 | Suggested/list price field | `REQUIRES_BACKEND_CONTRACT` | importer column + `RecordOut` field |
 | 18 | Multi-source analytics table | `REQUIRES_PRODUCTIONIZATION` | batch-scoped aggregation |
 | 19 | Compare | `REQUIRES_ADR` + `REQUIRES_BACKEND_CONTRACT` | identity ADR + cross-run query |
@@ -467,3 +467,44 @@ offset are not persisted either — both belong to the data, not to the
 operator's preference.
 
 Nothing from Golden has been dropped from this matrix.
+
+---
+
+## 22. Frontend integration of C4/C6 contracts — delivered 2026-10-26
+
+Scope authorized by the user: a limited lift of the frontend freeze, only to
+consume `brand`, `POST /api/v1/runs/preview` and `decisions`, in `frontend-next/`
+(the ADR-030 candidate). `demo/` and `frontend/` unchanged; no redesign.
+
+| # | Capability | Outcome | Where | Tests |
+|---|---|---|---|---|
+| 6 | Per-run decision counts | **RECOVERED** | `pages/shared.tsx::DecisionCounts` on `RunsPage` and `RunDetailPage` | 3 component + 1 live |
+| 10 | Brand filter | **RECOVERED** (top-10 options) | `CatalogPage` Brand select fed by the run's analytics `brands`; `brand` in records query and export | 7 component + 1 API + 1 live |
+| 15–16 | Pre-submit preview with column classification | **RECOVERED** | `pages/ImportPreview.tsx`, Preview per queued file on `UploadPage`; `api/preview.ts` | 7 component + 1 live |
+
+Rules kept, and why:
+
+- **Null decisions are not zeros.** `decisions: null` (no stored snapshot)
+  renders "Decision counts not available"; with counts present, a missing key is
+  a real 0.
+- **Brand is exact and server-sourced.** Options are only `brands.items[].label`
+  of the selected run, so every choice matches exactly and case-sensitively;
+  `Acme` and `acme` stay two options. No free text, no "no brand" filter.
+  The backend lists at most 10 brands; when `distinct` is larger the page says
+  so and points to search. Unbranded records are counted, not filterable.
+- **Brand is not remembered.** It is a value of one run's data, so it is
+  excluded from the session-stored query and cleared when the run changes.
+- **Preview is not processing.** Labelled PREVIEW, sends only the file (no
+  thresholds, fees or persist), creates no run (verified live: run count
+  unchanged), hides when its file leaves the queue. Golden's browser-side row
+  parsing and format confidence are not reproduced; the server importer is the
+  authority.
+
+Verification: `npx tsc -b --noEmit` clean; `vitest run` 80 passed, 3 skipped
+(the opt-in live suite); `oxlint` clean; `vite build` OK. Live suite
+`src/live.contract.test.tsx` passed 3/3 against a disposable local FastAPI on
+SQLite. Run it with `JUVAL_LIVE_API` and `VITE_API_BASE_URL` set to the same
+local URL. Its multipart shim exists only because vitest's jsdom `FormData` is
+not serialized by Node's `fetch`; browsers are unaffected. No browser E2E: no
+Playwright setup or browsers exist for `frontend-next/`. Not visually reviewed
+by the user yet (ADR-030 milestone review pending).

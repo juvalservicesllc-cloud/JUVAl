@@ -2,7 +2,9 @@ import { useState } from "react"
 import { createBatch } from "../api/batches"
 import { apiErrorMessage } from "../api/client"
 import { MAX_FILES, SUPPORTED_EXTENSIONS } from "../api/contract"
-import type { BatchResponse, FeesIn, ThresholdsIn } from "../api/types"
+import { previewImport } from "../api/preview"
+import type { BatchResponse, FeesIn, ImportPreviewResponse, ThresholdsIn } from "../api/types"
+import { ImportPreview } from "./ImportPreview"
 import { Badge } from "./shared"
 
 /**
@@ -18,6 +20,10 @@ import { Badge } from "./shared"
  * API reports a completed batch, not granular progress, so this shows an
  * honestly indeterminate state that names every submitted file instead of an
  * invented percentage.
+ *
+ * Each queued file can be previewed first (`POST /api/v1/runs/preview`): the
+ * server importer's verdict on its columns, rows and issues, with no run
+ * created. Preview is a separate, clearly labelled step and never submits.
  */
 
 const SEVERITIES = ["NONE", "LOW", "MEDIUM", "HIGH", "CRITICAL"]
@@ -28,6 +34,13 @@ type State =
   | { kind: "error"; message: string }
   | { kind: "done"; batch: BatchResponse }
 
+/** The preview belongs to one queued File object; removing that file hides it. */
+type PreviewState =
+  | { kind: "none" }
+  | { kind: "loading"; file: File }
+  | { kind: "error"; file: File; message: string }
+  | { kind: "ready"; file: File; preview: ImportPreviewResponse }
+
 const accepted = (file: File) => SUPPORTED_EXTENSIONS.some((ext) => file.name.toLowerCase().endsWith(ext))
 
 export function UploadPage({ go }: { go: (path: string) => void }) {
@@ -35,6 +48,7 @@ export function UploadPage({ go }: { go: (path: string) => void }) {
   const [dragging, setDragging] = useState(false)
   const [notice, setNotice] = useState("")
   const [state, setState] = useState<State>({ kind: "idle" })
+  const [preview, setPreview] = useState<PreviewState>({ kind: "none" })
 
   const [targetProfit, setTargetProfit] = useState("")
   const [targetRoi, setTargetRoi] = useState("")
@@ -65,6 +79,18 @@ export function UploadPage({ go }: { go: (path: string) => void }) {
   }
 
   const removeFile = (index: number) => setFiles((current) => current.filter((_, i) => i !== index))
+
+  async function runPreview(file: File) {
+    setPreview({ kind: "loading", file })
+    try {
+      const result = await previewImport(file)
+      setPreview((current) => current.kind === "loading" && current.file === file ? { kind: "ready", file, preview: result } : current)
+    } catch (error: unknown) {
+      setPreview((current) => current.kind === "loading" && current.file === file ? { kind: "error", file, message: apiErrorMessage(error) } : current)
+    }
+  }
+
+  const shownPreview = preview.kind !== "none" && files.includes(preview.file) ? preview : null
 
   async function submit() {
     if (!files.length) return setNotice("Choose at least one catalog file to submit.")
@@ -114,12 +140,23 @@ export function UploadPage({ go }: { go: (path: string) => void }) {
       {files.length > 0 && <ul className="file-queue" aria-label="File queue">
         {files.map((file, index) => <li key={`${file.name}-${file.size}-${index}`}>
           <span><b>{file.name}</b> <small>{(file.size / 1024).toFixed(0)} KB · {file.name.toLowerCase().endsWith(".csv") ? "CSV" : "XLSX"} · queued</small></span>
-          <button onClick={() => removeFile(index)} aria-label={`Remove ${file.name}`} disabled={busy}>Remove</button>
+          <span>
+            <button onClick={() => runPreview(file)} aria-label={`Preview ${file.name}`} disabled={busy || preview.kind === "loading"}>Preview</button>{" "}
+            <button onClick={() => removeFile(index)} aria-label={`Remove ${file.name}`} disabled={busy}>Remove</button>
+          </span>
         </li>)}
       </ul>}
 
       {notice && <p role="alert" className="notice">{notice}</p>}
     </section>
+
+    {shownPreview?.kind === "loading" && <section className="panel" aria-live="polite"><h2><span className="preview-tag">PREVIEW</span> {shownPreview.file.name}</h2><p>Validating columns and rows on the server… nothing is processed or stored.</p></section>}
+    {shownPreview?.kind === "error" && <section className="panel">
+      <h2><span className="preview-tag">PREVIEW</span> {shownPreview.file.name}</h2>
+      <p role="alert" className="notice">{shownPreview.message}</p>
+      <button onClick={() => setPreview({ kind: "none" })}>Close preview</button>
+    </section>}
+    {shownPreview?.kind === "ready" && <ImportPreview preview={shownPreview.preview} onClose={() => setPreview({ kind: "none" })} />}
 
     <section className="panel">
       <h2>Decision configuration</h2>

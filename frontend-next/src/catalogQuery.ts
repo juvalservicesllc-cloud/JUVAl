@@ -14,6 +14,8 @@ import type { CatalogQuery, RecordSort, SortDirection } from "./api/types"
  *   a different run than the one the operator navigated to from Run Detail.
  * - **the page offset** — a stored page number against a run whose contents may
  *   have changed opens on a page that no longer means the same thing.
+ * - **the brand** — it is a value from one run's data, not a preference.
+ *   Restored on another run it would silently narrow Catalog to nothing.
  * - **anything from the server** — no records, no totals, no error or loading
  *   state. Server truth is never cached here.
  *
@@ -23,8 +25,8 @@ import type { CatalogQuery, RecordSort, SortDirection } from "./api/types"
  * default instead.
  */
 
-/** The persisted subset: `CatalogQuery` minus `offset`. */
-export type StoredCatalogQuery = Omit<CatalogQuery, "offset">
+/** The persisted subset: `CatalogQuery` minus `offset` and `brand`. */
+export type StoredCatalogQuery = Omit<CatalogQuery, "offset" | "brand">
 
 const SORTS: RecordSort[] = ["record_ref", "sku", "asin", "title", "price", "cog", "decision", "profit", "roi", "margin", "hazmat", "bulky"]
 const DIRECTIONS: SortDirection[] = ["asc", "desc"]
@@ -59,6 +61,7 @@ export function loadCatalogQuery(defaults: CatalogQuery): CatalogQuery {
     return {
       // Never restored: the page an operator was on is not a preference.
       offset: 0,
+      brand: "",
       limit: LIMITS.includes(Number(stored.limit)) ? Number(stored.limit) : defaults.limit,
       search: typeof stored.search === "string" ? stored.search.slice(0, 200) : defaults.search,
       decision: oneOf(stored.decision, DECISIONS, defaults.decision),
@@ -80,7 +83,7 @@ export function loadCatalogQuery(defaults: CatalogQuery): CatalogQuery {
 
 export function saveCatalogQuery(query: CatalogQuery): void {
   try {
-    const { offset: _offset, ...preferences } = query
+    const { offset: _offset, brand: _brand, ...preferences } = query
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(preferences satisfies StoredCatalogQuery))
   } catch { /* preference only */ }
 }

@@ -1,6 +1,6 @@
 import { apiUrl, requestJson } from "./client"
 import { percentInputToRatio } from "./contract"
-import type { CatalogQuery, RunRecordsResponse, RunsListResponse } from "./types"
+import type { BrandDistributionOut, CatalogQuery, RunRecordsResponse, RunsListResponse } from "./types"
 
 /** Every filter, sort and page is a server-side query parameter
  *  (API_CONTRACT.md). This client never fetches more than one page and never
@@ -15,6 +15,7 @@ export function catalogSearchParams(query: CatalogQuery): URLSearchParams {
   params.set("direction", query.direction)
   params.set("confidence", query.confidence)
   if (query.search) params.set("search", query.search)
+  if (query.brand) params.set("brand", query.brand)
   if (query.decision && query.decision !== "ALL") params.set("decision", query.decision)
   const roi = percentInputToRatio(query.minRoi)
   const margin = percentInputToRatio(query.minMargin)
@@ -30,6 +31,14 @@ export function catalogSearchParams(query: CatalogQuery): URLSearchParams {
 
 export async function getRuns(signal?: AbortSignal): Promise<RunsListResponse> {
   return await requestJson("api/v1/runs?limit=100", { signal }) as RunsListResponse
+}
+
+/** Brand options come from the run's own analytics, so every option is a value
+ *  the server stored and will match exactly; nothing is typed or guessed. */
+export async function getRunBrands(executionId: string, signal?: AbortSignal): Promise<BrandDistributionOut> {
+  const body = await requestJson(`api/v1/runs/${encodeURIComponent(executionId)}/analytics`, { signal }) as { brands?: BrandDistributionOut }
+  if (!body?.brands || !Array.isArray(body.brands.items)) throw new Error("Brand list unavailable for this run.")
+  return body.brands
 }
 
 export async function getRunRecords(executionId: string, query: CatalogQuery, signal?: AbortSignal): Promise<RunRecordsResponse> {

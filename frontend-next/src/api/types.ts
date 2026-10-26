@@ -56,6 +56,10 @@ export interface RunSummaryOut {
   records_successful: number
   records_with_errors: number
   warnings: number
+  /** Stored-snapshot count per decision (API_CONTRACT §2b). Only keys that
+   *  occur are present; "UNKNOWN" counts records without a decision. `null`
+   *  (or absent, from an older API) = no snapshot stored: unknown, not zero. */
+  decisions?: Record<string, number> | null
 }
 
 export interface RecordPaginationOut { limit: number; offset: number; total: number; has_more: boolean }
@@ -66,6 +70,8 @@ export interface CatalogQuery {
   limit: number
   offset: number
   search: string
+  /** Exact, case-sensitive stored brand value (API_CONTRACT §2c); "" = all. */
+  brand: string
   decision: string
   sort: RecordSort
   direction: SortDirection
@@ -77,6 +83,15 @@ export interface CatalogQuery {
   bulky: string
   provenanceField: string
   provenanceStatus: string
+}
+
+/** The `brands` projection of `GET /api/v1/runs/{id}/analytics` (§13): the top
+ *  brands by record count (at most ten), how many distinct brands exist, and
+ *  how many records have none. Only `label` values are valid `brand` filters. */
+export interface BrandDistributionOut {
+  items: { label: string; count: number }[]
+  distinct: number
+  not_recorded: number
 }
 
 export interface ThresholdsIn {
@@ -126,4 +141,34 @@ export interface BatchResponse {
   records_with_errors: number
   warning_count: number
   files: BatchFileOut[]
+}
+
+/** `POST /api/v1/runs/preview` (API_CONTRACT §1b): the importer's verdict on
+ *  one file. Nothing is processed, decided or stored; there is no run. */
+export interface PreviewColumnOut {
+  position: number
+  header: string
+  normalized: string
+  status: "MAPPED" | "UNKNOWN" | "DUPLICATE" | "BLANK"
+  canonical: string | null
+  alias_of: string | null
+  /** MAPPED only. */
+  target: string | null
+  required: boolean
+  group: "core" | "native_financial_evidence" | null
+}
+
+export interface ImportPreviewResponse {
+  input_filename: string
+  input_hash: string
+  fatal: boolean
+  rows_scanned: number
+  rows_skipped_blank: number
+  records_importable: number
+  columns: PreviewColumnOut[]
+  missing_required_columns: { canonical: string; target: string }[]
+  issue_counts: { level: string; code: string; count: number }[]
+  issues: { level: string; code: string; message: string; field: string | null; record_ref: string | null }[]
+  issues_total: number
+  issues_truncated: boolean
 }

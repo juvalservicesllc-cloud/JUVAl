@@ -1,5 +1,25 @@
 # Juval — Project Status
 
+## 2026-10-26 — frontend-next consumes brand, import preview and decision counts (GOLDEN 6, 10, 15-16)
+
+**IMPLEMENTED in `frontend-next/` under a user-authorized, limited lift of the
+frontend freeze (only these three contracts).** Starting HEAD `8709b2b`, clean.
+`demo/` and `frontend/` unchanged; freeze otherwise retained. Runs and Run Detail
+show stored BUY/REVIEW/PASS counts, with an explicit "not available" state for
+`null`. Catalog has an exact Brand select fed by the run's analytics: not
+stored, reset on run change, carried into the records query and the export.
+Upload offers a per-file PREVIEW (server importer verdict: recognized, unknown,
+duplicate and blank columns, missing required columns, rows read and
+importable, issue counts and details) that creates no run. No formula, decision
+rule, Decision Score, backend or dependency change. Details and limits:
+GOLDEN_PRODUCT_EXPERIENCE_PARITY.md §22.
+
+Tests: tsc clean; vitest 80 passed + 3 skipped (opt-in live); oxlint clean;
+build OK; live suite 3/3 against a disposable local API. No browser E2E (no
+Playwright for frontend-next). ADR-040 unchanged: `catalog` was already COMPLETE
+by code presence and `pwa-gate` requires Fase 4 recertification.
+
+
 ## 2026-10-26 — Per-run decision counts on the Runs list (GOLDEN C6, item 6)
 
 **IMPLEMENTED (backend projection); GOLDEN item 6 still `GOLDEN_UX_SUPERIOR`

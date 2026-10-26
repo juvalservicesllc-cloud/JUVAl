@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { apiErrorMessage } from "../api/client"
-import { filteredExportUrl, getRunRecords, getRuns } from "../api/catalog"
-import type { CatalogQuery, FieldValueOut, RecordOut, RecordSort, RunSummaryOut } from "../api/types"
+import { filteredExportUrl, getRunBrands, getRunRecords, getRuns } from "../api/catalog"
+import type { BrandDistributionOut, CatalogQuery, FieldValueOut, RecordOut, RecordSort, RunSummaryOut } from "../api/types"
 import { clearCatalogQuery, loadCatalogQuery, saveCatalogQuery } from "../catalogQuery"
 import { favoriteKey, loadFavorites, saveFavorites, toggleFavorite } from "../favorites"
 import { count, fieldMoney, fieldPercent } from "../format"
@@ -23,7 +23,7 @@ import "./catalog-controls.css"
  */
 
 const DEFAULT_QUERY: CatalogQuery = {
-  limit: 20, offset: 0, search: "", decision: "ALL",
+  limit: 20, offset: 0, search: "", brand: "", decision: "ALL",
   // Golden opened on the most profitable rows; the backend sorts NULLs last
   // under DESC, so unknown-profit records sink instead of heading the page.
   sort: "profit", direction: "desc",
@@ -41,6 +41,7 @@ const COLUMNS: [label: string, sort: RecordSort | null][] = [
 ]
 
 type RunsState = { kind: "loading" } | { kind: "error"; message: string } | { kind: "empty" } | { kind: "ready"; runs: RunSummaryOut[] }
+type BrandsState = { kind: "loading" } | { kind: "error" } | { kind: "ready"; brands: BrandDistributionOut }
 type RecordsState = { kind: "loading" } | { kind: "error"; message: string } | { kind: "ready"; records: RecordOut[]; total: number; hasMore: boolean }
 
 function text(value: FieldValueOut): string {
@@ -59,6 +60,7 @@ export function CatalogPage({ initialRunId = "" }: { initialRunId?: string } = {
   const [runs, setRuns] = useState<RunsState>({ kind: "loading" })
   const [runId, setRunId] = useState(initialRunId)
   const [records, setRecords] = useState<RecordsState>({ kind: "loading" })
+  const [brands, setBrands] = useState<BrandsState>({ kind: "loading" })
   // Restored once, on mount. Only preferences come back -- never the run,
   // never the page, never anything the server returned.
   const [query, setQuery] = useState<CatalogQuery>(() => loadCatalogQuery(DEFAULT_QUERY))
@@ -85,6 +87,19 @@ export function CatalogPage({ initialRunId = "" }: { initialRunId?: string } = {
       .catch((error: unknown) => { if (!controller.signal.aborted) setRuns({ kind: "error", message: apiErrorMessage(error) }) })
     return () => controller.abort()
   }, [reload])
+
+  // Brand options belong to one run: reload them, and drop a selected brand,
+  // whenever the run changes, so a brand never carries over to a run it does
+  // not exist in.
+  useEffect(() => {
+    if (!runId) return
+    const controller = new AbortController()
+    setBrands({ kind: "loading" })
+    getRunBrands(runId, controller.signal)
+      .then((distribution) => setBrands({ kind: "ready", brands: distribution }))
+      .catch(() => { if (!controller.signal.aborted) setBrands({ kind: "error" }) })
+    return () => controller.abort()
+  }, [runId, reload])
 
   // One request per state change. AbortController cancels an in-flight request
   // when any dependency changes again, so a slow earlier response can never
@@ -130,8 +145,15 @@ export function CatalogPage({ initialRunId = "" }: { initialRunId?: string } = {
         <p>Filters change which records are visible and exported; they never recalculate decisions. Every change queries the selected run on the server.</p>
         <div className="filters">
           <input aria-label="Search catalog" placeholder="Search products" value={query.search} onChange={(e) => patch({ search: e.target.value })} />
-          <label>Run<select aria-label="Run" value={runId} onChange={(e) => { setRunId(e.target.value); setQuery((c) => ({ ...c, offset: 0 })) }}>
+          <label>Run<select aria-label="Run" value={runId} onChange={(e) => { setRunId(e.target.value); setQuery((c) => ({ ...c, brand: "", offset: 0 })) }}>
             {runs.runs.map((run) => <option key={run.execution_id} value={run.execution_id}>{run.input_filename} — {new Date(run.started_at).toLocaleString()}</option>)}
+          </select></label>
+          {/* Exact brand values the run stored (analytics `brands`), never free
+              text: the API matches exactly and case-sensitively, and records
+              without a brand have no filter of their own. */}
+          <label>Brand<select aria-label="Brand" value={query.brand} disabled={brands.kind !== "ready" || brands.brands.items.length === 0} onChange={(e) => patch({ brand: e.target.value })}>
+            <option value="">All Brand</option>
+            {brands.kind === "ready" && brands.brands.items.map((b) => <option key={b.label} value={b.label}>{b.label} ({count(b.count)})</option>)}
           </select></label>
           <label>Decision<select aria-label="Decision" value={query.decision} onChange={(e) => patch({ decision: e.target.value })}>
             <option value="ALL">All Decision</option><option>BUY</option><option>REVIEW</option><option>PASS</option>
@@ -161,6 +183,11 @@ export function CatalogPage({ initialRunId = "" }: { initialRunId?: string } = {
           <button onClick={() => { clearCatalogQuery(); setQuery(DEFAULT_QUERY) }}>Reset filters</button>
           <button onClick={() => window.open(filteredExportUrl(runId, query), "_blank", "noopener,noreferrer")} disabled={!runId}>Export {count(total)} results</button>
         </div>
+        {brands.kind === "error" && <p className="local-note">Brand list unavailable for this run; the brand filter is disabled rather than guessed.</p>}
+        {brands.kind === "ready" && brands.brands.distinct > brands.brands.items.length && <p className="local-note">
+          Brand lists the {count(brands.brands.items.length)} most frequent of {count(brands.brands.distinct)} brands in this run; use search to find the others.
+        </p>}
+        {brands.kind === "ready" && brands.brands.not_recorded > 0 && <p className="local-note">{count(brands.brands.not_recorded)} record{brands.brands.not_recorded === 1 ? " has" : "s have"} no brand recorded and appear only under All Brand.</p>}
       </section>
 
       {/* Golden edited the decision bands here and rewrote stored decisions.

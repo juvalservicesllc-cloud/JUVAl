@@ -28,3 +28,5 @@ aside button[aria-current="page"] { background:var(--accent); color:#fff; }
 .favorite-button { background:transparent; border:1px solid var(--border); color:var(--muted); padding:4px 8px; }
 .favorite-button[aria-pressed="true"] { border-color:var(--warning); color:var(--warning); }
 th button[aria-pressed="true"] { background:var(--accent); color:#fff; }
+.decision-counts{display:inline-flex;flex-wrap:wrap;gap:12px;align-items:center;font-weight:650}.decision-counts.unavailable{font-weight:400;color:var(--muted);font-style:italic}
+.preview-tag{font-style:normal;font-size:11px;font-weight:800;letter-spacing:.06em;border-radius:999px;padding:3px 8px;border:1px dashed var(--accent);color:var(--accent);vertical-align:middle}.preview-ok{color:var(--success);font-weight:650}.import-preview h3{font-size:14px;margin:18px 0 8px}.import-preview details{margin:12px 0}

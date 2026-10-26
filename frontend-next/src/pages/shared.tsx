@@ -17,3 +17,16 @@ export const ProvenanceBadge = ({ status }: { status: ProvenanceStatus | string 
     {SHORT[status] ?? status}
   </em>
 )
+
+/** BUY/REVIEW/PASS counts of a run's stored records, as `GET /api/v1/runs`
+ *  reports them. With counts present, a missing decision key is a real 0
+ *  (records exist, none got it). Without counts nothing is known, so no number
+ *  is shown -- a run with no stored records is not a run of zero BUYs. */
+export function DecisionCounts({ decisions }: { decisions: Record<string, number> | null | undefined }) {
+  if (!decisions) return <span className="decision-counts unavailable">Decision counts not available — no stored records for this run</span>
+  const undecided = decisions.UNKNOWN ?? 0
+  return <span className="decision-counts" aria-label="Decision counts">
+    {(["BUY", "REVIEW", "PASS"] as const).map((d) => <span key={d}><Badge>{d}</Badge> {decisions[d] ?? 0}</span>)}
+    {undecided > 0 && <span>{undecided} without decision</span>}
+  </span>
+}

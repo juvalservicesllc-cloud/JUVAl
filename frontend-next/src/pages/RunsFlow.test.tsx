@@ -67,6 +67,22 @@ describe("RunsPage on real persisted runs", () => {
     expect(go).toHaveBeenCalledWith("/catalog?run=run-1")
   })
 
+  it("shows each run's decision counts, and no numbers when they are null", async () => {
+    const counted = { ...run, decisions: { BUY: 2, REVIEW: 1, PASS: 2 } }
+    const uncounted = { ...run, execution_id: "run-2", input_filename: "legacy.csv", decisions: null }
+    vi.stubGlobal("fetch", okJson({ items: [counted, uncounted] }))
+    render(<RunsPage go={vi.fn()} />)
+    await screen.findByText("legacy.csv")
+
+    const counts = screen.getAllByLabelText("Decision counts")
+    expect(counts).toHaveLength(1)
+    expect(counts[0]).toHaveTextContent("BUY 2")
+    expect(counts[0]).toHaveTextContent("REVIEW 1")
+    expect(counts[0]).toHaveTextContent("PASS 2")
+    const unavailable = screen.getByText(/decision counts not available/i)
+    expect(unavailable).not.toHaveTextContent(/\d/)
+  })
+
   it("does not offer duplicate or delete, which have no approved semantics", async () => {
     vi.stubGlobal("fetch", okJson({ items: [run] }))
     render(<RunsPage go={vi.fn()} />)
@@ -159,9 +175,21 @@ describe("RunDetailPage", () => {
     render(<RunDetailPage executionId="run-1" go={vi.fn()} />)
     await screen.findByRole("heading", { name: "supplier.csv" })
 
-    // GET /runs/{id} returns no decision counts; showing any would be invented.
+    // This summary carries no `decisions` (an older API); showing any would be invented.
     expect(screen.queryByText(/\bBUY\b/)).not.toBeInTheDocument()
+    expect(screen.getByText(/decision counts not available/i)).toBeInTheDocument()
     expect(screen.queryByText(/average roi/i)).not.toBeInTheDocument()
+  })
+
+  it("shows the stored decision counts the run summary carries", async () => {
+    vi.stubGlobal("fetch", okJson({ ...run, decisions: { BUY: 3, PASS: 1, UNKNOWN: 1 } }))
+    render(<RunDetailPage executionId="run-1" go={vi.fn()} />)
+    const counts = await screen.findByLabelText("Decision counts")
+
+    expect(counts).toHaveTextContent("BUY 3")
+    expect(counts).toHaveTextContent("REVIEW 0")   // counts present: an absent key is a real zero
+    expect(counts).toHaveTextContent("PASS 1")
+    expect(counts).toHaveTextContent("1 without decision")
   })
 
   it("waits for the response instead of rendering a partial run", async () => {

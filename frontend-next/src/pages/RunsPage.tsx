@@ -3,16 +3,16 @@ import { apiErrorMessage } from "../api/client"
 import { listRuns } from "../api/runs"
 import type { RunSummaryOut } from "../api/types"
 import { count } from "../format"
-import { Badge } from "./shared"
+import { Badge, DecisionCounts } from "./shared"
 
 /**
  * Golden's run history on real persisted ExecutionRuns.
  *
  * Golden's row hierarchy is kept — filename first, status badge, counts,
- * timestamp, one drill-down action. Golden also showed BUY/REVIEW/PASS per row,
- * which it could do because every record was in memory. `GET /api/v1/runs`
- * returns no decision counts, and deriving them would mean one analytics
- * request per row, so they are deliberately absent rather than invented.
+ * timestamp, one drill-down action, and BUY/REVIEW/PASS per row. Golden counted
+ * those from records in memory; here they are the stored-snapshot counts
+ * `GET /api/v1/runs` returns in `decisions` (one grouped query server-side),
+ * and a run without stored records says so instead of showing zeros.
  *
  * Duplicate and Delete are not implemented: both need run lifecycle semantics
  * that no ADR covers yet.
@@ -45,6 +45,7 @@ export function RunsPage({ go }: { go: (path: string) => void }) {
           <Badge>{run.status}</Badge>{" "}
           {count(run.records_total)} records · {count(run.records_successful)} successful · {count(run.records_with_errors)} with errors · {count(run.warnings)} warning(s) · {new Date(run.started_at).toLocaleString()}
         </p>
+        <p><DecisionCounts decisions={run.decisions} /></p>
         <p className="mono"><small>{run.execution_id}</small></p>
         <button onClick={() => go(`/runs/${encodeURIComponent(run.execution_id)}`)}>Open</button>
         <button onClick={() => go(`/catalog?run=${encodeURIComponent(run.execution_id)}`)}>Open in Catalog</button>
