@@ -384,8 +384,8 @@ bottom mobile nav · collapsible sidebar.
 | 17 | Suggested/list price field | `REQUIRES_BACKEND_CONTRACT` | importer column + `RecordOut` field |
 | 18 | Multi-source analytics table | **RECOVERED** (§23, `frontend-next/` Batch Detail) — one row per child run from its own analytics; Golden's fixture column has no production equivalent (no fixtures) | — |
 | 19 | Compare | `REQUIRES_ADR` + `REQUIRES_BACKEND_CONTRACT` | identity ADR + cross-run query |
-| 20 | Decision-threshold bands (read-only) | `REQUIRES_ADR` | `ExecutionRun.thresholds` |
-| 21 | Threshold change → new run | `REQUIRES_ADR` | re-run contract |
+| 20 | Decision-threshold bands (read-only) | `REQUIRES_ADR` | `ExecutionRun.thresholds` — ADR-051 **Propuesta** (2026-10-26), not approved or implemented |
+| 21 | Threshold change → new run | `REQUIRES_ADR` | re-run contract — ADR-051 **Propuesta** (P3: new upload, `input_hash` link), not approved or implemented |
 | 22 | Opportunity ranking | `REQUIRES_ADR` | ranking/evidence policy |
 | 23 | Run duplicate / reprocess | `REQUIRES_ADR` | re-run semantics |
 | 24 | Run delete / reset | `REQUIRES_ADR` | retention/authorization policy |

@@ -1,5 +1,17 @@
 # Juval — Project Status
 
+## 2026-10-26 — ADR-051 proposed: reproducible decision configuration
+
+**PENDING DECISION.** `docs/adr/ADR-051-reproducible-decision-configuration.md`
+(Propuesta) inventories every BUY/REVIEW/PASS parameter (none is stored on
+`ExecutionRun`), and proposes an immutable per-run `juval.decision-configuration`
+v1 snapshot, a versioned rule-set identity, NOT_RECORDED for historical runs,
+re-run as a new upload linked by `input_hash`, and an additive table/API field.
+Decisions D1–D7 await approval. Finding recorded for a separate business
+decision: no column feeds `estimated_monthly_sales`, so `DEMAND_UNKNOWN` makes
+BUY unreachable for imported files. No code, schema or contract changed; GOLDEN
+20/21 stay `REQUIRES_ADR`.
+
 ## 2026-10-26 — frontend-next: Favorites (one run) and readable ADR-047 evidence
 
 **IMPLEMENTED in `frontend-next/`.** Favorites page for the selected run on the
