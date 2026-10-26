@@ -517,3 +517,23 @@ def test_batch_endpoint_atomicity_on_postgres(scenario, tmp_path, dsn, store, mo
     monkeypatch.setattr(service, "now_utc", lambda: datetime(2026, 3, 1, 12, tzinfo=timezone.utc))
     monkeypatch.setattr(service, "new_execution_id", iter(f"api-run-{n}" for n in range(100)).__next__)
     scenario(tmp_path, _batch_rows(dsn), pg_module, monkeypatch)
+
+
+# -- Record query parity (this module owns the disposable run-table harness) ---------
+
+def test_brand_filter_on_postgres_matches_sqlite(tmp_path, store):
+    from juval.application.record_snapshot_store import RecordSnapshotQuery
+
+    from .test_record_snapshot_pagination import brand_records
+    from .test_record_snapshot_pagination import run as page_run
+
+    sqlite = SqliteExecutionRunStore(tmp_path / "runs.db")
+    for backend in (store, sqlite):
+        backend.save_execution_run(page_run(), brand_records())
+
+    for query in (dict(brand="Acme"), dict(brand="acme"), dict(brand="Acm"),
+                  dict(brand="Juval", search="Widget 0"), dict(brand="Acme", decision="PASS")):
+        postgres, local = (backend.list_records("run-page", RecordSnapshotQuery(limit=10, **query)) for backend in (store, sqlite))
+        assert [item["record_ref"] for item in postgres.items] == [item["record_ref"] for item in local.items]
+        assert postgres.total == local.total
+    assert [item["record_ref"] for item in store.list_records("run-page", RecordSnapshotQuery(limit=10, brand="Acme")).items] == ["row_01"]

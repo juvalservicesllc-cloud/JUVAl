@@ -1,5 +1,24 @@
 # Juval — Project Status
 
+## 2026-10-26 — Exact brand filter on run records and filtered export (GOLDEN C4, item 10)
+
+**IMPLEMENTED (backend contract); GOLDEN item 10 still missing in the product
+until the frontend consumes it (frontend frozen, untouched).** Starting HEAD
+`6f4ecd7`, clean. `GET /api/v1/runs/{id}/records` and `/records/export` accept
+`brand` (1-200 chars): exact, case-sensitive equality on the stored brand value,
+the same value analytics reports as `brands.items[].label`, applied in SQL in
+both stores and recorded in the export's `filters`. Records without a brand
+never match; unknown brand = empty page. No status gating, no normalization, no
+schema, formula, Decision Score or frontend change. ADR-040 unchanged (44/68,
+17/68): `api` was already COMPLETE by code presence.
+
+Tests: 6 new in `test_record_snapshot_pagination.py` (store exactness and
+combination, analytics-label round trip in records and export, unknown brand,
+422 bounds) and a SQLite/PostgreSQL 16 parity test on the disposable cluster.
+Removing the SQLite clause fails 3 tests. Related suites: 318 passed, 26 skipped
+(live Supabase / session DB not configured).
+
+
 ## 2026-10-16 — ADR-050 unit 2: POST /api/v1/batches persists atomically
 
 **IMPLEMENTED; ADR-050 partially accepted (D1, D2, D3, D4 provisional, D6; D5

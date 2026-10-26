@@ -362,6 +362,9 @@ class SupabaseExecutionRunStore:
         if query.search:
             clauses.append("(record_ref ILIKE %s OR snapshot->>'supplier_sku' ILIKE %s OR snapshot->'title'->>'value' ILIKE %s OR snapshot->'brand'->>'value' ILIKE %s OR snapshot->'asin'->>'value' ILIKE %s)")
             params.extend([f"%{query.search}%"] * 5)
+        if query.brand is not None:
+            clauses.append("snapshot->'brand'->>'value' = %s")
+            params.append(query.brand)
         for field, minimum in (("roi", query.min_roi), ("profit", query.min_profit), ("margin", query.min_margin)):
             if minimum is not None:
                 statuses = ("VERIFIED",) if query.confidence == "VERIFIED_ONLY" else ("VERIFIED", "INFERRED")

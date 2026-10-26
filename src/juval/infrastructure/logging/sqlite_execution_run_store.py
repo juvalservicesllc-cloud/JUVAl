@@ -486,6 +486,9 @@ class SqliteExecutionRunStore:
         if query.search:
             clauses.append("(record_ref LIKE ? OR json_extract(snapshot, '$.supplier_sku') LIKE ? OR json_extract(snapshot, '$.title.value') LIKE ? OR json_extract(snapshot, '$.brand.value') LIKE ? OR json_extract(snapshot, '$.asin.value') LIKE ?)")
             params.extend([f"%{query.search}%"] * 5)
+        if query.brand is not None:
+            clauses.append("json_extract(snapshot, '$.brand.value') = ?")
+            params.append(query.brand)
         for field, minimum in (("roi", query.min_roi), ("profit", query.min_profit), ("margin", query.min_margin)):
             if minimum is not None:
                 statuses = ("VERIFIED",) if query.confidence == "VERIFIED_ONLY" else ("VERIFIED", "INFERRED")

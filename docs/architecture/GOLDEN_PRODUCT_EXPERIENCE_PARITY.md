@@ -120,7 +120,7 @@ closed through Wave B3. Summary only:
 |---|---|
 | Recovered | favourite star (run-scoped, local), profit-desc default, media slot, pill sort headers, single-line rows, readable provenance, export row count, decision-first column order |
 | Production superior | confidence mode, provenance filters, server-side everything, column visibility + ordering, pagination |
-| Still missing | brand filter dropdown (`REQUIRES_BACKEND_CONTRACT`), product image (`REQUIRES_BACKEND_CONTRACT`), decision-threshold bands (`REQUIRES_ADR`) |
+| Still missing | brand filter dropdown (backend `brand` param delivered 2026-10-26; frontend pending), product image (`REQUIRES_BACKEND_CONTRACT`), decision-threshold bands (`REQUIRES_ADR`) |
 
 ---
 
@@ -274,7 +274,7 @@ gap is the price **KPI tiles**, not the chart.
 |---|---|---|---|---|
 | Search | Catalog | Catalog (5 fields, server) | yes | `PRODUCTION_ALREADY_SUPERIOR` |
 | Decision | Catalog | Catalog | yes | `PRODUCTION_EQUIVALENT` |
-| **Brand** | Catalog | — (free-text search only) | no param | `REQUIRES_BACKEND_CONTRACT` |
+| **Brand** | Catalog | — (free-text search only) | `brand` exact match (2026-10-26) | `GOLDEN_CAPABILITY_MISSING` — frontend only |
 | ROI / profit / margin | Catalog | Catalog, confidence-aware | yes | `PRODUCTION_ALREADY_SUPERIOR` |
 | HazMat / Bulky | Catalog | Catalog | yes | `PRODUCTION_EQUIVALENT` |
 | Amazon match | Catalog | `provenance_field` × `provenance_status` | yes | `PRODUCTION_ALREADY_SUPERIOR` |
@@ -374,7 +374,7 @@ bottom mobile nav · collapsible sidebar.
 | 7 | Favorites page | `REQUIRES_PRODUCTIONIZATION` | cross-run record lookup for the multi-run view |
 | 8 | Dashboard KPI density (11 vs 4) | **PARTIALLY_RECOVERED** (C1.6) — 8 of 11; Golden's file counts are batch-level and its profit *total* has no production equivalent | run-scoped analytics exposes an average, not a sum |
 | 9 | Price history KPI tiles | `FIXTURE_PRESENTATION_ONLY` | must keep the fixture label |
-| 10 | Brand filter dropdown | `REQUIRES_BACKEND_CONTRACT` | `brand` query param |
+| 10 | Brand filter dropdown | `GOLDEN_CAPABILITY_MISSING` | backend delivered 2026-10-26 (`brand` on `/records` and `/records/export`, API_CONTRACT §2c); dropdown waits for the frontend freeze to lift |
 | 11 | Product image | `REQUIRES_BACKEND_CONTRACT` | image field + rights/caching policy |
 | 12 | Supplier source URL + external link | `REQUIRES_BACKEND_CONTRACT` | URL field + rights policy |
 | 13 | Raw source row disclosure | `REQUIRES_BACKEND_CONTRACT` | raw row not persisted |

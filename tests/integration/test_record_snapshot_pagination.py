@@ -65,6 +65,30 @@ def test_sqlite_economic_confidence_risk_and_provenance_filters(tmp_path):
     assert [item["record_ref"] for item in provenance.items] == ["row_02"]
 
 
+def brand_records() -> list[dict]:
+    records = [snapshot(i) for i in range(4)]
+    records[1]["brand"] = {"value": "Acme", "status": "VERIFIED"}
+    records[2]["brand"] = {"value": "acme", "status": "INFERRED"}
+    records[3]["brand"] = {"value": None, "status": "NOT_FOUND"}
+    return records
+
+
+def test_sqlite_brand_filter_is_exact_and_never_matches_an_unrecorded_brand(tmp_path):
+    store = SqliteExecutionRunStore(tmp_path / "runs.db")
+    store.save_execution_run(run(), brand_records())
+
+    def refs(**kwargs):
+        page = store.list_records("run-page", RecordSnapshotQuery(limit=10, **kwargs))
+        assert page.total == len(page.items)
+        return [item["record_ref"] for item in page.items]
+
+    assert refs(brand="Acme") == ["row_01"]            # case-sensitive: "acme" is another brand
+    assert refs(brand="acme") == ["row_02"]            # status does not gate a brand match
+    assert refs(brand="Acm") == []                     # exact, not a substring
+    assert refs(brand="Juval", search="Widget 0") == ["row_00"]
+    assert refs(brand="Acme", decision="PASS") == []   # combines with the other filters
+
+
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv("JUVAL_RUN_STORAGE_DIR", str(tmp_path))
@@ -133,3 +157,43 @@ def test_api_run_analytics_is_database_aggregated_and_preserves_zero(client):
 def test_api_records_rejects_invalid_pagination_and_query_values(client, query):
     execution_id = upload(client).json()["execution_id"]
     assert client.get(f"/api/v1/runs/{execution_id}/records?{query}").status_code == 422
+
+
+def test_api_brand_filter_selects_exactly_the_records_analytics_counted(client):
+    """A label from `analytics.brands.items` is a valid `brand` value and selects
+    the same number of records the projection counted, in records and export."""
+    import io
+
+    import openpyxl
+
+    body = upload(client).json()
+    execution_id = body["execution_id"]
+    brands = client.get(f"/api/v1/runs/{execution_id}/analytics").json()["brands"]["items"]
+    assert brands, "fixture must declare at least one brand"
+    for item in brands:
+        page = client.get(f"/api/v1/runs/{execution_id}/records", params={"brand": item["label"], "limit": 100}).json()
+        assert page["pagination"]["total"] == item["count"]
+        assert {record["brand"]["value"] for record in page["records"]} == {item["label"]}
+
+    label = brands[0]["label"]
+    response = client.get(f"/api/v1/runs/{execution_id}/records/export", params={"brand": label})
+    workbook = openpyxl.load_workbook(io.BytesIO(response.content))
+    rows = list(workbook["catalog_export"].iter_rows(values_only=True))
+    brand_column = rows[0].index("brand")
+    assert len(rows) - 1 == brands[0]["count"]
+    assert {row[brand_column] for row in rows[1:]} == {label}
+    metadata = {row[0]: row[1] for row in workbook["query_metadata"].iter_rows(values_only=True)}
+    assert json.loads(metadata["filters"])["brand"] == label
+
+
+def test_api_unknown_brand_is_an_empty_page_not_an_error(client):
+    execution_id = upload(client).json()["execution_id"]
+    page = client.get(f"/api/v1/runs/{execution_id}/records", params={"brand": "no such brand"}).json()
+    assert page["records"] == [] and page["pagination"]["total"] == 0
+
+
+@pytest.mark.parametrize("path", ["records", "records/export"])
+@pytest.mark.parametrize("brand", ["", "x" * 201])
+def test_api_rejects_an_empty_or_oversized_brand(client, path, brand):
+    execution_id = upload(client).json()["execution_id"]
+    assert client.get(f"/api/v1/runs/{execution_id}/{path}", params={"brand": brand}).status_code == 422

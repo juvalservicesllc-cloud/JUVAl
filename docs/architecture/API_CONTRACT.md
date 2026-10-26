@@ -214,13 +214,23 @@ un `execution_id` desconocido solo por la ausencia total del row en
 El endpoint acepta `min_roi`, `min_profit` y `min_margin` sobre los valores
 canónicos; `confidence=VERIFIED_ONLY` (por defecto) o `INCLUDE_INFERRED`
 controla qué estados pueden satisfacer esos umbrales. También acepta
-`hazmat`, `bulky`, `provenance_field` + `provenance_status`, y sorts
+`hazmat`, `bulky`, `provenance_field` + `provenance_status`, `brand`, y sorts
 allow-listed (`asin`, `title`, `price`, `cog`, `hazmat`, `bulky`, además de
 los existentes). Todo se aplica en persistencia, nunca sobre la página.
 
 `GET /api/v1/runs/{execution_id}/records/export` usa los mismos parámetros y
 devuelve un XLSX filtrado/ordenado con metadatos (`execution_id`, timestamp
-UTC, filtros, sort y direction). El download completo del run permanece
+UTC, filtros, sort y direction).
+
+`brand` (2026-10-26, 1–200 caracteres) es una igualdad exacta y sensible a
+mayúsculas sobre el valor de marca guardado en el snapshot, sin recortes ni
+normalización: es el mismo valor que `GET /analytics` publica como
+`brands.items[].label`, así que una etiqueta tomada de allí selecciona
+exactamente los records que contó. No filtra por estado de verificación (la
+marca no alimenta cálculos) y nunca coincide con un record sin marca
+registrada; esos solo se cuentan en `brands.not_recorded` y no tienen filtro
+propio. Una marca desconocida devuelve una página vacía, no un error. El
+export registra `brand` en `filters`. El download completo del run permanece
 separado. Las imágenes no forman parte de `RecordOut`; no se copian URLs del
 demo.
 

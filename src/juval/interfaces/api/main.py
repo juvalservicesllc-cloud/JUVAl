@@ -645,6 +645,7 @@ async def get_run_records(
     limit: int = Query(_RECORDS_LIST_DEFAULT_LIMIT, ge=1, le=_RECORDS_LIST_MAX_LIMIT),
     offset: int = Query(0, ge=0),
     search: Optional[str] = Query(None, max_length=200),
+    brand: Optional[str] = Query(None, min_length=1, max_length=200),
     decision: Optional[Literal["BUY", "REVIEW", "PASS"]] = None,
     sort: Literal["record_ref", "sku", "asin", "title", "price", "cog", "decision", "profit", "roi", "margin", "hazmat", "bulky"] = "record_ref",
     direction: Literal["asc", "desc"] = "asc",
@@ -665,7 +666,7 @@ async def get_run_records(
 
     page = store.list_records(
         execution_id,
-        RecordSnapshotQuery(limit=limit, offset=offset, search=search, decision=decision, sort=sort, direction=direction, min_roi=min_roi, min_profit=min_profit, min_margin=min_margin, confidence=confidence, hazmat=hazmat, bulky=bulky, provenance_field=provenance_field, provenance_status=provenance_status),
+        RecordSnapshotQuery(limit=limit, offset=offset, search=search, brand=brand, decision=decision, sort=sort, direction=direction, min_roi=min_roi, min_profit=min_profit, min_margin=min_margin, confidence=confidence, hazmat=hazmat, bulky=bulky, provenance_field=provenance_field, provenance_status=provenance_status),
     )
     response = RunRecordsResponse(
         execution_id=execution_id,
@@ -675,14 +676,15 @@ async def get_run_records(
     return JSONResponse(status_code=200, content=response.model_dump(mode="json"))
 
 
-def _query_from_params(*, search, decision, sort, direction, min_roi, min_profit, min_margin, confidence, hazmat, bulky, provenance_field, provenance_status, limit):
-    return RecordSnapshotQuery(limit=limit, offset=0, search=search, decision=decision, sort=sort, direction=direction, min_roi=min_roi, min_profit=min_profit, min_margin=min_margin, confidence=confidence, hazmat=hazmat, bulky=bulky, provenance_field=provenance_field, provenance_status=provenance_status)
+def _query_from_params(*, search, brand, decision, sort, direction, min_roi, min_profit, min_margin, confidence, hazmat, bulky, provenance_field, provenance_status, limit):
+    return RecordSnapshotQuery(limit=limit, offset=0, search=search, brand=brand, decision=decision, sort=sort, direction=direction, min_roi=min_roi, min_profit=min_profit, min_margin=min_margin, confidence=confidence, hazmat=hazmat, bulky=bulky, provenance_field=provenance_field, provenance_status=provenance_status)
 
 
 @app.get("/api/v1/runs/{execution_id}/records/export")
 async def export_filtered_records(
     execution_id: str,
     search: Optional[str] = Query(None, max_length=200),
+    brand: Optional[str] = Query(None, min_length=1, max_length=200),
     decision: Optional[Literal["BUY", "REVIEW", "PASS"]] = None,
     sort: Literal["record_ref", "sku", "asin", "title", "price", "cog", "decision", "profit", "roi", "margin", "hazmat", "bulky"] = "record_ref",
     direction: Literal["asc", "desc"] = "asc",
@@ -699,7 +701,7 @@ async def export_filtered_records(
     store = _require_execution_run_store()
     if store.load_execution_run(execution_id) is None:
         raise HTTPException(status_code=404, detail="unknown execution_id")
-    query = _query_from_params(search=search, decision=decision, sort=sort, direction=direction, min_roi=min_roi, min_profit=min_profit, min_margin=min_margin, confidence=confidence, hazmat=hazmat, bulky=bulky, provenance_field=provenance_field, provenance_status=provenance_status, limit=_EXPORT_MAX_RECORDS)
+    query = _query_from_params(search=search, brand=brand, decision=decision, sort=sort, direction=direction, min_roi=min_roi, min_profit=min_profit, min_margin=min_margin, confidence=confidence, hazmat=hazmat, bulky=bulky, provenance_field=provenance_field, provenance_status=provenance_status, limit=_EXPORT_MAX_RECORDS)
     page = store.list_records(execution_id, query)
     path = service.run_dir(execution_id) / "filtered-export.xlsx"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -715,7 +717,7 @@ async def export_filtered_records(
     metadata = workbook.create_sheet("query_metadata")
     append_literal_row(metadata, ["execution_id", execution_id])
     append_literal_row(metadata, ["generated_at", datetime.now(timezone.utc).isoformat()])
-    append_literal_row(metadata, ["filters", json.dumps({"search": search, "decision": decision, "min_roi": str(min_roi) if min_roi is not None else None, "min_profit": str(min_profit) if min_profit is not None else None, "min_margin": str(min_margin) if min_margin is not None else None, "confidence": confidence, "hazmat": hazmat, "bulky": bulky, "provenance_field": provenance_field, "provenance_status": provenance_status}, sort_keys=True)])
+    append_literal_row(metadata, ["filters", json.dumps({"search": search, "brand": brand, "decision": decision, "min_roi": str(min_roi) if min_roi is not None else None, "min_profit": str(min_profit) if min_profit is not None else None, "min_margin": str(min_margin) if min_margin is not None else None, "confidence": confidence, "hazmat": hazmat, "bulky": bulky, "provenance_field": provenance_field, "provenance_status": provenance_status}, sort_keys=True)])
     append_literal_row(metadata, ["sort", sort])
     append_literal_row(metadata, ["direction", direction])
     # State the unit explicitly: min_roi/min_margin are canonical ratios, so

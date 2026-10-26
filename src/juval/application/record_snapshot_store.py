@@ -36,6 +36,10 @@ class RecordSnapshotQuery:
     limit: int
     offset: int = 0
     search: str | None = None
+    # Exact, case-sensitive match on the stored brand value -- the same value
+    # the run analytics `brands.items[].label` reports, so a label taken from
+    # there selects exactly the records it counted.
+    brand: str | None = None
     decision: str | None = None
     sort: RecordSort = "record_ref"
     direction: SortDirection = "asc"
