@@ -1,5 +1,15 @@
 # Juval — Project Status
 
+## 2026-10-26 — frontend-next: Favorites (one run) and readable ADR-047 evidence
+
+**IMPLEMENTED in `frontend-next/`.** Favorites page for the selected run on the
+existing record endpoint and browser-local stars; structured, read-only view of
+stored ADR-047 documents on Product Detail with the original JSON kept. GOLDEN
+item 7 PARTIALLY_RECOVERED (single run, no images); RECOVERED stays 11/24.
+Details GOLDEN_PRODUCT_EXPERIENCE_PARITY.md §24. Tests: tsc clean; vitest 152
+passed + 7 skipped (opt-in); live 7/7; real-payload render PASS; oxlint clean;
+build OK. ADR-040 unchanged. `frontend/`, `demo/`, backend untouched.
+
 ## 2026-10-26 — frontend-next: Product Detail, Dashboard and per-file batch analytics
 
 **IMPLEMENTED in `frontend-next/`.** HEAD before `f64d1cd`. Three units on

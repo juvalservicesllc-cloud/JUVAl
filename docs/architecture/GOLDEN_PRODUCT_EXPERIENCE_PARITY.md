@@ -371,7 +371,7 @@ bottom mobile nav · collapsible sidebar.
 | 4 | Explainable metric cards on Product Detail | **RECOVERED** (C1.4) | — |
 | 5 | Provenance-grouped data quality on Product Detail | **RECOVERED** (C1.5) | — |
 | 6 | Per-run decision counts in the Runs list | **RECOVERED** (§22, `frontend-next/`) | — |
-| 7 | Favorites page | `REQUIRES_PRODUCTIONIZATION` | cross-run record lookup for the multi-run view |
+| 7 | Favorites page | **PARTIALLY_RECOVERED** (§24, `frontend-next/`) — one run at a time with a run selector; title, source file, decision, profit, ROI, remove, empty state + Catalog CTA | Golden's all-runs-at-once view needs a cross-run lookup; no product image (item 11) |
 | 8 | Dashboard KPI density (11 vs 4) | **RECOVERED** (§23, `frontend-next/`) — all 11: file counts from the run's batch (single-file runs say why there are none), profit total = backend `sum` of verified unit profit, labelled as such; `frontend/` stays 8 of 11 (C1.6) | — |
 | 9 | Price history KPI tiles | `FIXTURE_PRESENTATION_ONLY` | must keep the fixture label |
 | 10 | Brand filter dropdown | **RECOVERED** (§22, `frontend-next/`) — options limited to the run's top 10 brands | listing every brand needs the analytics `brands` limit reviewed |
@@ -537,4 +537,23 @@ live); live suite 6/6 against a disposable local API; oxlint clean; build OK.
 Not visually reviewed by the user yet (ADR-030 milestone review).
 
 GOLDEN items: RECOVERED 9 → 11 of 24 (8 and 18); PARTIALLY_RECOVERED 1 → 0.
+
+## 24. Favorites page and readable ADR-047 evidence in `frontend-next/` — delivered 2026-10-26
+
+| Unit | Now | Contract | Tests |
+|---|---|---|---|
+| Favorites (item 7) | `/favorites`: runs that have stars (with counts), the selected run's starred records each resolved by `GET .../records/{ref}`; title → Product Detail (same tab), decision, SKU, source file, profit and ROI with their status; deleted/failed records stay visible and removable; removing does not refetch the rest; empty state → Catalog; stars of runs no longer listed can be forgotten; labelled "this browser only" | existing record endpoint; `localStorage` stars (unchanged key) | 12 component + 1 live |
+| Product Detail — ADR-047 evidence | structured, read-only view of stored v1/v2 documents and diagnostics: calculated results (exact stored Decimal, own status, expression, blocker + evidence, preconditions, undeclared terms), selling price used, scenario and declared terms with source cells, dependency resolution (resolved/excluded/blocked), supplied inputs as supplied, capture problems, diagnostics, implementation identity, inconsistencies; unknown keys listed as stored; original JSON kept | `GET .../records/{ref}/financial` (§2e) | 10 component + 1 opt-in render of real API output |
+
+Item 7 is **PARTIALLY_RECOVERED**, not RECOVERED: Golden iterated every run at
+once and showed product images; production has neither a cross-run lookup nor
+an approved image source. No backend persistence or device sync was added.
+The evidence view is not a Golden item (Golden had no ADR-047), so it changes
+no count.
+
+Verification: `tsc` clean; vitest 152 passed, 7 skipped (opt-in); live suite
+7/7 on a disposable local API; the opt-in real-payload test rendered all four
+records of the synthetic financial flow (FULL, PARTIAL, NO_SCENARIO, INFERRED)
+with every exact value and blocker and no unknown key; oxlint clean; build OK.
+No browser E2E. GOLDEN: RECOVERED 11/24 (unchanged), PARTIALLY_RECOVERED 0 → 1.
 
