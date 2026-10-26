@@ -48,9 +48,10 @@
     lectura con lectura por lotes los devuelven (§2e).
   - VERIFIED IN DISPOSABLE POSTGRESQL: SQLite y PostgreSQL 16 desechable.
   - NOT DEPLOYED: Supabase real.
-  - IMPLEMENTED (2026-10-16): `POST /api/v1/batches` con el mismo opt-in, por
-    run hijo y en la transacción de cada hijo; verificado en SQLite y en
-    PostgreSQL 16 desechable.
+  - IMPLEMENTED (2026-10-16): `POST /api/v1/batches` con el mismo opt-in, con
+    documentos y diagnósticos por run hijo, guardados junto con todos los hijos
+    y el batch en una única transacción para todo el batch (ADR-050); verificado
+    en SQLite y en PostgreSQL 16 desechable.
   Los pasos 8-9 siguen PENDING, igual que la
   proyección a CostInputs/FeeInputs y el snapshot efectivo reproducible (§19):
   no hay consumo por Decision Score ni activación de pipeline.
@@ -591,8 +592,9 @@ Formato v2 (§19; serialización pura, sin persistencia ni consumidores):
 - Pendiente:
   - despliegue de la migración anterior (humano, fuera de los tests);
   - en `POST /api/v1/batches` (implementado 2026-10-16, ver API_CONTRACT §12):
-    el aislamiento de fallos de *persistencia* por archivo sigue sin decidir
-    (ADR-025), y la respuesta no lleva un resumen financiero por archivo,
+    la persistencia es todo o nada en una única transacción para todo el batch
+    (ADR-050 D2, que cierra el pendiente de ADR-025); la idempotencia (D5) sigue
+    diferida, y la respuesta no lleva un resumen financiero por archivo,
     porque añadirlo cambiaría `BatchFileOut`, compartido con el GET;
   - propiedad por run: la API autoriza por el permiso `runs:read`, no por
     propietario, porque los runs no tienen propietario en el modelo actual;

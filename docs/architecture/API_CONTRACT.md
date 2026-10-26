@@ -512,9 +512,10 @@ Each processable file creates one independent `ExecutionRun`. The response
 contains an ordered `files` array with `ordinal`, basename-only `filename`,
 content type, byte size, `status`, optional child `execution_id`, warnings and
 errors. Aggregate status is `SUCCESS`, `PARTIAL_SUCCESS` or `FAILED` and is
-computed from those child outcomes. Successful siblings persist even when
-another file is invalid (an invalid file is a `REJECTED` or `FAILED` outcome of
-the same batch). `persist=true` also stores the batch in the
+computed from those child outcomes. An invalid file does not invalidate its
+siblings: it is a `REJECTED` or `FAILED` outcome of the same batch, stored with
+them. A persistence failure, by contrast, stores nothing of the batch (see
+"Persistence and export (ADR-050)"). `persist=true` also stores the batch in the
 `batches`/`batch_files` tables; `GET /api/v1/batches/{batch_id}` returns that
 summary, and `GET /api/v1/runs/{execution_id}/batch` returns the batch a child
 run belongs to (`404` when the run was submitted on its own -- a normal
@@ -534,9 +535,10 @@ rules (§1a): `native_financial_evidence` (requires `persist=true`),
 `financial_target_profit` + `financial_target_profit_currency` and
 `financial_target_roi`, validated before any file is processed (`422`, nothing
 processed or stored). Each processed child runs
-`run_pipeline_with_financial_evidence` and saves its run, snapshots, documents
-and diagnostics in its own transaction through the same functions as §1a, keyed
-by its own `execution_id`; nothing is shared between files, and a file that
+`run_pipeline_with_financial_evidence` and builds its documents and diagnostics
+with the same functions as §1a, keyed by its own `execution_id`. They are stored
+together with every other child and the batch in the single batch transaction
+described below, not in a per-child transaction; nothing is shared between files, and a file that
 repeats another's `record_ref` is still a separate document of another run.
 
 - The response is unchanged: there is no per-file `financial` summary, because

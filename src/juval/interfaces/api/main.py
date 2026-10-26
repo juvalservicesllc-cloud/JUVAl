@@ -433,8 +433,10 @@ async def create_batch(
 
     The ADR-047 opt-in (`native_financial_evidence` + `financial_target_*`)
     has the single-file endpoint's fields, rules and functions. Each child's
-    documents and diagnostics are saved in that child's own run transaction,
-    keyed by its execution_id, so nothing is shared between files. The
+    documents and diagnostics are keyed by its own execution_id, so nothing
+    is shared between files. With persist=true the batch, every child run
+    and their records, documents and diagnostics are saved in one single
+    transaction for the whole batch (ADR-050): all of it or nothing. The
     response is unchanged; documents are read per child execution (§2e).
     """
     if not files:
