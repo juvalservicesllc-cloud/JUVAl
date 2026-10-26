@@ -176,7 +176,7 @@ consistent with column layout and theme.
 |---|---|---|---|---|---|
 | Run list | local runs, filename, status badge, file count, records, BUY/REVIEW/PASS, timestamp | persisted runs, sortable table, status, counts | yes | production authoritative | `PRODUCTION_ALREADY_SUPERIOR` |
 | Open run | ✓ | ✓ | yes | equivalent | `PRODUCTION_EQUIVALENT` |
-| **Per-run decision counts in the list** | BUY/REVIEW/PASS inline on every row | not in the list | analytics is per-run endpoint | Golden scannable at a glance | `GOLDEN_UX_SUPERIOR` |
+| **Per-run decision counts in the list** | BUY/REVIEW/PASS inline on every row | not in the list | `decisions` on every `RunSummaryOut` (2026-10-26, one grouped query) | Golden scannable at a glance | `GOLDEN_UX_SUPERIOR` — frontend only |
 | **Duplicate / reprocess** | clones the stored run **without recomputing** | absent | no re-run contract | Golden's is a copy, not a reprocess — misleading | `REQUIRES_ADR` |
 | **Delete / reset runs** | destructive, local, `confirm()` | absent | no retention/authorization policy | missing | `REQUIRES_ADR` |
 | Batch grouping | one run holds many files (`files[]`) | **one child `ExecutionRun` per file**, grouped by `batch_id` | yes | **production architecture is stronger** (per-file provenance, per-file audit) | `PRODUCTION_ALREADY_SUPERIOR` |
@@ -370,7 +370,7 @@ bottom mobile nav · collapsible sidebar.
 | 3 | Catalog filter persistence across navigation | **RECOVERED** (C1.3) | — |
 | 4 | Explainable metric cards on Product Detail | **RECOVERED** (C1.4) | — |
 | 5 | Provenance-grouped data quality on Product Detail | **RECOVERED** (C1.5) | — |
-| 6 | Per-run decision counts in the Runs list | `GOLDEN_UX_SUPERIOR` | one analytics call per row, or a list projection |
+| 6 | Per-run decision counts in the Runs list | `GOLDEN_UX_SUPERIOR` | list projection delivered 2026-10-26 (`decisions` on `GET /api/v1/runs`, API_CONTRACT §2b); Runs row waits for the frontend freeze |
 | 7 | Favorites page | `REQUIRES_PRODUCTIONIZATION` | cross-run record lookup for the multi-run view |
 | 8 | Dashboard KPI density (11 vs 4) | **PARTIALLY_RECOVERED** (C1.6) — 8 of 11; Golden's file counts are batch-level and its profit *total* has no production equivalent | run-scoped analytics exposes an average, not a sum |
 | 9 | Price history KPI tiles | `FIXTURE_PRESENTATION_ONLY` | must keep the fixture label |

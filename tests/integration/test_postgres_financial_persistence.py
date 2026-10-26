@@ -537,3 +537,15 @@ def test_brand_filter_on_postgres_matches_sqlite(tmp_path, store):
         assert [item["record_ref"] for item in postgres.items] == [item["record_ref"] for item in local.items]
         assert postgres.total == local.total
     assert [item["record_ref"] for item in store.list_records("run-page", RecordSnapshotQuery(limit=10, brand="Acme")).items] == ["row_01"]
+
+
+def test_decision_counts_on_postgres_match_sqlite(tmp_path, store):
+    from .test_record_snapshot_pagination import decision_runs
+
+    sqlite = SqliteExecutionRunStore(tmp_path / "runs.db")
+    for backend in (store, sqlite):
+        decision_runs(backend)
+    ids = ["run-page", "run-other", "run-empty", "unknown"]
+    assert store.decision_counts(ids) == sqlite.decision_counts(ids)
+    assert store.decision_counts(["run-page"])["run-page"] == store.get_run_analytics("run-page")["decisions"]
+    assert store.decision_counts([]) == {}

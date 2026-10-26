@@ -574,6 +574,31 @@ def test_get_runs_list_rejects_limit_over_the_explicit_max(client):
     assert resp.status_code == 422
 
 
+def test_runs_list_and_run_detail_carry_the_stored_decision_counts(client):
+    """GOLDEN item 6: the same per-decision counts the run analytics reports,
+    for every listed run, without one analytics call per row."""
+    from collections import Counter
+
+    posted = [_upload(client, persist="true").json() for _ in range(2)]
+    items = {item["execution_id"]: item for item in client.get("/api/v1/runs").json()["items"]}
+
+    for run in posted:
+        expected = dict(Counter(record["decision"] or "UNKNOWN" for record in run["records"]))
+        analytics = client.get(f"/api/v1/runs/{run['execution_id']}/analytics").json()["decisions"]
+        assert items[run["execution_id"]]["decisions"] == expected == analytics
+        assert client.get(f"/api/v1/runs/{run['execution_id']}").json()["decisions"] == expected
+
+
+def test_run_without_stored_records_has_null_decisions_not_zeros(client, tmp_path):
+    store = SqliteExecutionRunStore(tmp_path / "execution_runs.db")
+    store.save_execution_run(_run_without_records())
+    run_id = _run_without_records().execution_id
+
+    listed = {item["execution_id"]: item for item in client.get("/api/v1/runs").json()["items"]}
+    assert listed[run_id]["decisions"] is None
+    assert client.get(f"/api/v1/runs/{run_id}").json()["decisions"] is None
+
+
 def test_get_runs_list_requires_a_configured_store(monkeypatch, tmp_path):
     monkeypatch.setenv("JUVAL_RUN_STORAGE_DIR", str(tmp_path))
     monkeypatch.delenv("JUVAL_EXECUTION_DB_PATH", raising=False)

@@ -244,6 +244,9 @@ class RunSummaryOut(BaseModel):
     records_successful: int
     records_with_errors: int
     warnings: int
+    # Stored-snapshot count per decision ("UNKNOWN" for a record without one).
+    # null = no snapshot stored for this run, never zero BUY/REVIEW/PASS.
+    decisions: Optional[dict[str, int]] = None
 
 
 class RunsListResponse(BaseModel):

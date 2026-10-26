@@ -112,3 +112,13 @@ def issue_types(rows: Sequence[tuple[Any, int]]) -> list[dict[str, Any]]:
     counted = [(str(code), int(count)) for code, count in rows if code is not None]
     counted.sort(key=lambda item: (-item[1], item[0]))
     return [{"code": code, "count": count} for code, count in counted]
+
+
+def decision_counts_by_run(rows: Sequence[tuple[Any, Any, int]]) -> dict[str, dict[str, int]]:
+    """`rows` are `(execution_id, decision, count)`; a null decision is
+    "UNKNOWN", as in the analytics `decisions`. Runs without rows stay absent."""
+
+    counts: dict[str, dict[str, int]] = {}
+    for execution_id, decision, count in rows:
+        counts.setdefault(str(execution_id), {})[str(decision) if decision is not None else "UNKNOWN"] = int(count)
+    return counts

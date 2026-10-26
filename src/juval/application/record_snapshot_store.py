@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, Protocol, Sequence
 
 
 RecordSort = Literal["record_ref", "sku", "asin", "title", "price", "cog", "decision", "profit", "roi", "margin", "hazmat", "bulky"]
@@ -90,4 +90,13 @@ class RecordSnapshotStore(Protocol):
 
     def get_run_analytics(self, execution_id: str) -> dict[str, Any]:
         """Aggregate canonical snapshot fields for one immutable execution."""
+        ...
+
+    def decision_counts(self, execution_ids: Sequence[str]) -> dict[str, dict[str, int]]:
+        """Stored-snapshot count per decision for each run, in one query.
+
+        Same grouping as the analytics `decisions` (a null decision is
+        "UNKNOWN"). A run with no stored snapshot is absent from the result --
+        "nothing stored", never a run of zero BUY/REVIEW/PASS.
+        """
         ...

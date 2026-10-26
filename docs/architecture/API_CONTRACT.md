@@ -198,7 +198,7 @@ antes de tocar el store).
   "finished_at": "2026-08-17T12:05:00+00:00", "status": "SUCCESS",
   "input_filename": "...", "input_hash": "...", "records_total": 5,
   "records_processed": 5, "records_successful": 4, "records_with_errors": 1,
-  "warnings": 2 } ] }
+  "warnings": 2, "decisions": { "BUY": 3, "PASS": 2 } } ] }
 ```
 
 Cada elemento (`RunSummaryOut`) usa exactamente los campos reales de
@@ -209,6 +209,15 @@ equivalente en el dominio; inventarlos habría significado presentar
 una inferencia como si fuera un dato real (ver ADR-019 "Modelo de
 recurso"). Timestamps como string ISO 8601.
 
+`decisions` (2026-10-26, aditivo) es el recuento por decisión de los
+snapshots guardados del run, con la misma agrupación que `GET .../analytics`
+(`decisions`; un record sin decisión cuenta como `"UNKNOWN"`) y solo con las
+claves que aparecen. Se obtiene con una consulta agrupada para todos los runs
+de la página, no con una llamada de analytics por fila. `null` significa que el
+run no tiene snapshots guardados (p. ej. guardado antes de ADR-019 o sin
+records), nunca cero BUY/REVIEW/PASS. Es un recuento de lo almacenado; no
+recalcula ninguna decisión.
+
 ## 2b-2. `GET /api/v1/runs/{execution_id}` (Run Detail, 2026-08-17)
 
 Un único run — mismo `RunSummaryOut` de §2b. Añadido para la vista Run
@@ -218,7 +227,7 @@ Detail del frontend (necesita metadata de un run conocido por
 `GET .../records` para su propio chequeo de 404; ninguna capacidad de
 dominio/persistencia nueva.
 
-- 200 + `RunSummaryOut`.
+- 200 + `RunSummaryOut`, incluido `decisions` con la regla de §2b.
 - 404 si `execution_id` no existe en el store.
 - 500 si el store no está configurado (mismo mecanismo que §5).
 

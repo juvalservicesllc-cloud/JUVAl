@@ -89,6 +89,25 @@ def test_sqlite_brand_filter_is_exact_and_never_matches_an_unrecorded_brand(tmp_
     assert refs(brand="Acme", decision="PASS") == []   # combines with the other filters
 
 
+def decision_runs(store) -> None:
+    from dataclasses import replace
+
+    store.save_execution_run(run(), [snapshot(0), snapshot(1, decision="PASS"), snapshot(2, decision="PASS"), snapshot(3, decision=None)])
+    store.save_execution_run(replace(run(), execution_id="run-other"), [snapshot(0, decision="REVIEW")])
+    store.save_execution_run(replace(run(), execution_id="run-empty"), [])
+
+
+def test_sqlite_decision_counts_are_per_run_and_absent_without_snapshots(tmp_path):
+    store = SqliteExecutionRunStore(tmp_path / "runs.db")
+    decision_runs(store)
+
+    counts = store.decision_counts(["run-page", "run-other", "run-empty", "unknown"])
+
+    assert counts == {"run-page": {"BUY": 1, "PASS": 2, "UNKNOWN": 1}, "run-other": {"REVIEW": 1}}
+    assert counts["run-page"] == store.get_run_analytics("run-page")["decisions"]
+    assert store.decision_counts([]) == {}
+
+
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv("JUVAL_RUN_STORAGE_DIR", str(tmp_path))

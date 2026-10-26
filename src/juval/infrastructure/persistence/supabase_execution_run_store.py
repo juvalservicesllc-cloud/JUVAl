@@ -58,7 +58,7 @@ from juval.domain.batch import Batch, BatchFile, BatchFileStatus, BatchStatus
 from juval.application.batch_store import RunWrite
 from juval.application.financial_persistence import FinancialStorageUnavailable
 from juval.application.record_snapshot_store import RecordSnapshotPage, RecordSnapshotQuery
-from juval.application.run_analytics import brand_distribution, issue_types, numeric_summary, price_spread
+from juval.application.run_analytics import brand_distribution, decision_counts_by_run, issue_types, numeric_summary, price_spread
 from juval.infrastructure.logging.sqlite_execution_run_store import _diagnostics_row, _financial_row
 
 _INSERT = """
@@ -389,6 +389,13 @@ class SupabaseExecutionRunStore:
             total = conn.execute(count_sql, params).fetchone()[0]
             rows = conn.execute(sql, [*params, query.limit, query.offset]).fetchall()
         return RecordSnapshotPage(items=[snapshot for (snapshot,) in rows], total=total)
+
+    def decision_counts(self, execution_ids: Sequence[str]) -> dict[str, dict[str, int]]:
+        if not execution_ids:
+            return {}
+        with self._connect() as conn:
+            rows = conn.execute("SELECT execution_id, snapshot->>'decision', COUNT(*) FROM execution_run_records WHERE execution_id = ANY(%s) GROUP BY 1, 2", (list(execution_ids),)).fetchall()
+        return decision_counts_by_run(rows)
 
     def get_run_analytics(self, execution_id: str) -> dict[str, Any]:
         fields = ("asin", "weight", "selling_price", "profit", "roi", "margin")

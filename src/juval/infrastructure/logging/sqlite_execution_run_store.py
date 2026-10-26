@@ -67,7 +67,7 @@ from juval.domain.execution_run import ExecutionRun, ExecutionStatus
 from juval.domain.batch import Batch, BatchFile, BatchFileStatus, BatchStatus
 from juval.application.batch_store import RunWrite
 from juval.application.record_snapshot_store import RecordSnapshotPage, RecordSnapshotQuery
-from juval.application.run_analytics import brand_distribution, issue_types, numeric_summary, price_spread
+from juval.application.run_analytics import brand_distribution, decision_counts_by_run, issue_types, numeric_summary, price_spread
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS execution_runs (
@@ -513,6 +513,14 @@ class SqliteExecutionRunStore:
             total = conn.execute(count_sql, params).fetchone()[0]
             rows = conn.execute(sql, [*params, query.limit, query.offset]).fetchall()
         return RecordSnapshotPage(items=[json.loads(snapshot) for (snapshot,) in rows], total=total)
+
+    def decision_counts(self, execution_ids: Sequence[str]) -> dict[str, dict[str, int]]:
+        if not execution_ids:
+            return {}
+        placeholders = ",".join("?" for _ in execution_ids)
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            rows = conn.execute(f"SELECT execution_id, json_extract(snapshot, '$.decision'), COUNT(*) FROM execution_run_records WHERE execution_id IN ({placeholders}) GROUP BY 1, 2", list(execution_ids)).fetchall()
+        return decision_counts_by_run(rows)
 
     def get_run_analytics(self, execution_id: str) -> dict[str, Any]:
         """Use SQL grouping; only numeric value/status pairs leave SQLite."""

@@ -1,5 +1,22 @@
 # Juval — Project Status
 
+## 2026-10-26 — Per-run decision counts on the Runs list (GOLDEN C6, item 6)
+
+**IMPLEMENTED (backend projection); GOLDEN item 6 still `GOLDEN_UX_SUPERIOR`
+until the Runs page renders it (frontend frozen, untouched).** Starting HEAD
+`f0dc9b1`, clean. `RunSummaryOut` gains optional `decisions`, filled on
+`GET /api/v1/runs` (one grouped query for the whole page via the new
+`decision_counts` of both stores) and `GET /api/v1/runs/{id}`. Same grouping as
+analytics `decisions` (shared helper `run_analytics.decision_counts_by_run`);
+`null` = no stored snapshot, never zero counts. Counts what is stored; no
+decision is recomputed. No schema, formula or frontend change; existing fields
+unchanged. ADR-040 unchanged (44/68, 17/68).
+
+Tests: 2 API (list and detail equal the posted records and the analytics; null
+for a run without snapshots), 1 SQLite store (per run, UNKNOWN, absent, empty
+input), 1 SQLite/PostgreSQL 16 parity on the disposable cluster.
+
+
 ## 2026-10-26 — Validate-only import preview: POST /api/v1/runs/preview (GOLDEN C4, items 15-16)
 
 **IMPLEMENTED (backend contract); GOLDEN items 15-16 still missing in the UI

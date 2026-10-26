@@ -59,7 +59,7 @@ def record_to_json(record: SourcingRecord) -> RecordOut:
     return RecordOut(**record_to_snapshot(record))
 
 
-def run_to_summary(run: ExecutionRun) -> RunSummaryOut:
+def run_to_summary(run: ExecutionRun, decisions: Optional[dict[str, int]] = None) -> RunSummaryOut:
     return RunSummaryOut(
         execution_id=run.execution_id,
         started_at=run.started_at.isoformat(),
@@ -72,6 +72,7 @@ def run_to_summary(run: ExecutionRun) -> RunSummaryOut:
         records_successful=run.records_successful,
         records_with_errors=run.records_with_errors,
         warnings=run.warnings,
+        decisions=decisions,
     )
 
 

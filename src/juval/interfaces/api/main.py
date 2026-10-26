@@ -674,7 +674,8 @@ async def list_runs(
 ) -> JSONResponse:
     store = _require_execution_run_store()
     runs = store.list_execution_runs(limit=limit)
-    response = RunsListResponse(items=[service.run_to_summary(r) for r in runs])
+    decisions = store.decision_counts([r.execution_id for r in runs])
+    response = RunsListResponse(items=[service.run_to_summary(r, decisions.get(r.execution_id)) for r in runs])
     return JSONResponse(status_code=200, content=response.model_dump(mode="json"))
 
 
@@ -684,7 +685,7 @@ async def get_run(execution_id: str, _principal=Depends(require(RUNS_READ))) -> 
     run = store.load_execution_run(execution_id)
     if run is None:
         raise HTTPException(status_code=404, detail="unknown execution_id")
-    response = service.run_to_summary(run)
+    response = service.run_to_summary(run, store.decision_counts([execution_id]).get(execution_id))
     return JSONResponse(status_code=200, content=response.model_dump(mode="json"))
 
 
