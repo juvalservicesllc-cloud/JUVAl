@@ -132,7 +132,7 @@ describe("Product Detail (one record within one run)", () => {
   it("shows a stored document as stored, and its disagreements without choosing a side", async () => {
     stub({ financial: { ...noFinancial, financial_document: { format: "juval.adr047.financial-record", version: 2, payload: { scenario: "declared" } }, inconsistencies: ["document says 2 lines, diagnostics 3"] } })
     page()
-    expect(await screen.findByText("Financial document: juval.adr047.financial-record v2")).toBeInTheDocument()
+    expect(await screen.findByText("Financial document: original stored JSON (juval.adr047.financial-record v2)")).toBeInTheDocument()
     expect(screen.getByText("document says 2 lines, diagnostics 3")).toBeInTheDocument()
   })
 

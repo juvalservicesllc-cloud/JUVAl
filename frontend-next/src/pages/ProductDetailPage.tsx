@@ -4,6 +4,7 @@ import { getRecordFinancial, getRunRecord } from "../api/records"
 import type { FieldValueOut, ProvenanceStatus, RecordFinancialOut, RecordOut } from "../api/types"
 import { fieldMoney, fieldPercent } from "../format"
 import { METRIC_EXPLANATIONS } from "../metricExplanations"
+import { FinancialEvidenceView } from "./FinancialEvidence"
 import { Badge, ProvenanceBadge } from "./shared"
 
 /**
@@ -123,23 +124,12 @@ function ConfidenceGroups({ record }: { record: RecordOut }) {
 }
 
 function FinancialEvidence({ state }: { state: FinancialState }) {
-  return <section className="panel">
+  return <section className="panel" aria-label="Native financial evidence">
     <h2>Native financial evidence (ADR-047)</h2>
-    <p>Stored supplier-declared evidence, shown exactly as persisted. It does not change this record's profit, ROI or decision, and it is never Amazon verification.</p>
+    <p>Stored supplier-declared evidence and the ADR-047 calculator's stored results, shown exactly as persisted. They do not change this record's profit, ROI or decision, and they are never Amazon verification.</p>
     {state.kind === "loading" && <p>Loading stored evidence…</p>}
     {state.kind === "error" && <p className="local-note">Stored financial evidence could not be loaded; nothing is assumed about it.</p>}
-    {state.kind === "ready" && <>
-      {state.financial.financial_document
-        ? <details><summary>Financial document: {state.financial.financial_document.format} v{state.financial.financial_document.version}</summary><pre className="mono stored-json">{JSON.stringify(state.financial.financial_document.payload, null, 2)}</pre></details>
-        : <p>No financial document was stored for this record (older run, no declared scenario, or the opt-in was not used).</p>}
-      {state.financial.capture_diagnostics
-        ? <details><summary>Capture diagnostics: {state.financial.capture_diagnostics.format} v{state.financial.capture_diagnostics.version}</summary><pre className="mono stored-json">{JSON.stringify(state.financial.capture_diagnostics.payload, null, 2)}</pre></details>
-        : <p>No capture diagnostics were stored.</p>}
-      {state.financial.inconsistencies.length > 0 && <>
-        <p role="status" className="notice">The stored document and its diagnostics disagree; neither is preferred:</p>
-        <ul>{state.financial.inconsistencies.map((item, i) => <li key={i}>{item}</li>)}</ul>
-      </>}
-    </>}
+    {state.kind === "ready" && <FinancialEvidenceView financial={state.financial} />}
   </section>
 }
 
