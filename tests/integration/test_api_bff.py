@@ -413,6 +413,48 @@ def test_state_changing_request_with_correct_csrf_header_passes_the_guard(
         assert response.status_code not in (401, 403)
 
 
+# The two 403 bodies are a client contract: frontend-next renews its CSRF token
+# and retries exactly once on the CSRF detail, and never on the permission one
+# (frontend-next/src/api/client.ts). Exact strings, not substrings.
+CSRF_REJECTED = {"detail": "csrf token missing or invalid"}
+PERMISSION_DENIED = {"detail": "insufficient permissions"}
+
+
+def test_csrf_and_permission_403s_have_distinct_exact_bodies(configured, rsa_key, monkeypatch):
+    with TestClient(app) as client:
+        _login(client, rsa_key, monkeypatch)
+        response = client.post("/api/v1/batches", files={"files": ("a.csv", b"x")}, data={"thresholds": "{}", "fees": "{}"})
+        assert (response.status_code, response.json()) == (403, CSRF_REJECTED)
+    with TestClient(app) as client:
+        session = _login(client, rsa_key, monkeypatch, roles=("viewer",))
+        response = client.post(
+            "/api/v1/batches",
+            files={"files": ("a.csv", b"x")},
+            data={"thresholds": "{}", "fees": "{}"},
+            headers={bff.CSRF_HEADER: session["csrf_token"]},
+        )
+        assert (response.status_code, response.json()) == (403, PERMISSION_DENIED)
+
+
+@pytest.mark.parametrize("path, files", [
+    ("/api/v1/batches", {"files": ("a.csv", b"x")}),
+    ("/api/v1/runs/preview", {"file": ("a.csv", b"x")}),
+])
+def test_a_csrf_rejected_post_never_reaches_its_handler(configured, rsa_key, monkeypatch, path, files):
+    """Why a client retry after the CSRF 403 cannot duplicate a batch: the
+    guard is a dependency, so the handler -- ids, storage, processing -- never ran."""
+    from juval.interfaces.api import service as service_module
+
+    reached = []
+    monkeypatch.setattr(service_module, "new_execution_id", lambda: reached.append("id") or "never")
+    monkeypatch.setattr(service_module, "storage_dir", lambda: reached.append("storage") or "/nonexistent")
+    with TestClient(app) as client:
+        _login(client, rsa_key, monkeypatch)
+        response = client.post(path, files=files, data={"thresholds": "{}", "fees": "{}"}, headers={bff.CSRF_HEADER: "stale"})
+    assert (response.status_code, response.json()) == (403, CSRF_REJECTED)
+    assert reached == []
+
+
 def test_logout_clears_the_session_and_offers_idp_logout(configured, rsa_key, monkeypatch):
     with TestClient(app) as client:
         session = _login(client, rsa_key, monkeypatch)
