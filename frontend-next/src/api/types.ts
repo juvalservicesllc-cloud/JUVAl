@@ -133,6 +133,31 @@ export interface BrandDistributionOut {
   not_recorded: number
 }
 
+/** verified-only numeric summary (API_CONTRACT §11): NOT_FOUND, INVALID and
+ *  INFERRED values never participate. `null` = no usable value, not 0. */
+export interface NumericSummaryOut { count: number; sum: string | null; average: string | null; minimum: string | null; maximum: string | null }
+
+/** `GET /api/v1/runs/{id}/analytics` (§11, §13), aggregated by the backend. */
+export interface RunAnalyticsOut {
+  execution_id: string
+  records: { total_records: number }
+  /** Only decisions that occur are present; "UNKNOWN" = no decision. */
+  decisions: Record<string, number>
+  risks: Record<"hazmat" | "bulky", { status: Record<string, number>; severity: Record<string, number> }>
+  /** Per field, count by status; "UNKNOWN" = no status recorded. */
+  provenance: Record<string, Record<string, number>>
+  data_quality: { records_with_issues: number; total_issue_count: number }
+  profitability: Record<"profit" | "roi" | "margin", NumericSummaryOut>
+  brands: BrandDistributionOut
+  issue_types: { code: string; count: number }[]
+  price_spread: {
+    count: number
+    average_amount: string | null
+    at_or_below_cog: number
+    largest: { record_ref: string; title: string | null; amount: string; percent: string | null }[]
+  }
+}
+
 export interface ThresholdsIn {
   target_profit: string
   target_roi: string

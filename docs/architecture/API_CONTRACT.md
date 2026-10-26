@@ -546,7 +546,11 @@ issue counts; and verified-only profit/ROI/margin summaries. `NOT_FOUND`,
 averages rather than presented as equivalent to verified data. Unknown runs
 return the existing 404 `unknown execution_id`; empty runs return zero counts
 and null numeric summaries. No Decision Score, quality score, or AI output is
- included.
+ included. Each of `profitability.profit|roi|margin` is
+`{count, sum, average, minimum, maximum}` over VERIFIED values (`application/
+run_analytics.py::numeric_summary`, shared by both stores); `sum` and the
+statistics are `null` when `count` is 0. For profit, `sum` adds per-unit profit
+across records; frontend-next labels it as such, not as a sales projection.
 
 ## 12. Multi-file batches (Wave A, ADR-025)
 

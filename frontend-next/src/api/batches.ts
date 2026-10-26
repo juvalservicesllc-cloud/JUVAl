@@ -1,4 +1,4 @@
-import { requestJson } from "./client"
+import { ApiError, requestJson } from "./client"
 import { MAX_FILES } from "./contract"
 import type { BatchResponse, FeesIn, ThresholdsIn } from "./types"
 
@@ -33,4 +33,15 @@ export async function createBatch(
 
 export async function getBatch(batchId: string, signal?: AbortSignal): Promise<BatchResponse> {
   return await requestJson(`api/v1/batches/${encodeURIComponent(batchId)}`, { signal }) as BatchResponse
+}
+
+/** The batch a run belongs to, or `null` when it was submitted on its own
+ *  (the API's 404 there is a normal outcome, not an error). */
+export async function getRunBatch(executionId: string, signal?: AbortSignal): Promise<BatchResponse | null> {
+  try {
+    return await requestJson(`api/v1/runs/${encodeURIComponent(executionId)}/batch`, { signal }) as BatchResponse
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return null
+    throw error
+  }
 }

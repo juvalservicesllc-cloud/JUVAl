@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { loginUrl, onAuthRequired } from "../api/client"
 import { BatchPage } from "../pages/BatchPage"
 import { CatalogPage } from "../pages/CatalogPage"
+import { DashboardPage } from "../pages/DashboardPage"
 import { NotWiredPage } from "../pages/NotWiredPage"
 import { ProductDetailPage } from "../pages/ProductDetailPage"
 import { RunDetailPage } from "../pages/RunDetailPage"
@@ -80,7 +81,7 @@ export function App() {
     : productMatch ? <ProductDetailPage executionId={decodeURIComponent(productMatch[1])} recordRef={decodeURIComponent(productMatch[2])} go={go} />
     : runMatch ? <RunDetailPage executionId={decodeURIComponent(runMatch[1])} go={go} />
     : batchMatch ? <BatchPage batchId={decodeURIComponent(batchMatch[1])} go={go} />
-    : pathname === "/" ? <NotWiredPage title="Dashboard" capability="Run analytics: decision distribution, profitability, risk and provenance for a persisted run." />
+    : pathname === "/" ? <DashboardPage initialRunId={search.get("run") ?? ""} go={go} />
     : pathname === "/compare" ? <NotWiredPage title="Compare matched products" capability="Side-by-side comparison of records sharing an identifier across the source files of one batch." blocker="A comparable-identity ADR (ADR-011/ADR-012 refuse a global product identity) and a batch-scoped cross-run record query." />
     : pathname === "/favorites" ? <NotWiredPage title="Favorites" capability="Every starred record across runs. Starring already works in Catalog and is stored in this browser." blocker="A cross-run record lookup: production keeps no records in the browser to list them from." />
     : pathname === "/appearance" ? <NotWiredPage title="Appearance & branding" capability="Light/dark, accent and brand assets, stored in this browser." />
