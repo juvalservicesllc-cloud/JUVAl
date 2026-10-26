@@ -3,6 +3,7 @@ import { loginUrl, onAuthRequired } from "../api/client"
 import { BatchPage } from "../pages/BatchPage"
 import { CatalogPage } from "../pages/CatalogPage"
 import { NotWiredPage } from "../pages/NotWiredPage"
+import { ProductDetailPage } from "../pages/ProductDetailPage"
 import { RunDetailPage } from "../pages/RunDetailPage"
 import { RunsPage } from "../pages/RunsPage"
 import { UploadPage } from "../pages/UploadPage"
@@ -70,11 +71,13 @@ export function App() {
   const [pathname, search] = [route.split("?")[0], new URLSearchParams(route.split("?")[1] ?? "")]
   const batchMatch = pathname.match(/^\/batch\/(.+)$/)
   const runMatch = pathname.match(/^\/runs\/(.+)$/)
+  const productMatch = pathname.match(/^\/run\/([^/]+)\/product\/(.+)$/)
 
   const page =
     pathname === "/catalog" ? <CatalogPage initialRunId={search.get("run") ?? ""} />
     : pathname === "/import" ? <UploadPage go={go} />
     : pathname === "/runs" ? <RunsPage go={go} />
+    : productMatch ? <ProductDetailPage executionId={decodeURIComponent(productMatch[1])} recordRef={decodeURIComponent(productMatch[2])} go={go} />
     : runMatch ? <RunDetailPage executionId={decodeURIComponent(runMatch[1])} go={go} />
     : batchMatch ? <BatchPage batchId={decodeURIComponent(batchMatch[1])} go={go} />
     : pathname === "/" ? <NotWiredPage title="Dashboard" capability="Run analytics: decision distribution, profitability, risk and provenance for a persisted run." />

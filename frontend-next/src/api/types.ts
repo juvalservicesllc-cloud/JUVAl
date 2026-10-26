@@ -11,11 +11,25 @@ export type RecordSort =
   | "record_ref" | "sku" | "asin" | "title" | "price" | "cog"
   | "decision" | "profit" | "roi" | "margin" | "hazmat" | "bulky"
 
+/** Where one value came from (ADR-003). Shown as stored, never reconstructed. */
+export interface ProvenanceOut {
+  source: string
+  source_type: string
+  verification_status: string
+  retrieved_at: string
+  method: string
+  confidence?: number | null
+  evidence?: string | null
+  source_reference?: string | null
+}
+
 export interface FieldValueOut {
   value: string | number | null
   status: ProvenanceStatus | null
   unit?: string | null
   raw_value?: string | null
+  /** Absent on list responses that omit it and on historical snapshots. */
+  provenance?: ProvenanceOut | null
 }
 
 export interface RecordOut {
@@ -28,20 +42,45 @@ export interface RecordOut {
   brand: FieldValueOut
   category: FieldValueOut
   weight: FieldValueOut
+  height?: FieldValueOut
+  width?: FieldValueOut
+  length?: FieldValueOut
   selling_price: FieldValueOut
   cog: string | null
   shipping_per_unit: string | null
+  /** Intermediate Profitability Engine terms. `null`/absent = not stored on
+   *  this snapshot (unusable price, or an older snapshot) -- never 0. */
   total_fees?: string | null
+  seller_proceeds?: string | null
+  total_cost?: string | null
   profit: FieldValueOut
   roi: FieldValueOut
   margin: FieldValueOut
   break_even_price: FieldValueOut
+  max_cog_target_profit?: FieldValueOut
+  max_cog_target_roi?: FieldValueOut
   hazmat_status: string | null
+  hazmat_severity?: string | null
   bulky_status: string | null
+  bulky_severity?: string | null
   decision: string | null
   decision_reasons: string[]
   issue_count: number
   issues: string[]
+  issue_codes?: string[]
+}
+
+/** One persisted ADR-047 payload, exactly as stored (API_CONTRACT §2e). */
+export interface StoredPayloadOut { format: string; version: number; payload: Record<string, unknown> }
+
+/** `GET .../records/{ref}/financial`. `null` = nothing stored, which is not
+ *  evidence of anything; `inconsistencies` prefers neither side. */
+export interface RecordFinancialOut {
+  execution_id: string
+  record_ref: string
+  financial_document: StoredPayloadOut | null
+  capture_diagnostics: StoredPayloadOut | null
+  inconsistencies: string[]
 }
 
 export interface RunSummaryOut {
