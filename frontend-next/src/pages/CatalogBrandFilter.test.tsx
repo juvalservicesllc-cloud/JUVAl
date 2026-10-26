@@ -21,14 +21,14 @@ const BRANDS: Record<string, unknown> = {
   "run-2": { items: [{ label: "Zeta", count: 2 }], distinct: 1, not_recorded: 0 },
 }
 
-function stub({ analyticsFails = false } = {}) {
+function stub({ analyticsFails = false, brands = BRANDS }: { analyticsFails?: boolean; brands?: Record<string, unknown> } = {}) {
   const mock = vi.fn((url: string) => {
     const u = new URL(String(url))
     const runId = decodeURIComponent(u.pathname.split("/")[4] ?? "")
     const ok = (body: unknown) => Promise.resolve({ ok: true, status: 200, json: async () => body })
     if (u.pathname.endsWith("/analytics")) {
       return analyticsFails ? Promise.resolve({ ok: false, status: 500, json: async () => ({ detail: "internal server error" }) })
-        : ok({ brands: BRANDS[runId] })
+        : ok({ brands: brands[runId] })
     }
     if (u.pathname.endsWith("/records")) {
       const limit = Number(u.searchParams.get("limit")); const offset = Number(u.searchParams.get("offset"))
@@ -121,5 +121,15 @@ describe("Catalog brand filter (exact, from the run's own analytics)", () => {
     expect(await screen.findByText(/brand list unavailable/i)).toBeInTheDocument()
     expect(screen.getByLabelText("Brand")).toBeDisabled()
     expect(await screen.findByText("Anchor")).toBeInTheDocument()   // records still load
+  })
+
+  it("keeps the filter disabled while the brand list loads and when the run has no brands", async () => {
+    stub({ brands: { "run-1": { items: [], distinct: 0, not_recorded: 2 }, "run-2": { items: [], distinct: 0, not_recorded: 0 } } })
+    render(<CatalogPage />)
+    await screen.findByLabelText("Brand")
+    expect(screen.getByLabelText("Brand")).toBeDisabled()          // loading: nothing to choose yet
+    expect(await screen.findByText(/2 records have no brand recorded/i)).toBeInTheDocument()
+    expect(screen.getByLabelText("Brand")).toBeDisabled()          // empty: no option is invented
+    expect((screen.getByLabelText("Brand") as HTMLSelectElement).options).toHaveLength(1)
   })
 })

@@ -132,4 +132,19 @@ describe("Import preview on the upload page", () => {
     await waitFor(() => expect(screen.queryByLabelText("Import preview of supplier.csv")).not.toBeInTheDocument())
     expect(screen.getByText("other.csv")).toBeInTheDocument()   // the rest of the queue is untouched
   })
+
+  it("shows a loading state and leaves the file queue exactly as it was", async () => {
+    let resolve!: (value: unknown) => void
+    vi.stubGlobal("fetch", vi.fn(() => new Promise((done) => { resolve = done })))
+    await queueAndPreview()
+
+    expect(await screen.findByText(/validating columns and rows on the server/i)).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Preview other.csv" })).toBeDisabled()   // one preview at a time
+    resolve({ ok: true, status: 200, json: async () => previewBody() })
+    await screen.findByLabelText("Import preview of supplier.csv")
+
+    const queue = screen.getByLabelText("File queue")
+    expect(within(queue).getAllByRole("listitem").map((li) => li.querySelector("b")?.textContent)).toEqual(["supplier.csv", "other.csv"])
+  })
 })
+

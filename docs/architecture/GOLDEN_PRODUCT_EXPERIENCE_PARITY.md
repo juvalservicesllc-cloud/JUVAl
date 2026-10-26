@@ -479,8 +479,8 @@ consume `brand`, `POST /api/v1/runs/preview` and `decisions`, in `frontend-next/
 | # | Capability | Outcome | Where | Tests |
 |---|---|---|---|---|
 | 6 | Per-run decision counts | **RECOVERED** | `pages/shared.tsx::DecisionCounts` on `RunsPage` and `RunDetailPage` | 3 component + 1 live |
-| 10 | Brand filter | **RECOVERED** (top-10 options) | `CatalogPage` Brand select fed by the run's analytics `brands`; `brand` in records query and export | 7 component + 1 API + 1 live |
-| 15–16 | Pre-submit preview with column classification | **RECOVERED** | `pages/ImportPreview.tsx`, Preview per queued file on `UploadPage`; `api/preview.ts` | 7 component + 1 live |
+| 10 | Brand filter | **RECOVERED** (top-10 options) | `CatalogPage` Brand select fed by the run's analytics `brands`; `brand` in records query and export | 8 component + 1 API + 1 live |
+| 15–16 | Pre-submit preview with column classification | **RECOVERED** | `pages/ImportPreview.tsx`, Preview per queued file on `UploadPage`; `api/preview.ts` | 8 component + 1 live |
 
 Rules kept, and why:
 
@@ -500,8 +500,9 @@ Rules kept, and why:
   parsing and format confidence are not reproduced; the server importer is the
   authority.
 
-Verification: `npx tsc -b --noEmit` clean; `vitest run` 80 passed, 3 skipped
-(the opt-in live suite); `oxlint` clean; `vite build` OK. Live suite
+Verification: `npx tsc -b --noEmit` clean; `vitest run` 82 passed, 3 skipped
+(the opt-in live suite; re-validated 2026-10-26, adding loading/empty-brand and
+queue-unchanged checks); `oxlint` clean; `vite build` OK. Live suite
 `src/live.contract.test.tsx` passed 3/3 against a disposable local FastAPI on
 SQLite. Run it with `JUVAL_LIVE_API` and `VITE_API_BASE_URL` set to the same
 local URL. Its multipart shim exists only because vitest's jsdom `FormData` is
