@@ -1,5 +1,30 @@
 # Juval — Project Status
 
+## 2026-10-26 — frontend-next real-browser E2E for D7-D and D7-B
+
+**IMPLEMENTED (validation; no decision rule changed).** `frontend-next/e2e/`
+uses Playwright 1.62.1, the version `frontend/` already locks, as a dev
+dependency. It runs headless Chromium against a disposable API, Vite and SQLite
+on loopback ports 18771 and 18772; `npm run e2e`, see `e2e/README.md`. There are
+12 tests, covering all 14 D7 scenarios, empty, loading and error states,
+console and HTTP error monitoring, and desktop screenshots. Two consecutive runs
+passed 12/12 with no flaky tests.
+
+**Defect found and fixed.** `POST /api/v1/runs/preview` answered **500** for any
+file with demand columns. `ImportPreviewColumnOut.group` did not admit
+`declared_demand`, and the browser reported it as a CORS failure. Earlier tests
+had missed it: the backend tests called `preview_import()` directly and the
+frontend test mocked the response. The fix adds the value to the literal, plus
+an API-level regression test.
+
+**Reported, not fixed (pre-D7, Golden shell CSS identical in `demo/`).** Every
+page is 64px wider than the viewport, because `main` has `width:100%` plus
+padding with no border-box. `/favicon.ico` returns 404.
+
+Gates: backend 1744 passed / 185 skipped (infrastructure-gated); PostgreSQL
+parity 43/43; vitest 169 passed + 10 skipped; tsc, oxlint and build clean.
+GOLDEN and ADR-040 unchanged.
+
 ## 2026-10-26 — D7-B: declared demand observations captured as evidence (ADR-052)
 
 **IMPLEMENTED (ADR-052 Aceptada con condiciones; informative scope only).**

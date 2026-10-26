@@ -20,6 +20,8 @@ frontend/dev-dist/
 frontend/test-results/
 frontend/playwright-report/
 frontend/blob-report/
+frontend-next/test-results/
+frontend-next/playwright-report/
 
 # Temporary run storage (Fase 4A, interfaces/api -- never permanent, see
 # docs/architecture/API_CONTRACT.md §6)
