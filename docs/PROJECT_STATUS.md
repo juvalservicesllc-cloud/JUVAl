@@ -1,5 +1,16 @@
 # Juval — Project Status
 
+## 2026-10-26 — frontend-next: Product Detail, Dashboard and per-file batch analytics
+
+**IMPLEMENTED in `frontend-next/`.** HEAD before `f64d1cd`. Three units on
+existing contracts, no backend logic change: Product Detail (Catalog links no
+longer 404), Dashboard on `/analytics` with the 11 Golden KPIs, and Golden's
+multi-source analytics table on Batch Detail. GOLDEN 9 → 11/24 (items 8, 18);
+details GOLDEN_PRODUCT_EXPERIENCE_PARITY.md §23. Tests: tsc clean; vitest 130
+passed + 6 skipped (opt-in live); live 6/6 on a disposable API; oxlint clean;
+build OK. `frontend/`, `demo/` untouched. ADR-040 unchanged (no criterion
+measures these screens).
+
 ## 2026-10-26 — Security, identity and Dependabot unblock plan
 
 **PLAN (no activation).** HEAD `4bb5764`. `docs/compliance/UNBLOCK_PLAN_20261026.md`
