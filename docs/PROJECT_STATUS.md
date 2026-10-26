@@ -1,5 +1,25 @@
 # Juval — Project Status
 
+## 2026-10-26 — D7-B: declared demand observations captured as evidence (ADR-052)
+
+**IMPLEMENTED (ADR-052 Aceptada con condiciones; informative scope only).**
+Optional `demand_*` columns become one ADR-046 `DemandObservation` per record on
+`SourcingRecord.market_evidence` -- never on `Product.demand` or any decision
+input. Strict whole numbers; INFERRED with USER_INPUT provenance (file, row,
+column, method, captured instant); NOT_FOUND only with valid declared context;
+INVALID keeps raw text; explicit window or declared month with explicit
+timezone; naive instants need `demand_timezone`; DST gaps/folds refused; every
+gap becomes a WARNING diagnostic. Snapshot document
+`juval.adr046.demand-evidence` v1 (no migration), RecordOut fields and
+DECLARED / NOT_DECLARED / NOT_CAPTURED, both exports, preview group, Product
+Detail panel and a non-sortable Catalog column. One million declared units
+still give REVIEW with DEMAND_UNKNOWN (mandatory test). `processing/`,
+`product.py`, `decision.py`, `market_evidence.py` untouched. Tests: backend 40
+new + 1 PostgreSQL parity; 674 affected backend tests passed / 7 live-Supabase
+skips; frontend tsc clean, vitest 169 passed + 10 skipped (opt-in), live 9/9,
+oxlint clean, build OK. Projection to the engine NOT authorized. GOLDEN and
+ADR-040 unchanged.
+
 ## 2026-10-26 — ADR-052 proposed: declared demand observations (D7-B)
 
 **PENDING DECISION.** `docs/adr/ADR-052-declared-demand-observations-ingestion.md`
