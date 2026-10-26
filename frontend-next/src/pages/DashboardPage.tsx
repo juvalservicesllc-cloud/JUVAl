@@ -124,6 +124,15 @@ function Analytics({ analytics: a, batch, batchUnavailable, go, runId }: { analy
       <p className="local-note">Profit, ROI and margin figures include VERIFIED values only; inferred, not-found and invalid values are excluded, never counted as zero.</p>
     </section>
 
+    <section className="panel" aria-label="Pending demand verification">
+      <h2>REVIEW — pending demand verification</h2>
+      {a.review_classification ? <>
+        <p><strong>{count(a.review_classification.pending_demand_verification)}</strong> of {count(a.decisions.REVIEW ?? 0)} REVIEW records are held back only because demand could not be determined. Their decision stays REVIEW; demand has not been verified, so they are not BUY.</p>
+        {a.review_classification.review_not_classifiable > 0 && <p className="local-note">{count(a.review_classification.review_not_classifiable)} REVIEW records were processed before reason codes were stored and cannot be classified.</p>}
+        <button disabled={a.review_classification.pending_demand_verification === 0} onClick={() => go(`/catalog?run=${encodeURIComponent(runId)}&review=pending-demand`)}>Show them in Catalog</button>
+      </> : <p className="local-note">Not available from this API version.</p>}
+    </section>
+
     <section className="panel">
       <h2>Decisions</h2>
       <Bars label="Decision distribution" counts={a.decisions} order={["BUY", "REVIEW", "PASS"]} />

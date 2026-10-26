@@ -18,6 +18,12 @@ export const ProvenanceBadge = ({ status }: { status: ProvenanceStatus | string 
   </em>
 )
 
+/** Neutral, text-first label beside an official REVIEW badge: never green,
+ *  never a decision icon, never the word BUY (D7-D). */
+export const PendingDemandTag = () => (
+  <em className="pending-demand" title="REVIEW — only demand evidence is missing; demand has not been verified">demand not verified</em>
+)
+
 /** BUY/REVIEW/PASS counts of a run's stored records, as `GET /api/v1/runs`
  *  reports them. With counts present, a missing decision key is a real 0
  *  (records exist, none got it). Without counts nothing is known, so no number

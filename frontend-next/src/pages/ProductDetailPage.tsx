@@ -5,7 +5,7 @@ import type { FieldValueOut, ProvenanceStatus, RecordFinancialOut, RecordOut } f
 import { fieldMoney, fieldPercent } from "../format"
 import { METRIC_EXPLANATIONS } from "../metricExplanations"
 import { FinancialEvidenceView } from "./FinancialEvidence"
-import { Badge, ProvenanceBadge } from "./shared"
+import { Badge, PendingDemandTag, ProvenanceBadge } from "./shared"
 
 /**
  * Product Detail — one record *within one run* (ADR-011/012: there is no
@@ -188,6 +188,10 @@ export function ProductDetailPage({ executionId, recordRef, go }: { executionId:
       {record.decision_reasons.length
         ? <ul>{record.decision_reasons.map((reason, i) => <li key={i}>{reason}</li>)}</ul>
         : <p>No disqualifying or review reasons recorded.</p>}
+      {record.review_classification === "PENDING_DEMAND_VERIFICATION" && <p className="pending-demand-note" role="status">
+        <PendingDemandTag /> Every other rule passed; the only recorded blocker is that demand could not be determined. The decision stays REVIEW until demand is evidenced — this is not a BUY.
+      </p>}
+      {record.review_classification === "NOT_CLASSIFIABLE" && <p className="local-note">Reason codes were not stored for this earlier record, so it is not classified further; its decision is unchanged.</p>}
       <details className="explain"><summary>What does this mean?</summary><p>{METRIC_EXPLANATIONS.decision}</p></details>
       <p>Risk context: HazMat {record.hazmat_status ?? "UNKNOWN"} · Bulky {record.bulky_status ?? "UNKNOWN"}</p>
       <p className="threshold-unavailable">The thresholds this run used are not stored with the run yet, so they are not shown here.</p>

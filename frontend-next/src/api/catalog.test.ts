@@ -5,7 +5,7 @@ import type { CatalogQuery } from "./types"
 const base: CatalogQuery = {
   limit: 20, offset: 0, search: "", brand: "", decision: "ALL", sort: "profit", direction: "desc",
   minRoi: "", minProfit: "", minMargin: "", confidence: "VERIFIED_ONLY",
-  hazmat: "", bulky: "", provenanceField: "", provenanceStatus: "",
+  hazmat: "", bulky: "", provenanceField: "", provenanceStatus: "", pendingDemand: false,
 }
 
 describe("catalog query contract", () => {

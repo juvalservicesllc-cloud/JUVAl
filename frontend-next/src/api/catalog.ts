@@ -16,6 +16,7 @@ export function catalogSearchParams(query: CatalogQuery): URLSearchParams {
   params.set("confidence", query.confidence)
   if (query.search) params.set("search", query.search)
   if (query.brand) params.set("brand", query.brand)
+  if (query.pendingDemand) params.set("review_classification", "PENDING_DEMAND_VERIFICATION")
   if (query.decision && query.decision !== "ALL") params.set("decision", query.decision)
   const roi = percentInputToRatio(query.minRoi)
   const margin = percentInputToRatio(query.minMargin)

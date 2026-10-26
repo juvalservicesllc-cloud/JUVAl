@@ -65,6 +65,12 @@ export interface RecordOut {
   bulky_severity?: string | null
   decision: string | null
   decision_reasons: string[]
+  /** Structured reason codes; null/absent on snapshots written before them. */
+  decision_reason_codes?: string[] | null
+  /** Informative only, computed by the backend; the decision stays `decision`.
+   *  PENDING_DEMAND_VERIFICATION = REVIEW whose only code is DEMAND_UNKNOWN;
+   *  NOT_CLASSIFIABLE = REVIEW without stored codes; null = anything else. */
+  review_classification?: "PENDING_DEMAND_VERIFICATION" | "NOT_CLASSIFIABLE" | null
   issue_count: number
   issues: string[]
   issue_codes?: string[]
@@ -122,6 +128,8 @@ export interface CatalogQuery {
   bulky: string
   provenanceField: string
   provenanceStatus: string
+  /** REVIEW records whose only blocker is unknown demand (API_CONTRACT §2c). */
+  pendingDemand: boolean
 }
 
 /** The `brands` projection of `GET /api/v1/runs/{id}/analytics` (§13): the top
@@ -156,6 +164,8 @@ export interface RunAnalyticsOut {
     at_or_below_cog: number
     largest: { record_ref: string; title: string | null; amount: string; percent: string | null }[]
   }
+  /** Absent from an API older than D7-D. */
+  review_classification?: { pending_demand_verification: number; review_not_classifiable: number }
 }
 
 export interface ThresholdsIn {

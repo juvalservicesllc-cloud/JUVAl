@@ -75,6 +75,7 @@ export function loadCatalogQuery(defaults: CatalogQuery): CatalogQuery {
       bulky: oneOf(stored.bulky, RISK, defaults.bulky),
       provenanceField: oneOf(stored.provenanceField, PROVENANCE_FIELDS, defaults.provenanceField),
       provenanceStatus: oneOf(stored.provenanceStatus, PROVENANCE_STATUSES, defaults.provenanceStatus),
+      pendingDemand: stored.pendingDemand === true,
     }
   } catch {
     return defaults

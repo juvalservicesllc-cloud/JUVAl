@@ -171,5 +171,19 @@ describe.skipIf(!API)("live API contract", () => {
     expect(loadFavorites()).toEqual([])
     localStorage.clear()
   })
+
+  it("Pending demand verification: Catalog filter and Dashboard count match the real API", async () => {
+    const pending = await json(`/api/v1/runs/${runId}/records?review_classification=PENDING_DEMAND_VERIFICATION&confidence=INCLUDE_INFERRED&limit=50`)
+    expect(pending.records.length).toBeGreaterThan(0)
+    expect(pending.records.every((r: { decision: string; review_classification: string }) => r.decision === "REVIEW" && r.review_classification === "PENDING_DEMAND_VERIFICATION")).toBe(true)
+    const { review_classification } = await json(`/api/v1/runs/${runId}/analytics`)
+    expect(review_classification.pending_demand_verification).toBe(pending.pagination.total)
+
+    sessionStorage.clear()
+    render(<CatalogPage initialRunId={runId} initialPendingDemand />)
+    await waitFor(() => expect(screen.getByText(`${pending.pagination.total} result${pending.pagination.total === 1 ? "" : "s"}`)).toBeInTheDocument(), { timeout: 5000 })
+    expect(screen.getAllByText("demand not verified")).toHaveLength(pending.records.length)
+    sessionStorage.clear()
+  })
 })
 

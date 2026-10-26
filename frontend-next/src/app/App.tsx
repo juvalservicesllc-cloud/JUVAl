@@ -76,7 +76,7 @@ export function App() {
   const productMatch = pathname.match(/^\/run\/([^/]+)\/product\/(.+)$/)
 
   const page =
-    pathname === "/catalog" ? <CatalogPage initialRunId={search.get("run") ?? ""} />
+    pathname === "/catalog" ? <CatalogPage initialRunId={search.get("run") ?? ""} initialPendingDemand={search.get("review") === "pending-demand"} />
     : pathname === "/import" ? <UploadPage go={go} />
     : pathname === "/runs" ? <RunsPage go={go} />
     : productMatch ? <ProductDetailPage executionId={decodeURIComponent(productMatch[1])} recordRef={decodeURIComponent(productMatch[2])} go={go} />

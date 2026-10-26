@@ -33,7 +33,7 @@ const file = () => new File(["ASIN,COG\n"], "s.csv", { type: "text/csv" })
 
 const query: CatalogQuery = {
   limit: 20, offset: 0, search: "", brand: "", decision: "ALL", sort: "profit", direction: "desc",
-  minRoi: "", minProfit: "", minMargin: "", confidence: "VERIFIED_ONLY", hazmat: "", bulky: "", provenanceField: "", provenanceStatus: "",
+  minRoi: "", minProfit: "", minMargin: "", confidence: "VERIFIED_ONLY", hazmat: "", bulky: "", provenanceField: "", provenanceStatus: "", pendingDemand: false,
 }
 
 describe("shared API client: BFF cookie session and CSRF (ADR-034)", () => {

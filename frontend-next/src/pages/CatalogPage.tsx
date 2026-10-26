@@ -5,7 +5,7 @@ import type { BrandDistributionOut, CatalogQuery, FieldValueOut, RecordOut, Reco
 import { clearCatalogQuery, loadCatalogQuery, saveCatalogQuery } from "../catalogQuery"
 import { favoriteKey, loadFavorites, saveFavorites, toggleFavorite } from "../favorites"
 import { count, fieldMoney, fieldPercent } from "../format"
-import { Badge, ProvenanceBadge } from "./shared"
+import { Badge, PendingDemandTag, ProvenanceBadge } from "./shared"
 import { ProductThumbnail } from "./ProductThumbnail"
 import "./catalog-controls.css"
 
@@ -28,7 +28,7 @@ const DEFAULT_QUERY: CatalogQuery = {
   // under DESC, so unknown-profit records sink instead of heading the page.
   sort: "profit", direction: "desc",
   minRoi: "", minProfit: "", minMargin: "", confidence: "VERIFIED_ONLY",
-  hazmat: "", bulky: "", provenanceField: "", provenanceStatus: "",
+  hazmat: "", bulky: "", provenanceField: "", provenanceStatus: "", pendingDemand: false,
 }
 
 // Golden sorted eleven columns client-side. These are the ones the API can
@@ -56,14 +56,17 @@ function Cell({ value, format }: { value: FieldValueOut; format: (v: string | nu
   return <span className="fv">{format(value.value)} <ProvenanceBadge status={value.status} /></span>
 }
 
-export function CatalogPage({ initialRunId = "" }: { initialRunId?: string } = {}) {
+export function CatalogPage({ initialRunId = "", initialPendingDemand = false }: { initialRunId?: string; initialPendingDemand?: boolean } = {}) {
   const [runs, setRuns] = useState<RunsState>({ kind: "loading" })
   const [runId, setRunId] = useState(initialRunId)
   const [records, setRecords] = useState<RecordsState>({ kind: "loading" })
   const [brands, setBrands] = useState<BrandsState>({ kind: "loading" })
   // Restored once, on mount. Only preferences come back -- never the run,
   // never the page, never anything the server returned.
-  const [query, setQuery] = useState<CatalogQuery>(() => loadCatalogQuery(DEFAULT_QUERY))
+  const [query, setQuery] = useState<CatalogQuery>(() => {
+    const restored = loadCatalogQuery(DEFAULT_QUERY)
+    return initialPendingDemand ? { ...restored, pendingDemand: true } : restored
+  })
   const [favorites, setFavorites] = useState<string[]>(loadFavorites)
   const [reload, setReload] = useState(0)
 
@@ -158,6 +161,11 @@ export function CatalogPage({ initialRunId = "" }: { initialRunId?: string } = {
           <label>Decision<select aria-label="Decision" value={query.decision} onChange={(e) => patch({ decision: e.target.value })}>
             <option value="ALL">All Decision</option><option>BUY</option><option>REVIEW</option><option>PASS</option>
           </select></label>
+          {/* Informative sub-set of REVIEW computed by the backend; it never
+              changes a decision and is not a BUY signal (D7-D). */}
+          <label>Review status<select aria-label="Review status" value={query.pendingDemand ? "pending" : ""} onChange={(e) => patch({ pendingDemand: e.target.value === "pending" })}>
+            <option value="">All records</option><option value="pending">Pending demand verification</option>
+          </select></label>
           {/* Golden's "Amazon" filter selected a fixture match state. The real
               equivalent is the ASIN field's verification status. */}
           <label>Amazon<select aria-label="Amazon" value={query.provenanceStatus} onChange={(e) => patch({ provenanceField: e.target.value ? "asin" : "", provenanceStatus: e.target.value })}>
@@ -183,6 +191,9 @@ export function CatalogPage({ initialRunId = "" }: { initialRunId?: string } = {
           <button onClick={() => { clearCatalogQuery(); setQuery(DEFAULT_QUERY) }}>Reset filters</button>
           <button onClick={() => window.open(filteredExportUrl(runId, query), "_blank", "noopener,noreferrer")} disabled={!runId}>Export {count(total)} results</button>
         </div>
+        {query.pendingDemand && <p className="local-note pending-demand-note" role="status">
+          Showing REVIEW records whose only recorded blocker is unknown demand: economics and risk passed every rule, but no demand evidence exists, so the decision stays REVIEW. This is not a BUY recommendation. Records processed before reason codes were stored cannot be classified and are not listed.
+        </p>}
         {brands.kind === "error" && <p className="local-note">Brand list unavailable for this run; the brand filter is disabled rather than guessed.</p>}
         {brands.kind === "ready" && brands.brands.distinct > brands.brands.items.length && <p className="local-note">
           Brand lists the {count(brands.brands.items.length)} most frequent of {count(brands.brands.distinct)} brands in this run; use search to find the others.
@@ -235,7 +246,7 @@ export function CatalogPage({ initialRunId = "" }: { initialRunId?: string } = {
                 <td><Cell value={record.margin} format={fieldPercent} /></td>
                 <td>{record.hazmat_status ?? "UNKNOWN"}</td>
                 <td>{record.bulky_status ?? "UNKNOWN"}</td>
-                <td>{record.decision ? <Badge>{record.decision}</Badge> : "—"}</td>
+                <td>{record.decision ? <Badge>{record.decision}</Badge> : "—"}{record.review_classification === "PENDING_DEMAND_VERIFICATION" && <> <PendingDemandTag /></>}</td>
                 <td><button className="favorite-button" aria-label={`${starred ? "Remove" : "Add"} ${text(record.title) || record.record_ref} ${starred ? "from" : "to"} favorites`} aria-pressed={starred} title={starred ? "Starred in this browser" : "Star in this browser"} onClick={() => star(record.record_ref)}>{starred ? "★" : "☆"}</button></td>
               </tr>
             })}
