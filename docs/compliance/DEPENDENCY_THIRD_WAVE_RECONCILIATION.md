@@ -117,3 +117,27 @@ as static checks, not behavioral authorization or proof of a human review.
 Focused negative tests cover malformed/failed audits, partial coverage, retained
 advisory findings and unreadable scan input. Dated execution results are recorded
 in PROJECT_STATUS; RF-01 through RF-05 remain PARTIAL.
+
+
+## Registry re-check — 2026-10-26 (supersedes the npm "zero advisories" line above for current state)
+
+Isolated clone, HEAD `4bb5764`, no network change. `npm audit` now reports
+advisories in all four lockfiles; `npm audit --omit=dev` reports **0** in each,
+so every finding is dev/build tooling, not shipped runtime code.
+
+| Lockfile | Total (high/moderate/low) | Packages |
+|---|---|---|
+| `frontend/` | 8 (5/2/1) | vite (direct), vitest (direct), @vitest/mocker, source-map-js, undici, brace-expansion, fast-uri, serialize-javascript |
+| `frontend-next/` | 5 (3/2/0) | vite (direct), vitest (direct), @vitest/mocker, source-map-js, undici |
+| `demo/` | 4 (2/2/0) | vite (direct), vitest (direct), @vitest/mocker, source-map-js |
+| `project-portal/` | 5 (3/2/0) | vite (direct), vitest (direct), @vitest/mocker, source-map-js, undici |
+
+pip-audit (scratch venv, `-c constraints-audit.txt`, `--path` on `.venv`):
+direct runtime dependencies clean (pyjwt 2.15.1, cryptography 50.0.2,
+python-multipart 0.0.32, fastapi 0.143.3); flagged `pip 24.0` (installer) and
+`certifi 2026.7.22` (transitive). The local project entry is skipped (no version).
+
+None of this identifies the six GitHub alerts; mapping still needs their export
+(format and command: [UNBLOCK_PLAN_20261026.md §3](UNBLOCK_PLAN_20261026.md#3-dependabot--exact-input-needed)).
+No dependency changed. `frontend/` and `demo/` lockfiles are frozen/immutable
+(decision D8 there). ADR-040 `dependency-remediation` stays PARTIAL.

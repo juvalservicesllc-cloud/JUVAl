@@ -1,5 +1,15 @@
 # Juval — Project Status
 
+## 2026-10-26 — Security, identity and Dependabot unblock plan
+
+**PLAN (no activation).** HEAD `4bb5764`. `docs/compliance/UNBLOCK_PLAN_20261026.md`
+separates confirmed local facts, historical claims and what cannot be verified
+from the clone (current Railway exposure), lists decisions D0–D8, the Dependabot
+export format/command and an ordered 11-step plan with proofs and the ADR-040
+criteria each step could affect. Dependency re-check appended to
+DEPENDENCY_THIRD_WAVE_RECONCILIATION.md: dev-only npm advisories in all four
+lockfiles (runtime 0); Python runtime deps clean. ADR-040 unchanged.
+
 ## 2026-10-26 — frontend-next uses the BFF session cookie and CSRF contract (ADR-034)
 
 **IMPLEMENTED in `frontend-next/` (client side only); auth activation still

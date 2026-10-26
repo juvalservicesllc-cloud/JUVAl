@@ -5,6 +5,15 @@ workspace: `/home/juval/JUVAl/APP`. This ledger supersedes dated implementation
 snapshots in project plans, contracts and research; historical experiments are
 not reclassified as production evidence. Git commits identify the exact changes.
 
+## Unblock plan — 2026-10-26 (isolated clone, plan only)
+
+Ordered steps, owners, pending decisions D0–D8 and proofs per ADR-040 criterion:
+[UNBLOCK_PLAN_20261026.md](compliance/UNBLOCK_PLAN_20261026.md). New facts: npm
+lockfiles carry dev-only advisories (runtime 0); `frontend/` has no BFF client, so
+activation needs the PWA decision D3 first; current Railway state is
+NOT_VERIFIABLE from the clone (operator readback, step 0). No activation, deploy,
+migration or freeze change. ADR-040 unchanged.
+
 ## TABLETOP-002 RF-01 / RF-05 — 2026-09-21
 
 **COMPLETED_WITH_FINDINGS; RF-01 and RF-05 remain PARTIAL.** Daniel alone
