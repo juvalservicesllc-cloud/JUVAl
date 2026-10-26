@@ -1,5 +1,22 @@
 # Juval — Project Status
 
+## 2026-10-26 — D7-D: informative "pending demand verification" for REVIEW
+
+**IMPLEMENTED (approved D7-D).** New snapshots store `decision_reason_codes`
+beside the unchanged reason text; one definition
+(`application/review_classification.py`) marks REVIEW records whose only code
+is DEMAND_UNKNOWN as PENDING_DEMAND_VERIFICATION and REVIEW snapshots without
+codes as NOT_CLASSIFIABLE (never parsed from text). Filter on `/records` and
+`/records/export` (same SQL on SQLite and PostgreSQL, export column + metadata),
+analytics count, Catalog filter, Dashboard panel and Product Detail note in
+frontend-next. Decision engine, thresholds and stored decisions untouched
+(`processing/`, `domain/` diff empty); demand is still never imported, so BUY
+remains unreachable for imported files. No migration (JSON key). Tests:
+backend 10 new + 1 PostgreSQL parity (disposable cluster), 260 affected backend
+tests passed / 3 live-Supabase skips; frontend tsc clean, vitest 160 passed +
+8 skipped (opt-in), live 8/8, oxlint clean, build OK. ADR-051 still Propuesta;
+GOLDEN unchanged (not a Golden item). ADR-040 unchanged.
+
 ## 2026-10-26 — ADR-051 proposed: reproducible decision configuration
 
 **PENDING DECISION.** `docs/adr/ADR-051-reproducible-decision-configuration.md`
