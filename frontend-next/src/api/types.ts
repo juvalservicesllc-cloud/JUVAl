@@ -71,9 +71,34 @@ export interface RecordOut {
    *  PENDING_DEMAND_VERIFICATION = REVIEW whose only code is DEMAND_UNKNOWN;
    *  NOT_CLASSIFIABLE = REVIEW without stored codes; null = anything else. */
   review_classification?: "PENDING_DEMAND_VERIFICATION" | "NOT_CLASSIFIABLE" | null
+  /** Declared demand evidence (ADR-052), as stored; never used for the decision. */
+  demand_evidence?: DemandEvidenceOut | null
+  demand_evidence_state?: "DECLARED" | "NOT_DECLARED" | "NOT_CAPTURED" | null
   issue_count: number
   issues: string[]
   issue_codes?: string[]
+}
+
+/** `juval.adr046.demand-evidence` v1 (ADR-052 §3.8). Values keep their status,
+ *  unit, raw text and provenance; instants keep their declared offset. */
+export interface DemandObservationOut {
+  observation_id: string
+  metric: string
+  value: FieldValueOut
+  observed_at: string
+  window: { start: string; end: string }
+  window_source: "EXPLICIT" | "DECLARED_MONTH"
+  declared_month: string | null
+  declared_timezone: string | null
+  population_definition: string
+}
+export interface DemandDiagnosticOut { code: string; column: string | null; row: number; raw_value: string | null; message: string }
+export interface DemandEvidenceOut {
+  format: string
+  version: number
+  captured_at: string
+  observations: DemandObservationOut[]
+  diagnostics: DemandDiagnosticOut[]
 }
 
 /** One persisted ADR-047 payload, exactly as stored (API_CONTRACT §2e). */
@@ -229,7 +254,7 @@ export interface PreviewColumnOut {
   /** MAPPED only. */
   target: string | null
   required: boolean
-  group: "core" | "native_financial_evidence" | null
+  group: "core" | "native_financial_evidence" | "declared_demand" | null
 }
 
 export interface ImportPreviewResponse {

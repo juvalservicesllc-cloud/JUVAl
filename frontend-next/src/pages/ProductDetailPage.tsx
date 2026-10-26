@@ -4,6 +4,7 @@ import { getRecordFinancial, getRunRecord } from "../api/records"
 import type { FieldValueOut, ProvenanceStatus, RecordFinancialOut, RecordOut } from "../api/types"
 import { fieldMoney, fieldPercent } from "../format"
 import { METRIC_EXPLANATIONS } from "../metricExplanations"
+import { DeclaredDemandPanel } from "./DeclaredDemand"
 import { FinancialEvidenceView } from "./FinancialEvidence"
 import { Badge, PendingDemandTag, ProvenanceBadge } from "./shared"
 
@@ -253,6 +254,7 @@ export function ProductDetailPage({ executionId, recordRef, go }: { executionId:
       <ConfidenceGroups record={record} />
     </section>
 
+    <DeclaredDemandPanel record={record} />
     <Evidence record={record} />
     <FinancialEvidence state={financial} />
     {actions}

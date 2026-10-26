@@ -43,7 +43,7 @@ export function ImportPreview({ preview, onClose }: { preview: ImportPreviewResp
         <td>{c.position}</td>
         <td>{c.header}</td>
         <td className="mono">{c.canonical}{c.alias_of ? " (alias)" : ""}</td>
-        <td>{c.target}{c.group === "native_financial_evidence" ? " · financial evidence, does not affect decisions" : ""}</td>
+        <td>{c.target}{c.group === "native_financial_evidence" ? " · financial evidence, does not affect decisions" : c.group === "declared_demand" ? " · declared demand, does not affect decisions" : ""}</td>
         <td>{c.required ? "Required" : "Optional"}</td>
       </tr>)}</tbody>
     </table></div>}

@@ -5,6 +5,7 @@ import type { BrandDistributionOut, CatalogQuery, FieldValueOut, RecordOut, Reco
 import { clearCatalogQuery, loadCatalogQuery, saveCatalogQuery } from "../catalogQuery"
 import { favoriteKey, loadFavorites, saveFavorites, toggleFavorite } from "../favorites"
 import { count, fieldMoney, fieldPercent } from "../format"
+import { DeclaredDemandCell } from "./DeclaredDemand"
 import { Badge, PendingDemandTag, ProvenanceBadge } from "./shared"
 import { ProductThumbnail } from "./ProductThumbnail"
 import "./catalog-controls.css"
@@ -38,6 +39,8 @@ const COLUMNS: [label: string, sort: RecordSort | null][] = [
   ["Brand", null], ["Title", "title"], ["Cost", "cog"], ["Selling", "price"],
   ["Profit", "profit"], ["ROI", "roi"], ["Margin", "margin"],
   ["Hazmat", "hazmat"], ["Bulky", "bulky"], ["Decision", "decision"],
+  // Evidence only (ADR-052): never sortable or filterable, never a decision input.
+  ["Declared demand", null],
 ]
 
 type RunsState = { kind: "loading" } | { kind: "error"; message: string } | { kind: "empty" } | { kind: "ready"; runs: RunSummaryOut[] }
@@ -247,6 +250,7 @@ export function CatalogPage({ initialRunId = "", initialPendingDemand = false }:
                 <td>{record.hazmat_status ?? "UNKNOWN"}</td>
                 <td>{record.bulky_status ?? "UNKNOWN"}</td>
                 <td>{record.decision ? <Badge>{record.decision}</Badge> : "—"}{record.review_classification === "PENDING_DEMAND_VERIFICATION" && <> <PendingDemandTag /></>}</td>
+                <td><DeclaredDemandCell record={record} /></td>
                 <td><button className="favorite-button" aria-label={`${starred ? "Remove" : "Add"} ${text(record.title) || record.record_ref} ${starred ? "from" : "to"} favorites`} aria-pressed={starred} title={starred ? "Starred in this browser" : "Star in this browser"} onClick={() => star(record.record_ref)}>{starred ? "★" : "☆"}</button></td>
               </tr>
             })}

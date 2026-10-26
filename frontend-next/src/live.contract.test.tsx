@@ -185,5 +185,26 @@ describe.skipIf(!API)("live API contract", () => {
     expect(screen.getAllByText("demand not verified")).toHaveLength(pending.records.length)
     sessionStorage.clear()
   })
+
+  it("Declared demand: one million declared units are stored as evidence and the decision stays REVIEW", async () => {
+    const csv = "marketplace,asin,cost,selling_price,hazmat,bulky,estimated_monthly_sales,demand_window_start,demand_window_end,demand_observed_at,demand_population,demand_method\n"
+      + "US,B000000001,3,30,false,false,1000000,2026-09-01T00:00:00-04:00,2026-10-01T00:00:00-04:00,2026-10-01T00:00:00-04:00,synthetic population,synthetic live test\n"
+    const form = new FormData()
+    form.append("file", new File([csv], "demand.csv", { type: "text/csv" }))
+    form.append("thresholds", JSON.stringify({ target_profit: "0", target_roi: "0", minimum_estimated_monthly_sales: 0, maximum_risk_severity: "CRITICAL", allow_restricted: true, allow_approval_required: true, allow_unknown_risk: true }))
+    form.append("fees", JSON.stringify({ referral_fee: "1", referral_fee_rate: "0.15" }))
+    form.append("persist", "true")
+    const demandRun = (await json("/api/v1/runs", { method: "POST", body: form })).execution_id
+    const [stored] = (await json(`/api/v1/runs/${demandRun}/records?confidence=INCLUDE_INFERRED`)).records
+    expect(stored.decision).toBe("REVIEW")
+    expect(stored.decision_reason_codes).toEqual(["DEMAND_UNKNOWN"])
+    expect(stored.demand_evidence.observations[0].value).toMatchObject({ value: 1000000, status: "INFERRED", unit: "units" })
+
+    render(<ProductDetailPage executionId={demandRun} recordRef={stored.record_ref} go={vi.fn()} />)
+    const panel = await screen.findByLabelText("Declared demand", {}, { timeout: 5000 })
+    expect(panel).toHaveTextContent("1,000,000 units")
+    expect(panel).toHaveTextContent("Not used for this decision")
+    expect(within(screen.getByLabelText("Decision")).getByText("▲ REVIEW")).toBeInTheDocument()
+  })
 })
 
