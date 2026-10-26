@@ -299,6 +299,24 @@ añade `review_classification: {pending_demand_verification,
 review_not_classifiable}`. No requiere migración: es una clave más del JSON del
 snapshot.
 
+### Demanda declarada (ADR-052, D7-B, 2026-10-26)
+
+`RecordOut` añade dos campos:
+
+- `demand_evidence`: el documento `juval.adr046.demand-evidence` v1 tal como se
+  guardó, con `captured_at`, `observations[]` (valor, estado, provenance,
+  ventana, `observed_at`, población y origen de la ventana) y `diagnostics[]`.
+- `demand_evidence_state`:
+  - `DECLARED`;
+  - `NOT_DECLARED`: el archivo no tenía columnas de demanda y
+    `demand_evidence` es `null`;
+  - `NOT_CAPTURED`: snapshot anterior a ADR-052.
+
+Es evidencia: **nunca** se usa para la decisión, que sigue siendo la del motor.
+No hay filtros, orden ni analytics por demanda declarada. El export filtrado y
+el download del run añaden las columnas `demand_*` y `demand_evidence_state`; un
+valor ausente se exporta vacío, nunca 0.
+
 ## 2d. `GET /api/v1/runs/{execution_id}/records/{record_ref}` (F1)
 
 Returns exactly one immutable persisted snapshot using the composite identity

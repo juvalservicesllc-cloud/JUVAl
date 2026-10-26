@@ -238,10 +238,11 @@ acreditación propio; no forma parte de v1.
 
   Ningún filtro, orden ni agregado nuevo; `/analytics` no cambia.
 - **Export:**
-  - el filtrado y el download del run añaden `demand_declared_units`,
-    `demand_status`, `demand_window_start`, `demand_window_end`,
+  - el filtrado y el download del run añaden, en este orden,
+    `demand_evidence_state`, `demand_declared_units`, `demand_status`,
+    `demand_raw_value`, `demand_window_start`, `demand_window_end`,
     `demand_observed_at`, `demand_population`, `demand_method`,
-    `demand_source_reference`, `demand_diagnostics` y `demand_evidence_state`;
+    `demand_source_reference` y `demand_diagnostics`;
   - un valor ausente sale vacío, nunca 0;
   - los diagnósticos se exportan por código, y el valor crudo de un INVALID se
     exporta.

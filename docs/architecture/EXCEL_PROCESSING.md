@@ -377,3 +377,27 @@ no alimenta cálculos, riesgo, score ni decisiones, y no se persiste ni se expon
 por API. `application/native_financial_resolution.py::resolve_record_financial_dependencies`
 entrega al resolvedor de ADR-047 §16 esa evidencia junto con el precio nativo
 declarado. Nunca recurre al precio legacy ni a `FeeInputs`.
+
+## 10. Demanda declarada (ADR-052, D7-B, 2026-10-26)
+
+Las columnas opcionales `demand_*` permiten que un archivo *declare* una
+observación de ventas estimadas (`DemandObservation` de ADR-046). Son solo
+evidencia: nunca rellenan `Product.demand`, nunca llegan al Decision Engine, y un
+archivo sin ellas se importa exactamente igual que antes. Contrato completo:
+`docs/adr/ADR-052-declared-demand-observations-ingestion.md` §3.
+
+| Columna | Alias | Regla |
+|---|---|---|
+| `demand_estimated_sales` | `estimated_monthly_sales`, `estimated_sales` | entero ≥ 0; decimales, negativos, booleanos y texto son INVALID (se conserva el crudo); vacío nunca es 0 |
+| `demand_window_start`, `demand_window_end` | — | `[start, end)`; o en su lugar `demand_month` (`AAAA-MM`, texto) con `demand_timezone` |
+| `demand_observed_at` | — | siempre obligatorio; fin de ventana ≤ observed_at ≤ instante de importación |
+| `demand_timezone` | — | zona IANA, `UTC` o `±HH:MM`; obligatoria para fechas sin desfase (celdas de fecha de Excel); se rechazan huecos y repeticiones de horario de verano |
+| `demand_population`, `demand_method` | — | texto no vacío, ≤ 500 caracteres |
+
+`monthly_sales` **no** es alias en v1 y sigue siendo UNKNOWN. Los valores usables
+son INFERRED con `source_type=USER_INPUT`, porque el autor de la estimación no
+está acreditado, y `source_reference=row=N;column=<encabezado>`. Lo que la fila
+no declare con suficiente contexto queda como diagnóstico WARNING (códigos
+`DEMAND_*`) con la celda cruda; el resto de la fila se procesa con normalidad.
+La vista previa agrupa estas columnas como `declared_demand`.
+
