@@ -1,4 +1,4 @@
-import { apiUrl, ApiError } from "./client"
+import { requestJson } from "./client"
 import type { ImportPreviewResponse } from "./types"
 
 /** POST /api/v1/runs/preview — validate-only. The server's importer reads the
@@ -8,9 +8,5 @@ import type { ImportPreviewResponse } from "./types"
 export async function previewImport(file: File, signal?: AbortSignal): Promise<ImportPreviewResponse> {
   const form = new FormData()
   form.append("file", file, file.name)
-  const response = await fetch(apiUrl("api/v1/runs/preview"), { method: "POST", body: form, signal })
-  let body: unknown
-  try { body = await response.json() } catch { body = null }
-  if (!response.ok) throw new ApiError(response.status, body)
-  return body as ImportPreviewResponse
+  return await requestJson("api/v1/runs/preview", { method: "POST", body: form, signal }) as ImportPreviewResponse
 }

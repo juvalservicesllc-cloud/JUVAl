@@ -58,7 +58,9 @@ const nodeFetch = globalThis.fetch
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   if (!(init?.body instanceof FormData)) return nodeFetch(input, init)
   const { body, type } = await multipart(init.body)
-  return nodeFetch(input, { ...init, body, headers: { ...(init.headers as Record<string, string> | undefined), "content-type": type } })
+  const headers = new Headers(init.headers)
+  headers.set("content-type", type)
+  return nodeFetch(input, { ...init, body, headers })
 }) as typeof fetch
 
 async function json(path: string, init?: RequestInit) {

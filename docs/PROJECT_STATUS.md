@@ -1,5 +1,27 @@
 # Juval — Project Status
 
+## 2026-10-26 — frontend-next uses the BFF session cookie and CSRF contract (ADR-034)
+
+**IMPLEMENTED in `frontend-next/` (client side only); auth activation still
+PENDING.** Starting HEAD `928b91a`, clean. One shared client
+(`src/api/client.ts::apiFetch`) now carries every request: `credentials:
+"include"`, `X-JUVAL-CSRF` on POST (preview, batches) from
+`GET /api/v1/auth/session`, memory only, one retry on a CSRF rejection; 401
+raises a shell "Sign in" link (no auto-redirect), 403 distinguishes permission
+from CSRF, network failures and 422 lists are reported distinctly. `batches.ts`
+and `preview.ts` no longer call `fetch` directly. No backend, formula, decision
+or dependency change; `frontend/` and `demo/` untouched.
+
+Measured contract (disposable API, `JUVAL_AUTH_MODE=oidc`, seeded in-memory
+sessions, no IdP): no cookie → 401; cookie without/with wrong CSRF → 403; with
+CSRF → 200; viewer → 403 on preview/export, 200 on reads; preflight allows
+`x-juval-csrf` with credentials for the listed origin only; preview creates no
+run. In `disabled` mode `/auth/session` answers `authenticated: false` (not
+404). Tests: tsc clean; vitest 96 passed + 3 skipped (opt-in live); live suite
+3/3 (disabled mode); oxlint clean; build OK. Not verified: real FusionAuth
+login, logout UI (not built), browser E2E. Visual-review guide (SSH tunnel,
+loopback only): `frontend-next/README.md`.
+
 ## 2026-10-26 — frontend-next consumes brand, import preview and decision counts (GOLDEN 6, 10, 15-16)
 
 **IMPLEMENTED in `frontend-next/` under a user-authorized, limited lift of the

@@ -1,4 +1,4 @@
-import { apiUrl, ApiError } from "./client"
+import { requestJson } from "./client"
 import { MAX_FILES } from "./contract"
 import type { BatchResponse, FeesIn, ThresholdsIn } from "./types"
 
@@ -28,17 +28,9 @@ export async function createBatch(
   form.append("fees", JSON.stringify(fees))
   form.append("persist", String(persist))
 
-  const response = await fetch(apiUrl("api/v1/batches"), { method: "POST", body: form, signal })
-  let body: unknown
-  try { body = await response.json() } catch { body = null }
-  if (!response.ok) throw new ApiError(response.status, body)
-  return body as BatchResponse
+  return await requestJson("api/v1/batches", { method: "POST", body: form, signal }) as BatchResponse
 }
 
 export async function getBatch(batchId: string, signal?: AbortSignal): Promise<BatchResponse> {
-  const response = await fetch(apiUrl(`api/v1/batches/${encodeURIComponent(batchId)}`), { signal })
-  let body: unknown
-  try { body = await response.json() } catch { body = null }
-  if (!response.ok) throw new ApiError(response.status, body)
-  return body as BatchResponse
+  return await requestJson(`api/v1/batches/${encodeURIComponent(batchId)}`, { signal }) as BatchResponse
 }

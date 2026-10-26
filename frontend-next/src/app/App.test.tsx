@@ -70,4 +70,16 @@ describe("Golden-first shell and routing", () => {
 
     expect(localStorage.getItem("juval.appearance.dark")).toBe("false")
   })
+
+  it("offers sign-in when the API answers 401, without redirecting by itself", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response(JSON.stringify({ detail: "missing bearer token" }), { status: 401 }))))
+    at("/runs")
+
+    const link = await screen.findByRole("link", { name: "Sign in" })
+    const banner = link.closest("p")!
+    expect(new URL(link.getAttribute("href")!).pathname).toBe("/api/v1/auth/login")
+    expect(banner).toHaveTextContent(/nothing on this page was changed/i)
+    expect(location.pathname).toBe("/runs")
+  })
 })
+

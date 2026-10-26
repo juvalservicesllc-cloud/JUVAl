@@ -94,8 +94,10 @@ describe("UploadPage on the real pipeline", () => {
 
     await userEvent.setup().click(screen.getByRole("button", { name: /process catalog/i }))
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
-    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+    // The session lookup that supplies the CSRF token, then the batch itself.
+    expect(String((fetchMock.mock.calls[0] as unknown[])[0])).toContain("/api/v1/auth/session")
+    const [url, init] = fetchMock.mock.calls[1] as unknown as [string, RequestInit]
     expect(String(url)).toContain("/api/v1/batches")
     expect(init.method).toBe("POST")
     const body = init.body as FormData

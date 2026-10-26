@@ -55,8 +55,8 @@ describe("Import preview on the upload page", () => {
     await queueAndPreview()
     await screen.findByLabelText("Import preview of supplier.csv")
 
-    expect(mock).toHaveBeenCalledTimes(1)
-    const [url, init] = mock.mock.calls[0] as unknown as [string, RequestInit]
+    expect(mock).toHaveBeenCalledTimes(2)   // the session lookup for the CSRF token, then the preview
+    const [url, init] = mock.mock.calls[1] as unknown as [string, RequestInit]
     expect(new URL(url).pathname).toBe("/api/v1/runs/preview")
     expect(init.method).toBe("POST")
     const form = init.body as FormData
@@ -135,7 +135,9 @@ describe("Import preview on the upload page", () => {
 
   it("shows a loading state and leaves the file queue exactly as it was", async () => {
     let resolve!: (value: unknown) => void
-    vi.stubGlobal("fetch", vi.fn(() => new Promise((done) => { resolve = done })))
+    vi.stubGlobal("fetch", vi.fn((url: string) => String(url).endsWith("/auth/session")
+      ? Promise.resolve({ ok: false, status: 404, json: async () => ({ detail: "authentication is not enabled" }) })
+      : new Promise((done) => { resolve = done })))
     await queueAndPreview()
 
     expect(await screen.findByText(/validating columns and rows on the server/i)).toBeInTheDocument()

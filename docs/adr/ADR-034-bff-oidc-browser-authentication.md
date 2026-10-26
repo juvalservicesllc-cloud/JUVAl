@@ -209,6 +209,15 @@ que no se habilitan sobre una base no verificada.
   frontend, (4) tenant con usuarios reales. Ninguna está completa.
 - **El frontend necesitará cambios**: hoy no envía credencial alguna. El
   contrato exacto se reporta antes de tocar `frontend/`, que sigue congelado.
+  **Actualización 2026-10-26:** `frontend-next/` (candidata ADR-030) ya consume
+  este contrato en un único cliente (`src/api/client.ts::apiFetch`): cookie con
+  `credentials: "include"`, `X-JUVAL-CSRF` en POST con el token de
+  `/api/v1/auth/session` guardado solo en memoria, un único reintento ante CSRF
+  rechazado, y 401 → enlace de login sin redirección automática. Verificado con
+  tests de cliente y contra una API local en modo `oidc` con sesiones sembradas
+  (sin IdP). Login real con FusionAuth, logout desde la UI y la topología
+  pública siguen sin verificar; `frontend/` no cambia. `JUVAL_AUTH_MODE` sigue
+  sin activarse.
 - Se gana una propiedad real: un XSS en la PWA no puede robar un token de
   FusionAuth, porque no hay ninguno que robar en el navegador.
 

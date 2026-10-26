@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { loginUrl, onAuthRequired } from "../api/client"
 import { BatchPage } from "../pages/BatchPage"
 import { CatalogPage } from "../pages/CatalogPage"
 import { NotWiredPage } from "../pages/NotWiredPage"
@@ -42,6 +43,11 @@ export function App() {
   }, [])
 
   useEffect(() => { localStorage.setItem("juval.appearance.dark", String(dark)) }, [dark])
+
+  // The API answered 401: offer sign-in, never redirect on our own -- an
+  // automatic redirect on every 401 is how login loops start.
+  const [signInNeeded, setSignInNeeded] = useState(false)
+  useEffect(() => onAuthRequired(() => setSignInNeeded(true)), [])
 
   // Internal navigation stays in this tab: intercept same-origin anchors so a
   // link routes instead of reloading the application. Anything explicitly
@@ -88,6 +94,9 @@ export function App() {
         <span>LIVE — real backend, real persisted runs</span>
         <button onClick={() => setDark(!dark)} role="switch" aria-checked={dark}>{dark ? "Light" : "Dark"}</button>
       </header>
+      {signInNeeded && <p role="alert" className="notice">
+        You are not signed in or your session has expired. <a href={loginUrl()}>Sign in</a> to continue; nothing on this page was changed.
+      </p>}
       {page}
     </main>
   </div>
