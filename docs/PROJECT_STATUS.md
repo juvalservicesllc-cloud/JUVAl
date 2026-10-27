@@ -1,5 +1,41 @@
 # Juval — Project Status
 
+## 2026-10-27 — GOLDEN 17 final audit
+
+**IMPLEMENTED (audit fixes only; no decision, formula or threshold change).**
+
+Two defects were found and fixed:
+
+1. **Source type.** The suggested price was marked `SUPPLIER_FILE`, which
+   attributes to the supplier a value whose author is not accredited. It is now
+   `USER_INPUT`, as ADR-052 §3.6 decided for declared demand, with evidence
+   "author not accredited". The Catalog tooltip no longer says "declared by the
+   supplier".
+2. **Raw values.** `raw_value`, `currency_raw` and the diagnostics were trimmed.
+   They now keep the cell text as received.
+
+**ADR-053** is now "Aceptada con condiciones". The ADR-046 §20.1 amendment, S5
+and S6 remain PENDING user ratification.
+
+**New tests:**
+- exact long decimals;
+- raw whitespace;
+- a currency-only file;
+- a duplicate currency column;
+- BUY unchanged on an engine-built record (the importer cannot reach BUY);
+- a round trip on a disposable PostgreSQL 16 cluster, including NOT_CAPTURED.
+
+**Gates:**
+- pytest: 1865 passed, 129 skipped, with `JUVAL_POSTGRES_BIN`. The skips are the
+  session-DB lab, nginx, live Supabase (deliberately unused) and 2 skipped by
+  design.
+- vitest: 177 passed, 10 skipped.
+- tsc, oxlint and build: clean.
+- E2E Chromium: 17/17 twice, and 5/5 for the G17 spec alone.
+
+**GOLDEN 17 ratified RECOVERED (12/24).** ADR-040 is unchanged: the measurement
+scripts were not re-run and no criterion moved.
+
 ## 2026-10-27 — GOLDEN 17: supplier suggested price (ADR-053)
 
 **IMPLEMENTED (evidence only; no decision, formula or threshold change).**
@@ -10,7 +46,7 @@
 - **Where it is stored.** `SourcingRecord.supplier_suggested_price`, outside
   `Product`.
 - **Status.** A usable value is INFERRED (never VERIFIED), with the declared
-  currency as its unit.
+  currency as its unit (source type corrected to USER_INPUT by the final audit).
 - **Unusable values.** Zero, negative, non-numeric and unknown currency are
   INVALID. They keep their raw cells and raise a WARNING.
 - **Empty cell.** NOT_FOUND, never 0.

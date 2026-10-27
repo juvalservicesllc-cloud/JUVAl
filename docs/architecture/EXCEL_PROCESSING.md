@@ -416,7 +416,7 @@ exactamente igual que antes. Contrato completo:
 
 `suggested_price`, `msrp`, `list_price`, `rrp`, `srp`, `map` y `retail_price`
 **no** son alias y siguen siendo UNKNOWN. Un importe usable es INFERRED con
-`source_type=SUPPLIER_FILE`, `unit` = moneda declarada y
+`source_type=USER_INPUT` (el autor del archivo no está acreditado, como en §10), `unit` = moneda declarada y
 `source_reference=row=N;column=<encabezado>`. Los problemas quedan como WARNING
 (códigos `SUGGESTED_PRICE_*`) con las celdas crudas; el resto de la fila se
 procesa con normalidad. La vista previa agrupa estas columnas como

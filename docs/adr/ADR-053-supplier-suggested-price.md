@@ -1,10 +1,15 @@
-# ADR-053 — Precio sugerido declarado por el proveedor (GOLDEN 17)
+# ADR-053 — Precio sugerido del proveedor, declarado en el archivo (GOLDEN 17)
 
-- Estado: **Aceptada** (2026-10-27) por instrucción explícita del usuario
-  (unidad "GOLDEN 17: precio sugerido declarado"). Las decisiones S1–S9 de §3 son
-  las de esa instrucción o se derivan de ella. **S5 (el cero es inválido)** y
-  **S6 (sin conversión de mayúsculas en la moneda)** son elección del agente y
-  quedan sujetas a revisión del usuario.
+- Estado: **Aceptada con condiciones** (2026-10-27). La implementación de la
+  captura informativa se apoya en instrucción explícita del usuario (unidad
+  "GOLDEN 17: precio sugerido declarado"): S1–S4 y S7–S9 vienen de esa
+  instrucción o se derivan de ella. Hay tres elementos que **no** tienen todavía
+  ratificación del usuario y siguen PENDING:
+  - la enmienda a ADR-046 §20.1 (abajo);
+  - **S5** (el cero es inválido);
+  - **S6** (no se convierten mayúsculas en la moneda).
+- **Auditoría del 2026-10-27 (§7):** S2 se corrigió a `USER_INPUT`, y los valores
+  crudos se conservan tal como llegaron.
 - **Alcance:** solo evidencia **informativa**, es decir captura, snapshot, API,
   exports, preview y visualización. No autoriza usar el precio sugerido en
   `selling_price`, `cog`, cálculos financieros, `DecisionInputs`, umbrales ni
@@ -71,10 +76,13 @@ idéntica a la anterior.
   concepto distinto o deja ambiguo quién sugiere el precio.
 - **S2 — Nunca VERIFIED.** Que el dato aparezca en el archivo no lo verifica. Un
   importe utilizable es **INFERRED**, con estos datos:
-  - `source_type=SUPPLIER_FILE`;
+  - `source_type=USER_INPUT`, no `SUPPLIER_FILE`. El archivo lo entrega quien
+    llama a la API o a la CLI, y nadie acredita quién escribió el precio
+    (mismo criterio que ADR-052 §3.6). El nombre de la columna dice lo que el
+    archivo *afirma*; no atribuye el dato al proveedor;
   - `method="declared_in_uploaded_file"`;
-  - `evidence` que dice que no está verificado y que no es precio de venta ni
-    coste.
+  - `evidence` que dice que el autor no está acreditado, que no está verificado
+    y que no es precio de venta ni coste.
 
   El dominio rechaza VERIFIED en `__post_init__`.
 - **S3 — Moneda explícita y nunca inferida.** `unit` del importe es la moneda
@@ -85,10 +93,15 @@ idéntica a la anterior.
   - No se toma la moneda del marketplace ni de `fin_currency`, y no se convierte.
   - Igual que en ADR-046, se valida la forma del código, no su pertenencia a
     ISO 4217.
-- **S4 — Decimal exacto.** El importe se guarda como lo declaró la celda
-  (`Decimal(str(celda))`), sin redondear ni normalizar. Un símbolo (`$24.99`) o
-  un separador de miles lo hacen INVALID (`SUGGESTED_PRICE_INVALID`); no se
-  interpreta.
+- **S4 — Decimal exacto.** Solo se acepta un decimal simple (signo opcional,
+  dígitos y punto). El importe se guarda como `Decimal` de ese texto, sin
+  redondear ni truncar.
+  - Lo hacen INVALID (`SUGGESTED_PRICE_INVALID`), sin interpretarlos: un símbolo
+    (`$24.99`), un separador de miles, `_`, un exponente, `NaN` o `Infinity`.
+  - El único ajuste de lectura es ignorar los espacios de alrededor, igual que en
+    el resto de columnas.
+  - `raw_value`, `currency_raw` y los diagnósticos conservan la celda **tal como
+    llegó**, con espacios incluidos.
 - **S5 — Cero y negativos son INVALID** (`SUGGESTED_PRICE_NOT_POSITIVE`), con el
   texto crudo. Un precio sugerido de 0 casi siempre es un marcador de "sin
   precio", y mostrarlo como 0,00 induciría a error. ADR-046 §12 admite `>= 0`
@@ -149,3 +162,20 @@ idéntica a la anterior.
 - **Invariante:** decisiones, motivos, profit y ROI idénticos con y sin las
   columnas, y `processing/` nunca lo importa.
 - **Navegador:** E2E en Chromium sobre Catalog y Product Detail.
+
+## 7. Auditoría del 2026-10-27
+
+- **Origen del dato (corregido).** La versión inicial marcaba el importe como
+  `SUPPLIER_FILE`, que atribuía al proveedor un dato cuya autoría no consta. Ahora
+  es `USER_INPUT`, con evidencia "author not accredited". La UI ya no dice
+  "declared by the supplier".
+- **Crudo (corregido).** La versión inicial recortaba los espacios de
+  `raw_value` y `currency_raw`. Ahora se conservan tal como llegaron.
+- **Moneda contradictoria.** No se comparan monedas ni se elige entre ellas.
+  - Un símbolo en el importe vuelve INVALID el importe.
+  - Si la columna de moneda aparece dos veces, se usa la primera y la segunda
+    produce un aviso `DUPLICATE_COLUMN` (regla general del importer).
+  - Que la moneda no coincida con el marketplace o con `fin_currency` no es un
+    error: son conceptos distintos y no se comparan.
+- **Sin cambios:** S1, S3 y S5–S9, la frontera con el motor y la compatibilidad
+  histórica.

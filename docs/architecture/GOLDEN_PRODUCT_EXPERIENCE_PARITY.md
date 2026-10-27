@@ -570,7 +570,7 @@ Detail panel. `frontend/` and `demo/` are unchanged.
 | "Suggested" column in Catalog, between Cost and Selling | "Suggested (supplier)" in the same place, showing `24.99 EUR` + status badge | — |
 | Sortable | not sortable | amounts may be in different currencies; ordering them would invent an equivalence |
 | `$` formatting | exact stored Decimal + declared ISO-form code; no `$` assumed | currency is never inferred or converted |
-| Labelled `VERIFIED_SOURCE` | INFERRED, `SUPPLIER_FILE`, "Not used for this decision" | appearing in a file does not verify it (ADR-053 S2) |
+| Labelled `VERIFIED_SOURCE` | INFERRED, `USER_INPUT`, "Not used for this decision" | appearing in a file neither verifies it nor proves who wrote it (ADR-053 S2) |
 | Product Detail card "Suggested price" | Product Detail panel with amount, raw cells, currency, source row/column, method, captured-at, diagnostics | provenance rule (ADR-003/004) |
 | West Marine adapter field | two explicit columns, no aliases, `.xlsx`/`.csv` only | no new input format; `msrp`/`list_price`/… are other concepts |
 | — | zero, negative, text and unknown currency are INVALID with raw cells and a WARNING | nothing is repaired |
@@ -579,8 +579,18 @@ Exports: the Catalog export and the run download carry identical
 `supplier_suggested_price_*` cells, and both agree with the API. This is verified
 by pytest and by the Chromium E2E.
 
-Verification: pytest 57 new tests (1801 passed, 185 skipped in total); vitest
-177 passed, 10 skipped; tsc, oxlint and build clean; Playwright E2E 17/17 in
-Chromium, twice, plus the new spec on its own (5/5).
+Verification after the final audit (2026-10-27):
+
+- pytest: 65 G17 tests, including 2 on a disposable PostgreSQL 16 cluster.
+  The full suite has 1865 passed and 129 skipped with `JUVAL_POSTGRES_BIN` set.
+- vitest: 177 passed, 10 skipped.
+- tsc, oxlint and build: clean.
+- Playwright E2E in Chromium: 17/17, twice, plus the G17 spec on its own (5/5).
+
+**Audit verdict: RECOVERED.** Item 17's exact criterion is "Suggested/list price
+field", whose blocker was "importer column + `RecordOut` field" (§16: "suggested
+price has no field"). Both now exist, and the value is shown in the same places as
+Golden. "List price" is deliberately *not* treated as the same concept (ADR-053
+S1). That difference is documented above and is not a missing capability.
 
 GOLDEN items: RECOVERED 11 → **12/24** (item 17). PARTIALLY_RECOVERED stays 1 (item 7).
