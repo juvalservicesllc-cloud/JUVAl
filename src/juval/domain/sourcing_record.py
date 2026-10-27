@@ -31,6 +31,7 @@ from .declared_demand import DeclaredDemandCapture
 from .issues import IssueLevel, ProcessingIssue
 from .product import Product
 from .risk import RiskProfile
+from .supplier_price import SupplierSuggestedPrice
 
 
 @dataclass(frozen=True)
@@ -56,6 +57,10 @@ class SourcingRecord:
     # columns. Evidence only: processing/ never reads it and it never reaches
     # Product.demand or DecisionInputs.
     market_evidence: Optional[DeclaredDemandCapture] = None
+    # Supplier suggested price (ADR-053). None = the file had neither
+    # suggested-price column. Evidence only, like market_evidence: never a
+    # selling price, cost or decision input.
+    supplier_suggested_price: Optional[SupplierSuggestedPrice] = None
 
     def __post_init__(self) -> None:
         if not self.record_ref:

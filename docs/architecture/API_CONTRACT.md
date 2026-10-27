@@ -156,8 +156,9 @@ Procesar sin guardar sigue siendo §1 con `persist=false`. Permiso
   (`MAPPED` | `UNKNOWN` | `DUPLICATE` | `BLANK`), `canonical`, `alias_of`
   (canónico cuando el header es un alias), y solo para `MAPPED`: `target`,
   `required` y `group` (`core` | `native_financial_evidence` |
-  `declared_demand`; las columnas `fin_*` nunca alimentan profitability ni
-  decisiones, ADR-047, y las de demanda declarada tampoco, ADR-052). Un `DUPLICATE`
+  `declared_demand` | `supplier_suggested_price`; las columnas `fin_*` nunca
+  alimentan profitability ni decisiones, ADR-047, y las de demanda declarada y
+  precio sugerido tampoco, ADR-052 y ADR-053). Un `DUPLICATE`
   conserva `canonical` pero no `target`, porque se ignora.
 - Headers fatales (falta una columna requerida) o archivo vacío: **200** con
   `fatal: true`; informarlo es el propósito del endpoint. Un archivo vacío
@@ -317,6 +318,25 @@ Es evidencia: **nunca** se usa para la decisión, que sigue siendo la del motor.
 No hay filtros, orden ni analytics por demanda declarada. El export filtrado y
 el download del run añaden las columnas `demand_*` y `demand_evidence_state`; un
 valor ausente se exporta vacío, nunca 0.
+
+### Precio sugerido del proveedor (ADR-053, GOLDEN 17, 2026-10-27)
+
+`RecordOut` añade dos campos:
+
+- `supplier_suggested_price`: el documento `juval.supplier-suggested-price` v1 tal
+  como se guardó: `amount` (forma `FieldValue`; `value` es el Decimal exacto como
+  texto y `unit` la moneda declarada cuando es usable), `currency_raw` (la celda
+  de moneda tal como llegó) y `diagnostics[]` (`code`, `column`, `row`,
+  `raw_value`, `message`).
+- `supplier_suggested_price_state`: `DECLARED`, `NOT_DECLARED` (el archivo no
+  tenía las columnas; el documento es `null`) o `NOT_CAPTURED` (snapshot
+  anterior a ADR-053).
+
+Es evidencia: **nunca** es precio de venta, coste ni insumo de la decisión. No hay
+filtros, orden ni analytics (ordenar mezclaría monedas). El export filtrado y el
+download del run añaden las mismas ocho columnas `supplier_suggested_price_*`;
+el importe se exporta como texto exacto y un valor ausente queda vacío. No
+requiere migración: es una clave más del JSON del snapshot.
 
 ## 2d. `GET /api/v1/runs/{execution_id}/records/{record_ref}` (F1)
 

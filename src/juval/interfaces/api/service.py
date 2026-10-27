@@ -22,6 +22,7 @@ from typing import Optional
 
 from juval.application.record_snapshot import record_to_snapshot
 from juval.application.demand_evidence import demand_evidence_state
+from juval.application.suggested_price_evidence import suggested_price_state
 from juval.application.review_classification import review_classification
 from juval.domain.costs import FeeInputs
 from juval.domain.decision import Thresholds
@@ -65,7 +66,8 @@ def record_out(snapshot: dict) -> RecordOut:
     """A stored snapshot as the API shows it, plus the informative REVIEW
     sub-classification -- computed in one place, never stored, never a decision."""
     return RecordOut(**{**snapshot, "review_classification": review_classification(snapshot),
-                        "demand_evidence_state": demand_evidence_state(snapshot)})
+                        "demand_evidence_state": demand_evidence_state(snapshot),
+                        "supplier_suggested_price_state": suggested_price_state(snapshot)})
 
 
 def run_to_summary(run: ExecutionRun, decisions: Optional[dict[str, int]] = None) -> RunSummaryOut:

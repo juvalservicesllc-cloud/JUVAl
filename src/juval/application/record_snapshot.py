@@ -26,6 +26,7 @@ from typing import Any, Optional
 
 from juval.domain.provenance import FieldValue
 from juval.application.demand_evidence import serialize_demand_evidence
+from juval.application.suggested_price_evidence import serialize_suggested_price
 from juval.domain.risk import RiskFlag, RiskType
 from juval.domain.sourcing_record import SourcingRecord
 
@@ -178,4 +179,7 @@ def record_to_snapshot(record: SourcingRecord) -> dict[str, Any]:
         # columns; absent on snapshots written before it existed. Never read
         # by decisions.
         "demand_evidence": serialize_demand_evidence(record.market_evidence),
+        # Supplier suggested price (ADR-053): null = neither column in the file;
+        # absent on snapshots written before it existed. Never read by decisions.
+        "supplier_suggested_price": serialize_suggested_price(record.supplier_suggested_price),
     }

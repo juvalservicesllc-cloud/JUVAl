@@ -156,9 +156,22 @@ DEMAND_EVIDENCE_COLUMN_SPECS: tuple[ColumnSpec, ...] = (
 DEMAND_EVIDENCE_COLUMNS: frozenset[str] = frozenset(spec.canonical for spec in DEMAND_EVIDENCE_COLUMN_SPECS)
 
 
+# -- Supplier suggested price (ADR-053, GOLDEN 17) ---------------------------
+#
+# Optional evidence columns: never selling_price, cost or a decision input. No
+# aliases on purpose -- msrp, list_price, suggested_price, rrp, map name other
+# concepts or leave who suggests the price ambiguous (ADR-053 S1).
+SUGGESTED_PRICE_COLUMN_SPECS: tuple[ColumnSpec, ...] = (
+    ColumnSpec("supplier_suggested_price", "supplier_suggested_price.amount", False, "decimal"),
+    ColumnSpec("supplier_suggested_price_currency", "supplier_suggested_price.currency", False, "str"),
+)
+SUGGESTED_PRICE_COLUMNS: frozenset[str] = frozenset(spec.canonical for spec in SUGGESTED_PRICE_COLUMN_SPECS)
+
+
 def _build_alias_index() -> dict[str, str]:
     index: dict[str, str] = {}
-    for spec in (*COLUMN_SPECS, *FINANCIAL_EVIDENCE_COLUMN_SPECS, *DEMAND_EVIDENCE_COLUMN_SPECS):
+    for spec in (*COLUMN_SPECS, *FINANCIAL_EVIDENCE_COLUMN_SPECS, *DEMAND_EVIDENCE_COLUMN_SPECS,
+                 *SUGGESTED_PRICE_COLUMN_SPECS):
         index[spec.canonical] = spec.canonical
         for alias in spec.aliases:
             index[alias] = spec.canonical

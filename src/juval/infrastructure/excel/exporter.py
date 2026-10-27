@@ -72,7 +72,14 @@ DEMAND_EXPORT_HEADERS: tuple[str, ...] = (
     "demand_window_start", "demand_window_end", "demand_observed_at", "demand_population",
     "demand_method", "demand_source_reference", "demand_diagnostics",
 )
-HEADERS = HEADERS + DEMAND_EXPORT_HEADERS
+#: Supplier suggested price (ADR-053), appended after the demand columns in both
+#: exports. Evidence only. The amount is exact text, never a float; absent is empty.
+SUGGESTED_PRICE_EXPORT_HEADERS: tuple[str, ...] = (
+    "supplier_suggested_price_state", "supplier_suggested_price", "supplier_suggested_price_currency",
+    "supplier_suggested_price_status", "supplier_suggested_price_raw", "supplier_suggested_price_currency_raw",
+    "supplier_suggested_price_source_reference", "supplier_suggested_price_diagnostics",
+)
+HEADERS = HEADERS + DEMAND_EXPORT_HEADERS + SUGGESTED_PRICE_EXPORT_HEADERS
 
 
 def demand_cells_from_capture(capture) -> tuple[Any, ...]:
@@ -87,6 +94,16 @@ def demand_cells_from_capture(capture) -> tuple[Any, ...]:
     return ("DECLARED", value.value, value.status.value, value.raw_value,
             observation.window.start.isoformat(), observation.window.end.isoformat(), observation.observed_at.isoformat(),
             observation.population_definition, value.provenance.method, value.provenance.source_reference, diagnostics)
+
+
+def suggested_price_cells_from_capture(capture) -> tuple[Any, ...]:
+    """Export cells for one record's SupplierSuggestedPrice (None = NOT_DECLARED)."""
+    if capture is None:
+        return ("NOT_DECLARED",) + (None,) * (len(SUGGESTED_PRICE_EXPORT_HEADERS) - 1)
+    amount = capture.amount
+    diagnostics = "; ".join(d.code for d in capture.diagnostics) or None
+    return ("DECLARED", str(amount.value) if amount.value is not None else None, amount.unit, amount.status.value,
+            amount.raw_value, capture.currency_raw, amount.provenance.source_reference, diagnostics)
 
 
 def _value_and_status(fv: Optional[FieldValue]) -> tuple[Any, Any]:
@@ -192,7 +209,7 @@ def _row_for_record(record: SourcingRecord) -> tuple[Any, ...]:
         decision_reasons,
         len(record.issues),
         issues_text,
-    ) + demand_cells_from_capture(record.market_evidence)
+    ) + demand_cells_from_capture(record.market_evidence) + suggested_price_cells_from_capture(record.supplier_suggested_price)
 
 
 def append_literal_row(sheet: Worksheet, values: Sequence[Any]) -> None:

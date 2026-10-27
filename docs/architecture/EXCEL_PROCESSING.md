@@ -401,3 +401,23 @@ no declare con suficiente contexto queda como diagnóstico WARNING (códigos
 `DEMAND_*`) con la celda cruda; el resto de la fila se procesa con normalidad.
 La vista previa agrupa estas columnas como `declared_demand`.
 
+## 11. Precio sugerido del proveedor (ADR-053, GOLDEN 17, 2026-10-27)
+
+Dos columnas opcionales permiten que un archivo *declare* el precio de reventa que
+sugiere el proveedor. Es solo evidencia: no es `selling_price` ni `cost`, nunca
+alimenta profitability ni decisiones, y un archivo sin ellas se importa
+exactamente igual que antes. Contrato completo:
+`docs/adr/ADR-053-supplier-suggested-price.md`.
+
+| Columna | Alias | Regla |
+|---|---|---|
+| `supplier_suggested_price` | — | decimal simple > 0, guardado exacto; símbolo, separador de miles, `_`, exponente, cero y negativo son INVALID con el crudo; vacío es NOT_FOUND, nunca 0 |
+| `supplier_suggested_price_currency` | — | tres letras ASCII mayúsculas (`USD`); ausente o con otra forma deja el importe INVALID; nunca se infiere ni se convierte |
+
+`suggested_price`, `msrp`, `list_price`, `rrp`, `srp`, `map` y `retail_price`
+**no** son alias y siguen siendo UNKNOWN. Un importe usable es INFERRED con
+`source_type=SUPPLIER_FILE`, `unit` = moneda declarada y
+`source_reference=row=N;column=<encabezado>`. Los problemas quedan como WARNING
+(códigos `SUGGESTED_PRICE_*`) con las celdas crudas; el resto de la fila se
+procesa con normalidad. La vista previa agrupa estas columnas como
+`supplier_suggested_price`.

@@ -20,7 +20,9 @@ from typing import Optional
 
 from juval.domain.execution_run import hash_file
 from juval.domain.issues import ProcessingIssue
-from juval.infrastructure.excel.column_mapping import COLUMN_SPECS, DEMAND_EVIDENCE_COLUMN_SPECS, FINANCIAL_EVIDENCE_COLUMN_SPECS, ColumnSpec
+from juval.infrastructure.excel.column_mapping import (
+    COLUMN_SPECS, DEMAND_EVIDENCE_COLUMN_SPECS, FINANCIAL_EVIDENCE_COLUMN_SPECS, SUGGESTED_PRICE_COLUMN_SPECS, ColumnSpec,
+)
 from juval.infrastructure.excel.importer import HeaderResolution, import_file
 
 #: Issues listed in full; the counts by level and code always cover all of them.
@@ -32,6 +34,8 @@ _SPECS: dict[str, tuple[ColumnSpec, str]] = {
     **{spec.canonical: (spec, "native_financial_evidence") for spec in FINANCIAL_EVIDENCE_COLUMN_SPECS},
     # Declared demand evidence (ADR-052) never feeds decisions either.
     **{spec.canonical: (spec, "declared_demand") for spec in DEMAND_EVIDENCE_COLUMN_SPECS},
+    # Supplier suggested price (ADR-053): evidence, never a price or cost input.
+    **{spec.canonical: (spec, "supplier_suggested_price") for spec in SUGGESTED_PRICE_COLUMN_SPECS},
 }
 
 
@@ -45,7 +49,7 @@ class PreviewColumn:
     alias_of: Optional[str]     # canonical name when the header is one of its aliases
     target: Optional[str]       # MAPPED only
     required: bool              # MAPPED only
-    group: Optional[str]        # MAPPED only: core | native_financial_evidence | declared_demand
+    group: Optional[str]        # MAPPED only: core | native_financial_evidence | declared_demand | supplier_suggested_price
 
 
 @dataclass(frozen=True)

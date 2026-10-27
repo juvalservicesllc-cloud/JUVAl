@@ -116,6 +116,10 @@ class RecordOut(BaseModel):
     # decision. `demand_evidence_state`: DECLARED | NOT_DECLARED | NOT_CAPTURED.
     demand_evidence: Optional[dict[str, Any]] = None
     demand_evidence_state: Optional[str] = None
+    # Supplier suggested price (ADR-053), exactly as stored; never a selling
+    # price, cost or decision input. State: DECLARED | NOT_DECLARED | NOT_CAPTURED.
+    supplier_suggested_price: Optional[dict[str, Any]] = None
+    supplier_suggested_price_state: Optional[str] = None
     issue_count: int = 0
     issues: list[str] = []
     issue_codes: list[str] = []
@@ -157,7 +161,7 @@ class PreviewColumnOut(BaseModel):
     alias_of: Optional[str] = None
     target: Optional[str] = None
     required: bool
-    group: Optional[Literal["core", "native_financial_evidence", "declared_demand"]] = None
+    group: Optional[Literal["core", "native_financial_evidence", "declared_demand", "supplier_suggested_price"]] = None
 
 
 class PreviewMissingColumnOut(BaseModel):
