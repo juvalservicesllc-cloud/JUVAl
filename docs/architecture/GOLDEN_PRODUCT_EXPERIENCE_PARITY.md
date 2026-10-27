@@ -381,7 +381,7 @@ bottom mobile nav · collapsible sidebar.
 | 14 | Process trace | `REQUIRES_BACKEND_CONTRACT` | trace not persisted |
 | 15 | Column classification / format-detection preview | **RECOVERED** (§22, `frontend-next/`) — column classification; format detection with a confidence % deliberately not reproduced | — |
 | 16 | Pre-submit file preview | **RECOVERED** (§22, `frontend-next/`) — importer verdict per file, not a browser row preview | — |
-| 17 | Suggested/list price field | `REQUIRES_BACKEND_CONTRACT` | importer column + `RecordOut` field |
+| 17 | Suggested/list price field | **RECOVERED** (§25, ADR-053) — supplier suggested price as declared evidence: Catalog column + Product Detail panel, with its declared currency and INFERRED status; not sortable | — |
 | 18 | Multi-source analytics table | **RECOVERED** (§23, `frontend-next/` Batch Detail) — one row per child run from its own analytics; Golden's fixture column has no production equivalent (no fixtures) | — |
 | 19 | Compare | `REQUIRES_ADR` + `REQUIRES_BACKEND_CONTRACT` | identity ADR + cross-run query |
 | 20 | Decision-threshold bands (read-only) | `REQUIRES_ADR` | `ExecutionRun.thresholds` — ADR-051 **Propuesta** (2026-10-26), not approved or implemented |
@@ -557,3 +557,30 @@ records of the synthetic financial flow (FULL, PARTIAL, NO_SCENARIO, INFERRED)
 with every exact value and blocker and no unknown key; oxlint clean; build OK.
 No browser E2E. GOLDEN: RECOVERED 11/24 (unchanged), PARTIALLY_RECOVERED 0 → 1.
 
+## 25. Supplier suggested price (item 17) — delivered 2026-10-27
+
+Contract: ADR-053 (an amendment to ADR-046 §20.1 limited to this one field).
+The backend gained two importer columns, the snapshot document
+`juval.supplier-suggested-price` v1, two `RecordOut` fields, eight export columns
+and a preview group. `frontend-next/` gained a Catalog column and a Product
+Detail panel. `frontend/` and `demo/` are unchanged.
+
+| Golden | Production | Why it differs |
+|---|---|---|
+| "Suggested" column in Catalog, between Cost and Selling | "Suggested (supplier)" in the same place, showing `24.99 EUR` + status badge | — |
+| Sortable | not sortable | amounts may be in different currencies; ordering them would invent an equivalence |
+| `$` formatting | exact stored Decimal + declared ISO-form code; no `$` assumed | currency is never inferred or converted |
+| Labelled `VERIFIED_SOURCE` | INFERRED, `SUPPLIER_FILE`, "Not used for this decision" | appearing in a file does not verify it (ADR-053 S2) |
+| Product Detail card "Suggested price" | Product Detail panel with amount, raw cells, currency, source row/column, method, captured-at, diagnostics | provenance rule (ADR-003/004) |
+| West Marine adapter field | two explicit columns, no aliases, `.xlsx`/`.csv` only | no new input format; `msrp`/`list_price`/… are other concepts |
+| — | zero, negative, text and unknown currency are INVALID with raw cells and a WARNING | nothing is repaired |
+
+Exports: the Catalog export and the run download carry identical
+`supplier_suggested_price_*` cells, and both agree with the API. This is verified
+by pytest and by the Chromium E2E.
+
+Verification: pytest 57 new tests (1801 passed, 185 skipped in total); vitest
+177 passed, 10 skipped; tsc, oxlint and build clean; Playwright E2E 17/17 in
+Chromium, twice, plus the new spec on its own (5/5).
+
+GOLDEN items: RECOVERED 11 → **12/24** (item 17). PARTIALLY_RECOVERED stays 1 (item 7).

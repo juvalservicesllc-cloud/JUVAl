@@ -74,6 +74,9 @@ export interface RecordOut {
   /** Declared demand evidence (ADR-052), as stored; never used for the decision. */
   demand_evidence?: DemandEvidenceOut | null
   demand_evidence_state?: "DECLARED" | "NOT_DECLARED" | "NOT_CAPTURED" | null
+  /** Supplier suggested price (ADR-053), as stored; never a selling price, cost or decision input. */
+  supplier_suggested_price?: SuggestedPriceOut | null
+  supplier_suggested_price_state?: "DECLARED" | "NOT_DECLARED" | "NOT_CAPTURED" | null
   issue_count: number
   issues: string[]
   issue_codes?: string[]
@@ -98,6 +101,16 @@ export interface DemandEvidenceOut {
   version: number
   captured_at: string
   observations: DemandObservationOut[]
+  diagnostics: DemandDiagnosticOut[]
+}
+
+/** `juval.supplier-suggested-price` v1 (ADR-053). `amount.unit` is the declared
+ *  currency when usable; `currency_raw` is the currency cell as received. */
+export interface SuggestedPriceOut {
+  format: string
+  version: number
+  amount: FieldValueOut
+  currency_raw: string | null
   diagnostics: DemandDiagnosticOut[]
 }
 
@@ -254,7 +267,7 @@ export interface PreviewColumnOut {
   /** MAPPED only. */
   target: string | null
   required: boolean
-  group: "core" | "native_financial_evidence" | "declared_demand" | null
+  group: "core" | "native_financial_evidence" | "declared_demand" | "supplier_suggested_price" | null
 }
 
 export interface ImportPreviewResponse {

@@ -5,6 +5,7 @@ import type { FieldValueOut, ProvenanceStatus, RecordFinancialOut, RecordOut } f
 import { fieldMoney, fieldPercent } from "../format"
 import { METRIC_EXPLANATIONS } from "../metricExplanations"
 import { DeclaredDemandPanel } from "./DeclaredDemand"
+import { SuggestedPricePanel } from "./SuggestedPrice"
 import { FinancialEvidenceView } from "./FinancialEvidence"
 import { Badge, PendingDemandTag, ProvenanceBadge } from "./shared"
 
@@ -254,6 +255,7 @@ export function ProductDetailPage({ executionId, recordRef, go }: { executionId:
       <ConfidenceGroups record={record} />
     </section>
 
+    <SuggestedPricePanel record={record} />
     <DeclaredDemandPanel record={record} />
     <Evidence record={record} />
     <FinancialEvidence state={financial} />

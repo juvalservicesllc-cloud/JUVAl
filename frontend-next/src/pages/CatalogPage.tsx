@@ -6,6 +6,7 @@ import { clearCatalogQuery, loadCatalogQuery, saveCatalogQuery } from "../catalo
 import { favoriteKey, loadFavorites, saveFavorites, toggleFavorite } from "../favorites"
 import { count, fieldMoney, fieldPercent } from "../format"
 import { DeclaredDemandCell } from "./DeclaredDemand"
+import { SuggestedPriceCell } from "./SuggestedPrice"
 import { Badge, PendingDemandTag, ProvenanceBadge } from "./shared"
 import { ProductThumbnail } from "./ProductThumbnail"
 import "./catalog-controls.css"
@@ -36,7 +37,10 @@ const DEFAULT_QUERY: CatalogQuery = {
 // actually sort server-side; Brand has no sort key, so its header stays plain
 // rather than pretending to be interactive.
 const COLUMNS: [label: string, sort: RecordSort | null][] = [
-  ["Brand", null], ["Title", "title"], ["Cost", "cog"], ["Selling", "price"],
+  ["Brand", null], ["Title", "title"], ["Cost", "cog"],
+  // Evidence only (ADR-053): not sortable -- ordering would mix currencies.
+  ["Suggested (supplier)", null],
+  ["Selling", "price"],
   ["Profit", "profit"], ["ROI", "roi"], ["Margin", "margin"],
   ["Hazmat", "hazmat"], ["Bulky", "bulky"], ["Decision", "decision"],
   // Evidence only (ADR-052): never sortable or filterable, never a decision input.
@@ -243,6 +247,7 @@ export function CatalogPage({ initialRunId = "", initialPendingDemand = false }:
                 <td>{text(record.brand) || "—"}</td>
                 <td><a href={`/run/${encodeURIComponent(runId)}/product/${encodeURIComponent(record.record_ref)}`}>{text(record.title) || record.record_ref}</a></td>
                 <td>{fieldMoney(record.cog)}</td>
+                <td><SuggestedPriceCell record={record} /></td>
                 <td><Cell value={record.selling_price} format={fieldMoney} /></td>
                 <td><Cell value={record.profit} format={fieldMoney} /></td>
                 <td><Cell value={record.roi} format={fieldPercent} /></td>

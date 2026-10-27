@@ -1,7 +1,7 @@
-import { execFileSync } from "node:child_process"
-import { writeFileSync } from "node:fs"
-import { join, resolve } from "node:path"
-import { test as base, expect, type Page } from "@playwright/test"
+import { join } from "node:path"
+import {
+  DEMAND_HEADERS, DIR, apiRecord, downloadedRows, expect, expectSameTab, exportedRows, fixtures, markTab, row, runs, test, upload,
+} from "./support"
 
 /**
  * D7-D (pending demand verification) and D7-B (declared demand evidence) end to
@@ -10,78 +10,7 @@ import { test as base, expect, type Page } from "@playwright/test"
  * created. Declared demand must stay evidence -- every run here is REVIEW.
  */
 
-const API = process.env.JUVAL_E2E_API!
-const DIR = process.env.JUVAL_E2E_DIR!
-const python = process.env.JUVAL_PYTHON ?? resolve(import.meta.dirname, "../../.venv/bin/python")
-const fixtures = (...args: string[]) => execFileSync(python, [join(import.meta.dirname, "fixtures.py"), ...args], { encoding: "utf8" })
-
-const DEMAND_HEADERS = ["demand_evidence_state", "demand_declared_units", "demand_status", "demand_raw_value", "demand_window_start", "demand_window_end",
-  "demand_observed_at", "demand_population", "demand_method", "demand_source_reference", "demand_diagnostics"]
-
-/** Fails a test on any console error, uncaught exception or HTTP >= 400 it did not declare as expected. */
-const test = base.extend<{ watch: { allow: (pattern: RegExp) => void } }>({
-  watch: [async ({ page }, use) => {
-    const allowed: RegExp[] = []
-    const seen: string[] = []
-    page.on("console", (m) => { if (m.type() === "error") seen.push(`console: ${m.text()} @ ${m.location().url}`) })
-    page.on("pageerror", (e) => seen.push(`pageerror: ${e.message}`))
-    page.on("response", (r) => { if (r.status() >= 400) seen.push(`http ${r.status()} ${r.request().method()} ${r.url()}`) })
-    await use({ allow: (pattern) => allowed.push(pattern) })
-    expect(seen.filter((s) => !allowed.some((p) => p.test(s))), "unexpected console or HTTP errors").toEqual([])
-  }, { auto: true }],
-})
 test.describe.configure({ mode: "serial" })
-
-const runs: Record<string, string> = {}
-
-async function upload(page: Page, file: string): Promise<string> {
-  await page.goto("/import")
-  await page.getByLabel("Supplier files").setInputFiles(join(DIR, "files", file))
-  await page.getByLabel("Target profit").fill("5")
-  await page.getByLabel("Target ROI").fill("0")
-  await page.getByLabel("Minimum estimated monthly sales").fill("0")
-  await page.getByLabel("Maximum accepted risk severity").selectOption("CRITICAL")
-  await page.getByLabel("Referral fee", { exact: true }).fill("1")
-  await page.getByLabel("Referral fee rate").fill("0.15")
-  await page.getByLabel("Allow unknown risk").check()
-  await page.getByRole("button", { name: "Process catalog" }).click()
-  await expect(page.getByRole("heading", { name: /Batch result/ })).toBeVisible()
-  await page.getByRole("button", { name: "Open batch" }).click()
-  const open = page.getByRole("row").filter({ hasText: file }).getByRole("link", { name: "Open run" })
-  const id = decodeURIComponent((await open.getAttribute("href"))!.replace("/runs/", ""))
-  runs[file] = id
-  return id
-}
-
-const markTab = (page: Page) => page.evaluate(() => { (window as unknown as { e2eTab: number }).e2eTab = 1 })
-/** Same tab, same document: no new page opened and the marker survived (no reload). */
-async function expectSameTab(page: Page) {
-  expect(page.context().pages()).toHaveLength(1)
-  expect(await page.evaluate(() => (window as unknown as { e2eTab?: number }).e2eTab)).toBe(1)
-}
-
-const row = (page: Page, title: string) => page.getByRole("row").filter({ has: page.getByRole("link", { name: title, exact: true }) })
-const apiRecord = async (page: Page, run: string, ref = "row_2") => (await page.request.get(`${API}/api/v1/runs/${run}/records/${ref}`)).json()
-
-async function exportedRows(page: Page, run: string): Promise<Record<string, unknown>[]> {
-  await page.goto(`/catalog?run=${encodeURIComponent(run)}`)
-  await expect(page.getByText(/^\d+ results?$/)).toBeVisible()
-  // Chromium starts the noopener popup's download before Playwright announces the popup, so the
-  // download event cannot be awaited reliably; the request the button made is fetched again instead.
-  const exported = page.context().waitForEvent("request", (r) => new URL(r.url()).pathname.endsWith("/records/export"))
-  await page.getByRole("button", { name: /^Export/ }).click()
-  return workbookRows(page, (await exported).url(), `export-${run}.xlsx`)
-}
-
-const downloadedRows = (page: Page, run: string) => workbookRows(page, `${API}/api/v1/runs/${run}/download`, `download-${run}.xlsx`)
-
-async function workbookRows(page: Page, url: string, name: string): Promise<Record<string, unknown>[]> {
-  const response = await page.request.get(url)
-  expect(response.status()).toBe(200)
-  writeFileSync(join(DIR, name), await response.body())
-  const [headers, ...rows] = JSON.parse(fixtures("dump", join(DIR, name))) as unknown[][]
-  return rows.map((r) => Object.fromEntries(headers.map((h, i) => [h as string, r[i]])))
-}
 
 test("empty and loading states before any run exists", async ({ page }) => {
   await page.route("**/api/v1/runs?*", async (route) => { await new Promise((r) => setTimeout(r, 1500)); await route.continue() })
@@ -234,7 +163,7 @@ test("13: a historical snapshot shows NOT_CAPTURED and is not classified", async
   const r = row(page, "E2E historical widget")
   await expect(r.getByText("▲ REVIEW")).toBeVisible()
   await expect(r.getByText("demand not verified")).toHaveCount(0)
-  await expect(r.getByRole("cell").nth(12)).toHaveText("—")
+  await expect(r.getByRole("cell").nth(13)).toHaveText("—")             // Declared demand (after Suggested, ADR-053)
   await r.getByRole("link", { name: "E2E historical widget" }).click()
   await expect(page.getByRole("region", { name: "Declared demand", exact: true })).toContainText("This record was processed before declared demand was captured.")
   await expect(page.getByLabel("Decision")).toContainText("Reason codes were not stored for this earlier record")

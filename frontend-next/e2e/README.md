@@ -47,5 +47,21 @@ The tests run in order and share the database:
 - Retry after a failed request, and an unknown record;
 - desktop screenshots with basic accessibility checks.
 
+## What `g17-suggested-price.spec.ts` covers
+
+GOLDEN 17 (ADR-053): `suggested-price.xlsx` declares one usable amount (EUR), one
+with a lowercase currency and one zero. The spec covers:
+
+- the preview group;
+- a non-sortable Catalog column between Cost and Selling;
+- the Product Detail panel, with provenance and diagnostics;
+- the decision and selling price staying the engine's;
+- the Catalog export, the run download and the API agreeing on every
+  `supplier_suggested_price_*` column;
+- NOT_CAPTURED on the historical snapshot;
+- screenshots with basic accessibility checks.
+
+It reuses `support.ts`, and seeds the historical run itself when it runs alone.
+
 Every test fails on a console error, an uncaught exception or an HTTP status
 ≥ 400 that it did not declare as expected.

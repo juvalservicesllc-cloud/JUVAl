@@ -1,12 +1,13 @@
 """Inputs for the frontend-next E2E suite (run with the repository's .venv).
 
-    build <dir>          write the four XLSX supplier files the specs upload
+    build <dir>          write the five XLSX supplier files the specs upload
     seed-history <db>    store one run whose snapshot predates reason codes and
                          declared demand (D7-D NOT_CLASSIFIABLE, D7-B NOT_CAPTURED)
     dump <xlsx>          print a workbook's first sheet as JSON rows
 
-Every demand value here is synthetic and says so in its method and population:
-it is a declaration in an uploaded file (USER_INPUT, INFERRED), never market data.
+Every value here is synthetic. Demand says so in its method and population: it is
+a declaration in an uploaded file (USER_INPUT, INFERRED), never market data. The
+suggested prices are invented amounts, not any supplier's price.
 """
 import json
 import sys
@@ -34,6 +35,15 @@ FILES = {
                            "estimated_monthly_sales": 1000000, **CONTEXT}],
     "demand-invalid.xlsx": [{"asin": "B0E2E00021", "title": "E2E declared invalid", "selling_price": 30,
                              "estimated_monthly_sales": "approx 400", **CONTEXT}],
+    # Supplier suggested price (ADR-053): a numeric cell with its currency, a currency that is not a code, and zero.
+    "suggested-price.xlsx": [
+        {"asin": "B0E2E00041", "title": "E2E suggested euro", "selling_price": 30,
+         "supplier_suggested_price": 24.99, "supplier_suggested_price_currency": "EUR"},
+        {"asin": "B0E2E00042", "title": "E2E suggested bad currency", "selling_price": 30,
+         "supplier_suggested_price": "19.50", "supplier_suggested_price_currency": "usd"},
+        {"asin": "B0E2E00043", "title": "E2E suggested zero", "selling_price": 30,
+         "supplier_suggested_price": 0, "supplier_suggested_price_currency": "USD"},
+    ],
     # The observed_at cell is present but empty: incomplete context.
     "demand-incomplete.xlsx": [{"asin": "B0E2E00031", "title": "E2E declared incomplete", "selling_price": 30,
                                 "estimated_monthly_sales": 420, **CONTEXT, "demand_observed_at": None}],

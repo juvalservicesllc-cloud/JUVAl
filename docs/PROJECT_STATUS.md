@@ -1,5 +1,40 @@
 # Juval — Project Status
 
+## 2026-10-27 — GOLDEN 17: supplier suggested price (ADR-053)
+
+**IMPLEMENTED (evidence only; no decision, formula or threshold change).**
+
+- **What a file can declare.** Two optional columns,
+  `supplier_suggested_price` and `supplier_suggested_price_currency`. They have
+  no aliases.
+- **Where it is stored.** `SourcingRecord.supplier_suggested_price`, outside
+  `Product`.
+- **Status.** A usable value is INFERRED (never VERIFIED), with the declared
+  currency as its unit.
+- **Unusable values.** Zero, negative, non-numeric and unknown currency are
+  INVALID. They keep their raw cells and raise a WARNING.
+- **Empty cell.** NOT_FOUND, never 0.
+- **Where it appears.** In the snapshot, the API, both exports, the preview
+  group, a Catalog column and a Product Detail panel in `frontend-next/`.
+- **No effect on decisions.** Decisions, reasons, profit and ROI are identical
+  with and without the columns (test). `processing/` never references the field
+  (test).
+- **Storage.** No migration: the snapshot is JSON in SQLite and JSONB in
+  Supabase.
+- **ADR-053** amends ADR-046 §20.1 for this single field. S5 (zero is invalid)
+  and S6 (no currency case folding) await user review.
+
+**GOLDEN:** 11/24 → 12/24 RECOVERED (item 17; see the parity matrix §25).
+ADR-040 (44/68, 17/68) is not re-measured here.
+
+**Git integration.** Bundle
+`/srv/juval-exchange/outbox/juval-a174825..b820d5a.bundle`
+(`a174825..master`, head `b820d5a`, 34 commits), with SHA-256
+`5140c535f378874718f1acf33677689d549376defcbf56f8a4115063ce7b4b33`.
+`git bundle verify` passed, and a fast-forward of a disposable clone of the seed
+passed too. It was not imported into the operational repository and nothing was
+pushed. The GOLDEN 17 commits came after the bundle and are not in it.
+
 ## 2026-10-26 — frontend-next shell overflow and favicon fixed
 
 **IMPLEMENTED (UX stabilization; no functional change).** Both shell findings
