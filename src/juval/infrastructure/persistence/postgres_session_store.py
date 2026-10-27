@@ -82,61 +82,134 @@ def _require_driver():
     return psycopg
 
 
-def verify_session_database(dsn: str) -> None:
-    """Read-only startup check of the selected database and ADR-036 boundary.
+_SESSION_CRUD = {
+    "identity_sessions": ("SELECT", "INSERT", "UPDATE", "DELETE"),
+    "identity_oauth_transactions": ("SELECT", "INSERT", "DELETE"),
+}
 
-    Does not read rows, create tables, or run migrations. Missing tables,
-    incompatible columns/digest keys, non-owner roles, disabled/forced RLS or any policy
-    abort startup. Driver diagnostics may contain credentials: suppress them.
-    Connection and SQL waits are bounded independently.
+
+def _verify_session_runtime_boundary(conn) -> None:
+    """Check only the identity runtime boundary; Gate B2 audits wider capabilities."""
+    role = conn.execute(
+        "select current_user, session_user, rolsuper, rolbypassrls, "
+        "rolcreatedb, rolcreaterole, rolreplication, rolcanlogin, "
+        "current_setting('server_version_num')::integer, "
+        "exists (select 1 from pg_auth_members m "
+        "where m.member = r.oid or m.roleid = r.oid) "
+        "from pg_roles r where r.rolname = current_user"
+    ).fetchone()
+    if (
+        role is None
+        or role[:8] != ("juval_backend", "juval_backend", False, False, False, False, False, True)
+        or role[9] is not False
+    ):
+        raise RuntimeError("session runtime role does not satisfy ADR-048")
+    version = role[8]
+    if conn.execute("select has_schema_privilege(current_user, 'public', 'USAGE')").fetchone() != (True,):
+        raise RuntimeError("session schema is inaccessible")
+    rows = conn.execute(
+        "select c.relname, c.relrowsecurity, c.relforcerowsecurity, "
+        "c.relowner = (select oid from pg_roles where rolname = current_user), "
+        "c.oid = to_regclass(c.relname) "
+        "from pg_class c join pg_namespace n on n.oid = c.relnamespace "
+        "where n.nspname = 'public' and c.relkind = 'r' and c.relname = any(%s)",
+        (list(_SESSION_CRUD),),
+    ).fetchall()
+    # The adapters use unqualified names: reject search_path shadowing as well.
+    if (
+        len(rows) != 2
+        or {row[0] for row in rows} != set(_SESSION_CRUD)
+        or any(row[1:] != (True, False, False, True) for row in rows)
+    ):
+        raise RuntimeError("session tables do not satisfy ADR-048")
+
+    expected_policies = set()
+    for table, commands in _SESSION_CRUD.items():
+        for command in commands:
+            expected_policies.add((
+                table, "juval_backend_" + command.lower(), "PERMISSIVE",
+                ("juval_backend",), command,
+                "true" if command != "INSERT" else None,
+                "true" if command in ("INSERT", "UPDATE") else None,
+            ))
+    policies = conn.execute(
+        "select tablename, policyname, permissive, roles, cmd, qual, with_check "
+        "from pg_policies where schemaname = 'public' and tablename = any(%s)",
+        (list(_SESSION_CRUD),),
+    ).fetchall()
+    observed_policies = {
+        (table, name, permissive, tuple(roles), command, qual, check)
+        for table, name, permissive, roles, command, qual, check in policies
+    }
+    if len(policies) != len(expected_policies) or observed_policies != expected_policies:
+        raise RuntimeError("session runtime policies do not satisfy ADR-048")
+
+    privileges = ["SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"]
+    if version >= 170000:
+        privileges.append("MAINTAIN")
+    for table, commands in _SESSION_CRUD.items():
+        # Effective privileges include PUBLIC and inherited grants, unlike ACL inspection.
+        effective = conn.execute(
+            "select privilege, has_table_privilege(current_user, %s, privilege) "
+            "from unnest(%s::text[]) as p(privilege)",
+            ("public." + table, privileges),
+        ).fetchall()
+        if len(effective) != len(privileges) or dict(effective) != {
+            privilege: privilege in commands for privilege in privileges
+        }:
+            raise RuntimeError("session runtime privileges do not satisfy ADR-048")
+
+
+def verify_session_database(dsn: str) -> None:
+    """Bounded, read-only startup check of the ADR-048 identity runtime boundary.
+
+    No token rows, migrations or repairs. Require non-owner juval_backend,
+    exact command policies/effective CRUD, columns and digest primary keys.
+    Wider capability/default-privilege auditing belongs to Gate B2.
+    Driver diagnostics may contain credentials: suppress them.
     """
     try:
-        with _require_driver().connect(dsn, connect_timeout=5) as conn:
-            conn.execute("set transaction read only")
-            conn.execute("set local statement_timeout = '5s'")
-            rows = conn.execute(
-                "select relrowsecurity, relforcerowsecurity, "
-                "relowner = (select oid from pg_roles where rolname = current_user), "
-                "not exists (select 1 from pg_policy where polrelid = c.oid) "
-                "from pg_class c where c.oid in "
-                "(to_regclass('identity_sessions'), to_regclass('identity_oauth_transactions')) "
-                "and relkind = 'r'"
-            ).fetchall()
-            if len(rows) != 2 or any(row != (True, False, True, True) for row in rows):
-                raise RuntimeError("session schema does not satisfy ADR-036")
-            # Both upserts and single-use transaction custody require a valid,
-            # nondeferrable primary key on exactly the digest column.
-            for table, column in (
-                ("identity_sessions", "session_digest"),
-                ("identity_oauth_transactions", "transaction_digest"),
-            ):
-                key_count = conn.execute(
+        with _require_driver().connect(dsn, connect_timeout=5, autocommit=False) as conn:
+            try:
+                conn.execute("set transaction read only")
+                conn.execute("set local statement_timeout = '5s'")
+                if conn.execute("show transaction_read_only").fetchone() != ("on",):
+                    raise RuntimeError("session readiness transaction is not read-only")
+                _verify_session_runtime_boundary(conn)
+                # Preserve the ADR-036 digest-key and column compatibility checks.
+                for table, column in (
+                    ("identity_sessions", "session_digest"),
+                    ("identity_oauth_transactions", "transaction_digest"),
+                ):
+                    key_count = conn.execute(
                     "select count(*) from pg_constraint c "
                     "join pg_attribute a on a.attrelid = c.conrelid "
                     "join pg_index i on i.indexrelid = c.conindid "
                     "where c.conrelid = to_regclass(%s) and c.contype = 'p' "
                     "and not c.condeferrable and c.convalidated and i.indisvalid "
                     "and a.attname = %s and c.conkey = array[a.attnum]",
-                    (table, column),
-                ).fetchone()[0]
-                if key_count != 1:
-                    raise RuntimeError("session digest primary key is missing or incompatible")
-            # Resolve every column used by the adapters without reading tokens.
-            conn.execute(
+                        ("public." + table, column),
+                    ).fetchone()[0]
+                    if key_count != 1:
+                        raise RuntimeError("session digest primary key is missing or incompatible")
+                # Resolve every column used by the adapters without reading tokens.
+                conn.execute(
                 "select session_digest, subject, roles, csrf_digest, "
                 "access_token_ciphertext, refresh_token_ciphertext, crypto_key_id, "
                 "access_token_expires_at, created_at, last_seen_at, expires_at, "
                 "revoked_at, refresh_generation from identity_sessions limit 0"
-            )
-            conn.execute(
+                )
+                conn.execute(
                 "select transaction_digest, state_digest, nonce_digest, "
                 "code_verifier_ciphertext, crypto_key_id, redirect_uri, return_to, "
                 "created_at, expires_at from identity_oauth_transactions limit 0"
-            )
+                )
+            finally:
+                conn.rollback()
     except Exception:
         raise RuntimeError(
             "durable session database readiness failed; verify connectivity, migration, "
-            "table ownership and zero-policy RLS (ADR-036)"
+            "non-owner runtime role, effective CRUD and explicit RLS policies (ADR-048)"
         ) from None
 
 

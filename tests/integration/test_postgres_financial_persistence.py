@@ -357,7 +357,7 @@ def test_financial_api_reads_postgres_and_reports_a_missing_migration(tmp_path, 
     ref = document.evidence.record_reference
     monkeypatch.setenv("JUVAL_RUN_STORAGE_DIR", str(tmp_path))
     monkeypatch.setenv("JUVAL_EXECUTION_STORE", "supabase")
-    monkeypatch.setenv("JUVAL_SUPABASE_DB_URL", dsn)                                   # the disposable schema
+    monkeypatch.setenv("JUVAL_RUNTIME_DB_URL", dsn)                                    # the disposable schema
     client = TestClient(app, raise_server_exceptions=False)
     body = client.get(f"/api/v1/runs/run-A/records/{ref}/financial").json()
     assert body["financial_document"] == {"format": "juval.adr047.financial-record", "version": 1,
@@ -382,7 +382,7 @@ def test_api_writes_and_batch_reads_financial_documents_on_postgres(tmp_path, ds
 
     monkeypatch.setenv("JUVAL_RUN_STORAGE_DIR", str(tmp_path / "runs"))
     monkeypatch.setenv("JUVAL_EXECUTION_STORE", "supabase")
-    monkeypatch.setenv("JUVAL_SUPABASE_DB_URL", dsn)                                   # the disposable schema
+    monkeypatch.setenv("JUVAL_RUNTIME_DB_URL", dsn)                                    # the disposable schema
     monkeypatch.delenv("JUVAL_MAX_UPLOAD_BYTES", raising=False)
     ids = iter(("pg-api-1", "pg-api-2"))
     monkeypatch.setattr(service, "new_execution_id", lambda: next(ids))

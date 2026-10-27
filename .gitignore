@@ -55,3 +55,6 @@ juval_runs.db
 # not JUVAl project configuration. CLAUDE.md at the repo root is the tracked
 # contract.
 .claude/
+
+# Gate B2 canonical evidence: private local output, never source.
+/.local-evidence/gate_b2/

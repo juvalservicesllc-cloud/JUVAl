@@ -277,11 +277,10 @@ def build_stores() -> tuple[SessionStore, OAuthTransactionStore]:
             "(expected 'postgres' or 'memory')"
         )
 
-    dsn = os.environ.get("JUVAL_SESSION_DB_URL") or os.environ.get("JUVAL_SUPABASE_DB_URL")
+    dsn = os.environ.get("JUVAL_RUNTIME_DB_URL")
     if not dsn:
         raise RuntimeError(
-            "JUVAL_SESSION_STORE=postgres requires JUVAL_SESSION_DB_URL (or "
-            "JUVAL_SUPABASE_DB_URL) to be set"
+            "JUVAL_SESSION_STORE=postgres requires JUVAL_RUNTIME_DB_URL to be set"
         )
     try:
         cipher = TokenCipher.from_environment()

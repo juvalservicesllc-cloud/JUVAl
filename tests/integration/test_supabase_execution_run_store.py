@@ -1,5 +1,5 @@
 """Real integration test for SupabaseExecutionRunStore (ADR-017/ADR-019)
-— runs only when JUVAL_SUPABASE_DB_URL points at a live Postgres/Supabase
+— runs only when JUVAL_RUNTIME_DB_URL points at a live Postgres/Supabase
 instance. Connects for real (psycopg), no mocks/SQLite/fakes. Every test
 row is deleted via a DELETE scoped to its own execution_id in a finally
 block -- SupabaseExecutionRunStore intentionally exposes no delete
@@ -25,11 +25,11 @@ from juval.domain.provenance import FieldValue
 from juval.domain.sourcing_record import SourcingRecord
 from juval.infrastructure.persistence.supabase_execution_run_store import SupabaseExecutionRunStore
 
-DB_URL = os.environ.get("JUVAL_SUPABASE_DB_URL")
+DB_URL = os.environ.get("JUVAL_RUNTIME_DB_URL")
 
 pytestmark = pytest.mark.skipif(
     not DB_URL,
-    reason="JUVAL_SUPABASE_DB_URL not set -- no live Supabase project to test against",
+    reason="JUVAL_RUNTIME_DB_URL not set -- no runtime database configured",
 )
 
 

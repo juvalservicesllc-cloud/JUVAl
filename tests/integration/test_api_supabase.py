@@ -33,11 +33,11 @@ psycopg = pytest.importorskip("psycopg")
 from juval.infrastructure.persistence.supabase_execution_run_store import SupabaseExecutionRunStore
 from juval.interfaces.api.main import _execution_run_store, app
 
-DB_URL = os.environ.get("JUVAL_SUPABASE_DB_URL")
+DB_URL = os.environ.get("JUVAL_RUNTIME_DB_URL")
 
 pytestmark = pytest.mark.skipif(
     not DB_URL,
-    reason="JUVAL_SUPABASE_DB_URL not set -- no live Supabase project to test against",
+    reason="JUVAL_RUNTIME_DB_URL not set -- no runtime database configured",
 )
 
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "sample_sourcing_TEST_DATA.xlsx"
@@ -159,6 +159,6 @@ def test_api_does_not_persist_to_supabase_without_persist_flag(supabase_client):
 def test_supabase_mode_without_dsn_fails_fast(monkeypatch):
     """A selected mode missing its connection variable must not degrade."""
     monkeypatch.setenv("JUVAL_EXECUTION_STORE", "supabase")
-    monkeypatch.delenv("JUVAL_SUPABASE_DB_URL", raising=False)
-    with pytest.raises(RuntimeError, match="JUVAL_SUPABASE_DB_URL"):
+    monkeypatch.delenv("JUVAL_RUNTIME_DB_URL", raising=False)
+    with pytest.raises(RuntimeError, match="JUVAL_RUNTIME_DB_URL"):
         _execution_run_store()
