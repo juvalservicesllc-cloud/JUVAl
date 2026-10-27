@@ -160,8 +160,8 @@ def _execution_run_store() -> Optional[ExecutionRunStore]:
 
     JUVAL_EXECUTION_STORE ("sqlite"|"supabase"), when set, is the sole
     source of truth -- it always wins over which connection variable
-    happens to be present, so a stray JUVAL_SUPABASE_DB_URL left over in
-    a local .env can never silently redirect a "sqlite" selection (or
+    happens to be present, so a stray database credential can never silently
+    redirect a "sqlite" selection (or
     vice versa). Unset JUVAL_EXECUTION_STORE keeps the pre-existing
     legacy behavior: SqliteExecutionRunStore if JUVAL_EXECUTION_DB_PATH
     is set, else no store configured. Missing the variable a selected
@@ -181,9 +181,9 @@ def _execution_run_store() -> Optional[ExecutionRunStore]:
         return SqliteExecutionRunStore(db_path)
 
     if mode == "supabase":
-        db_url = os.environ.get("JUVAL_SUPABASE_DB_URL")
+        db_url = os.environ.get("JUVAL_RUNTIME_DB_URL")
         if not db_url:
-            raise RuntimeError("JUVAL_EXECUTION_STORE=supabase requires JUVAL_SUPABASE_DB_URL to be set")
+            raise RuntimeError("JUVAL_EXECUTION_STORE=supabase requires JUVAL_RUNTIME_DB_URL to be set")
         return SupabaseExecutionRunStore(db_url)
 
     raise RuntimeError(f"JUVAL_EXECUTION_STORE has an unrecognized value: {mode!r} (expected 'sqlite' or 'supabase')")

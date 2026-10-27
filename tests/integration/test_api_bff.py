@@ -496,10 +496,10 @@ def test_startup_fails_closed_when_the_durable_store_is_unconfigured(unconfigure
     monkeypatch = unconfigured
     _oidc_browser_env(monkeypatch)
     monkeypatch.setenv("JUVAL_SESSION_STORE", "postgres")
-    monkeypatch.delenv("JUVAL_SESSION_DB_URL", raising=False)
+    monkeypatch.delenv("JUVAL_RUNTIME_DB_URL", raising=False)
     monkeypatch.delenv("JUVAL_SUPABASE_DB_URL", raising=False)
 
-    with pytest.raises(RuntimeError, match="JUVAL_SESSION_DB_URL"):
+    with pytest.raises(RuntimeError, match="JUVAL_RUNTIME_DB_URL"):
         with TestClient(app):
             pass  # pragma: no cover - startup must raise before this runs
 
@@ -508,7 +508,7 @@ def test_startup_fails_closed_without_an_encryption_key(unconfigured):
     monkeypatch = unconfigured
     _oidc_browser_env(monkeypatch)
     monkeypatch.setenv("JUVAL_SESSION_STORE", "postgres")
-    monkeypatch.setenv("JUVAL_SESSION_DB_URL", "postgresql://unused/db")
+    monkeypatch.setenv("JUVAL_RUNTIME_DB_URL", "postgresql://unused/db")
     monkeypatch.delenv("JUVAL_SESSION_ENCRYPTION_KEYS", raising=False)
 
     with pytest.raises(RuntimeError, match="cannot start"):
@@ -536,7 +536,7 @@ def test_startup_never_downgrades_a_configured_postgres_store_to_memory(unconfig
     monkeypatch = unconfigured
     _oidc_browser_env(monkeypatch)
     monkeypatch.setenv("JUVAL_SESSION_STORE", "postgres")
-    monkeypatch.delenv("JUVAL_SESSION_DB_URL", raising=False)
+    monkeypatch.delenv("JUVAL_RUNTIME_DB_URL", raising=False)
     monkeypatch.delenv("JUVAL_SUPABASE_DB_URL", raising=False)
 
     with pytest.raises(RuntimeError):

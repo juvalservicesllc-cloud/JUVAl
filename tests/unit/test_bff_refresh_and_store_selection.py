@@ -213,17 +213,18 @@ def test_memory_store_allowed_under_oidc_with_the_explicit_opt_in(monkeypatch):
 def test_postgres_without_a_dsn_fails_closed(monkeypatch):
     monkeypatch.setenv("JUVAL_AUTH_MODE", "oidc")
     monkeypatch.setenv("JUVAL_SESSION_STORE", "postgres")
-    monkeypatch.delenv("JUVAL_SESSION_DB_URL", raising=False)
-    monkeypatch.delenv("JUVAL_SUPABASE_DB_URL", raising=False)
+    monkeypatch.delenv("JUVAL_RUNTIME_DB_URL", raising=False)
+    monkeypatch.setenv("JUVAL_SESSION_DB_URL", "postgresql://legacy-session:JUVAL-SANITIZED-FIXTURE@localhost/db")
+    monkeypatch.setenv("JUVAL_SUPABASE_DB_URL", "postgresql://admin:synthetic@localhost/db")
     auth_module.reset_for_tests()
-    with pytest.raises(RuntimeError, match="JUVAL_SESSION_DB_URL"):
+    with pytest.raises(RuntimeError, match="JUVAL_RUNTIME_DB_URL"):
         bff.build_stores()
 
 
 def test_postgres_without_an_encryption_key_fails_closed(monkeypatch):
     monkeypatch.setenv("JUVAL_AUTH_MODE", "oidc")
     monkeypatch.setenv("JUVAL_SESSION_STORE", "postgres")
-    monkeypatch.setenv("JUVAL_SESSION_DB_URL", "postgresql://unused/db")
+    monkeypatch.setenv("JUVAL_RUNTIME_DB_URL", "postgresql://runtime:synthetic@localhost/db")
     monkeypatch.delenv("JUVAL_SESSION_ENCRYPTION_KEYS", raising=False)
     auth_module.reset_for_tests()
     with pytest.raises(RuntimeError, match="cannot start"):
@@ -293,7 +294,7 @@ def test_bearer_only_deployment_needs_no_session_store(monkeypatch):
     for name in bff._BFF_ENV_VARS:
         monkeypatch.delenv(name, raising=False)
     monkeypatch.delenv("JUVAL_SESSION_STORE", raising=False)
-    monkeypatch.delenv("JUVAL_SESSION_DB_URL", raising=False)
+    monkeypatch.delenv("JUVAL_RUNTIME_DB_URL", raising=False)
     monkeypatch.delenv("JUVAL_SUPABASE_DB_URL", raising=False)
     auth_module.reset_for_tests()
 
@@ -308,11 +309,11 @@ def test_an_explicitly_named_store_is_checked_even_when_bearer_only(monkeypatch)
     for name in bff._BFF_ENV_VARS:
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("JUVAL_SESSION_STORE", "postgres")
-    monkeypatch.delenv("JUVAL_SESSION_DB_URL", raising=False)
+    monkeypatch.delenv("JUVAL_RUNTIME_DB_URL", raising=False)
     monkeypatch.delenv("JUVAL_SUPABASE_DB_URL", raising=False)
     auth_module.reset_for_tests()
 
-    with pytest.raises(RuntimeError, match="JUVAL_SESSION_DB_URL"):
+    with pytest.raises(RuntimeError, match="JUVAL_RUNTIME_DB_URL"):
         bff.build_stores()
 
 
@@ -322,7 +323,7 @@ def test_postgres_readiness_failure_aborts_selection_without_exposing_dsn(monkey
 
     monkeypatch.setenv("JUVAL_AUTH_MODE", "oidc")
     monkeypatch.setenv("JUVAL_SESSION_STORE", "postgres")
-    monkeypatch.setenv("JUVAL_SESSION_DB_URL", "postgresql://unused/db")
+    monkeypatch.setenv("JUVAL_RUNTIME_DB_URL", "postgresql://runtime:synthetic@localhost/db")
     monkeypatch.setattr(bff.TokenCipher, "from_environment", lambda: object())
     auth_module.reset_for_tests()
 

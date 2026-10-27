@@ -393,6 +393,12 @@ def test_migration_and_rollback_are_repeatable_and_isolated(session_db_dsn):
 
 @pytest.mark.parametrize("defect", ["none", "missing", "rls_off", "forced", "policy", "column"])
 def test_startup_database_readiness_rejects_unsafe_schema(session_db_dsn, defect):
+    """ADR-048 supersedes the old positive owner/zero-policy expectation.
+
+    The ADR-036 owner fixture is no longer a valid startup baseline, even
+    without additional defects. Compliant-boundary defects are covered by
+    test_postgres_session_readiness using simulated catalogs.
+    """
     import psycopg
     from juval.infrastructure.persistence.postgres_session_store import verify_session_database
 
@@ -407,14 +413,11 @@ def test_startup_database_readiness_rejects_unsafe_schema(session_db_dsn, defect
             conn.execute("create policy unexpected on identity_sessions using (true)")
         elif defect == "column":
             conn.execute("alter table identity_sessions drop column csrf_digest")
-    if defect == "none":
+    with pytest.raises(RuntimeError, match="readiness failed"):
         verify_session_database(session_db_dsn)
-    else:
-        with pytest.raises(RuntimeError, match="readiness failed"):
-            verify_session_database(session_db_dsn)
 
 
-def test_startup_database_readiness_requires_the_table_owner(session_db_dsn):
+def test_startup_database_readiness_rejects_unknown_select_only_role(session_db_dsn):
     import psycopg
     from psycopg import sql
     from psycopg.conninfo import make_conninfo, conninfo_to_dict
