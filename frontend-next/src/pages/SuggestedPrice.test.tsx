@@ -6,8 +6,8 @@ import { ImportPreview } from "./ImportPreview"
 import { ProductDetailPage } from "./ProductDetailPage"
 import { SuggestedPriceCell, SuggestedPricePanel } from "./SuggestedPrice"
 
-const provenance = { source: "price.csv", source_type: "SUPPLIER_FILE", verification_status: "INFERRED", retrieved_at: "2026-10-27T15:00:00+00:00",
-  method: "declared_in_uploaded_file", evidence: "declared in uploaded file as the supplier's suggested price; not verified; not a selling price or cost",
+const provenance = { source: "price.csv", source_type: "USER_INPUT", verification_status: "INFERRED", retrieved_at: "2026-10-27T15:00:00+00:00",
+  method: "declared_in_uploaded_file", evidence: "declared in uploaded file as the supplier's suggested price; author not accredited; not verified; not a selling price or cost",
   source_reference: "row=2;column=supplier_suggested_price" }
 const doc = (amount: unknown, currency_raw: string | null, diagnostics: unknown[] = []) => ({ format: "juval.supplier-suggested-price", version: 1, amount, currency_raw, diagnostics })
 const none = { value: null, status: null }
@@ -35,7 +35,8 @@ describe("The supplier suggested price is shown as evidence, never as a price or
     expect(panel).toHaveTextContent("24.99 EUR")
     expect(panel).not.toHaveTextContent("$")                                   // no currency is assumed
     expect(within(panel).getByLabelText("Status: INFERRED")).toBeInTheDocument()
-    expect(panel).toHaveTextContent("SUPPLIER_FILE · price.csv · row=2;column=supplier_suggested_price")
+    expect(panel).toHaveTextContent("USER_INPUT · price.csv · row=2;column=supplier_suggested_price")
+    expect(panel).toHaveTextContent("Its author is not accredited")
     expect(panel).toHaveTextContent("declared_in_uploaded_file")
     expect(panel).not.toHaveTextContent("VERIFIED")
   })

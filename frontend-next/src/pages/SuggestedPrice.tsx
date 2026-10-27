@@ -4,9 +4,11 @@ import { ProvenanceBadge } from "./shared"
 /**
  * Supplier suggested price (ADR-053, GOLDEN 17): what the uploaded file
  * declared as the supplier's suggested resale price. Evidence only -- not the
- * selling price used for profit, not the cost, never a decision input. The
- * amount is shown exactly as stored with its declared currency code: no
- * conversion, no rounding through a float, no "$" assumed.
+ * selling price used for profit, not the cost, never a decision input. Who
+ * wrote the file is not accredited, so the value is never attributed to the
+ * supplier as its source (USER_INPUT, ADR-053 S2). The amount is shown exactly
+ * as stored with its declared currency code: no conversion, no rounding
+ * through a float, no "$" assumed.
  */
 
 const STATE_TEXT: Record<string, string> = {
@@ -20,7 +22,7 @@ export function SuggestedPriceCell({ record }: { record: RecordOut }) {
     return <span className="local-note" title={STATE_TEXT[record.supplier_suggested_price_state ?? "NOT_CAPTURED"]}>—</span>
   }
   const shown = amount.status === "INFERRED" ? `${amount.value} ${amount.unit}` : amount.status === "INVALID" ? "invalid" : "no value"
-  return <span className="fv" title="Declared by the supplier in the uploaded file; not verified and not used for this decision">
+  return <span className="fv" title="Declared in the uploaded file as the supplier's suggested price; author not accredited, not verified, not used for this decision">
     {shown} <ProvenanceBadge status={amount.status} />
   </span>
 }
@@ -30,7 +32,7 @@ export function SuggestedPricePanel({ record }: { record: RecordOut }) {
   const amount = document?.amount
   return <section className="panel" aria-label="Supplier suggested price">
     <h2>Supplier suggested price <span className="not-used">Not used for this decision</span></h2>
-    <p>What the uploaded file declared as the supplier's suggested resale price. It is not verified, it is not the selling price used for profit and it is not the cost.</p>
+    <p>What the uploaded file declared as the supplier's suggested resale price. Its author is not accredited and it is not verified; it is not the selling price used for profit and it is not the cost.</p>
     {!document || !amount ? <p className="local-note">{STATE_TEXT[record.supplier_suggested_price_state ?? "NOT_CAPTURED"]}</p> : <>
       <dl>
         <dt>Declared amount</dt>

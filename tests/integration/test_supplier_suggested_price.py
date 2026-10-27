@@ -9,6 +9,7 @@ import csv
 import io
 import json
 import pathlib
+from dataclasses import replace
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -87,6 +88,28 @@ def test_decisions_reasons_profit_and_roi_are_identical_with_and_without_the_col
     assert [record_to_snapshot(r)["decision"] for r in without] == ["REVIEW", "REVIEW", "PASS"]
 
 
+def test_a_buy_stays_a_buy_and_nothing_else_moves_when_the_price_is_attached():
+    """The importer cannot reach BUY (no demand column feeds the engine, D7), so
+    BUY is proven on a record built for the engine directly."""
+    from juval.domain.costs import CostInputs
+    from juval.domain.product import Demand, Identification, Price, Product, SellingPriceSource
+    from juval.domain.sourcing_record import SourcingRecord
+    from juval.processing.pipeline import process_record
+
+    common = dict(source="engine-test", method="m", retrieved_at=NOW)
+    price = FieldValue.verified(Decimal("30"), **common)
+    product = Product(identification=Identification(asin=FieldValue.verified("B000000001", **common), marketplace="US"),
+                      price=Price(current_buy_box=price, selling_price_used=price, selling_price_source=SellingPriceSource.CURRENT_BUY_BOX),
+                      demand=Demand(estimated_monthly_sales=FieldValue.verified(500, **common)))
+    plain = SourcingRecord(record_ref="row_1", product=product, costs=CostInputs(cog=Decimal("3")))
+    suggested = SupplierSuggestedPrice(FieldValue.inferred(Decimal("99.99"), unit="USD", source_type=SourceType.USER_INPUT, **common))
+    a = process_record(plain, THRESHOLDS, fees=FEES, now=NOW)
+    b = process_record(replace(plain, supplier_suggested_price=suggested), THRESHOLDS, fees=FEES, now=NOW)
+    sa, sb = record_to_snapshot(a), record_to_snapshot(b)
+    assert sa["decision"] == "BUY"
+    assert {k: v for k, v in sa.items() if k != "supplier_suggested_price"} == {k: v for k, v in sb.items() if k != "supplier_suggested_price"}
+
+
 def test_processing_never_reads_the_suggested_price():
     root = pathlib.Path(__file__).resolve().parents[2] / "src" / "juval" / "processing"
     for source in root.glob("*.py"):
@@ -103,10 +126,11 @@ def test_a_valid_decimal_is_inferred_with_its_currency_and_row_column_provenance
     amount = document["amount"]
     assert (amount["value"], amount["unit"], amount["status"], amount["raw_value"]) == ("24.99", "USD", "INFERRED", None)
     provenance = amount["provenance"]
-    assert provenance["source_type"] == "SUPPLIER_FILE" and provenance["source"] == "price.csv"
+    # The uploaded file's author is not accredited: never attributed to the supplier as a source (ADR-052 §3.6).
+    assert provenance["source_type"] == "USER_INPUT" and provenance["source"] == "price.csv"
     assert provenance["method"] == "declared_in_uploaded_file"
     assert provenance["source_reference"] == "row=2;column=supplier_suggested_price"
-    assert "not verified" in provenance["evidence"] and provenance["retrieved_at"] == NOW.isoformat()
+    assert "author not accredited; not verified" in provenance["evidence"] and provenance["retrieved_at"] == NOW.isoformat()
     assert record.supplier_suggested_price.amount.value == Decimal("24.99")
     assert document["diagnostics"] == [] and not any(i.code.startswith("SUGGESTED_PRICE") for i in record.issues)
 
@@ -117,9 +141,20 @@ def test_the_original_header_is_the_provenance_column(tmp_path):
     assert (document["amount"]["value"], document["amount"]["unit"]) == ("10", "EUR")
 
 
-def test_the_amount_is_kept_exactly_as_declared(tmp_path):
-    _, document = capture(tmp_path, **{**PRICE, "supplier_suggested_price": "12.3450"})
-    assert document["amount"]["value"] == "12.3450"                  # not rounded, not normalised
+@pytest.mark.parametrize("raw", ["12.3450", "1234567890.123456789012345678", "0.0001"])
+def test_the_amount_is_kept_exactly_as_declared(tmp_path, raw):
+    record, document = capture(tmp_path, **{**PRICE, "supplier_suggested_price": raw})
+    assert document["amount"]["value"] == raw                         # not rounded, truncated or normalised
+    assert record.supplier_suggested_price.amount.value == Decimal(raw)
+
+
+def test_raw_cells_keep_their_text_as_received(tmp_path):
+    _, document = capture(tmp_path, **{"supplier_suggested_price": " $5 ", "supplier_suggested_price_currency": " usd "})
+    assert document["amount"]["raw_value"] == " $5 " and document["currency_raw"] == " usd "
+    assert [d["raw_value"] for d in document["diagnostics"]] == [" $5 ", " usd "]
+    # Surrounding whitespace alone is not a defect, as for every other column.
+    _, padded = capture(tmp_path, **{"supplier_suggested_price": " 24.99 ", "supplier_suggested_price_currency": " USD "})
+    assert (padded["amount"]["value"], padded["amount"]["unit"], padded["amount"]["status"]) == ("24.99", "USD", "INFERRED")
 
 
 @pytest.mark.parametrize("raw", ["0", "0.00", "-0", "-5", "-0.01"])
@@ -178,6 +213,21 @@ def test_an_unknown_currency_is_refused_and_kept_raw(tmp_path, currency):
     assert codes(document) == ["SUGGESTED_PRICE_CURRENCY_INVALID"]
     assert document["diagnostics"][0]["raw_value"] == currency
     assert document["diagnostics"][0]["column"] == "supplier_suggested_price_currency"
+
+
+def test_a_currency_only_file_declares_no_amount(tmp_path):
+    record, document = capture(tmp_path, supplier_suggested_price_currency="USD")
+    assert (document["amount"]["status"], document["currency_raw"], document["diagnostics"]) == ("NOT_FOUND", "USD", [])
+    assert record_to_snapshot(record)["decision"] == "REVIEW"
+
+
+def test_a_duplicate_currency_column_uses_the_first_and_reports_the_second(tmp_path):
+    path = tmp_path / "dup.csv"
+    path.write_text("marketplace,asin,cost,selling_price,supplier_suggested_price,supplier_suggested_price_currency,"
+                    "supplier_suggested_price_currency\nUS,B000000001,3,30,24.99,USD,EUR\n")
+    result = import_file(path, now=NOW)
+    assert result.records[0].supplier_suggested_price.amount.unit == "USD"
+    assert any(i.code == "DUPLICATE_COLUMN" and i.field == "supplier_suggested_price_currency" for i in result.issues)
 
 
 def test_every_problem_of_a_row_is_reported(tmp_path):
