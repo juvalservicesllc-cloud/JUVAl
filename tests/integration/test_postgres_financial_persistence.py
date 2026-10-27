@@ -435,7 +435,7 @@ def test_batch_children_store_their_own_documents_on_postgres(tmp_path, dsn, sto
 
     monkeypatch.setenv("JUVAL_RUN_STORAGE_DIR", str(tmp_path / "runs"))
     monkeypatch.setenv("JUVAL_EXECUTION_STORE", "supabase")
-    monkeypatch.setenv("JUVAL_SUPABASE_DB_URL", dsn)                                   # the disposable schema
+    monkeypatch.setenv("JUVAL_RUNTIME_DB_URL", dsn)                                    # the disposable schema
     monkeypatch.delenv("JUVAL_MAX_UPLOAD_BYTES", raising=False)
     ids = iter(f"pg-batch-{n}" for n in range(10))
     monkeypatch.setattr(service, "new_execution_id", lambda: next(ids))
@@ -512,7 +512,7 @@ def test_batch_endpoint_atomicity_on_postgres(scenario, tmp_path, dsn, store, mo
 
     monkeypatch.setenv("JUVAL_RUN_STORAGE_DIR", str(tmp_path / "runs"))
     monkeypatch.setenv("JUVAL_EXECUTION_STORE", "supabase")
-    monkeypatch.setenv("JUVAL_SUPABASE_DB_URL", dsn)                                   # the disposable schema
+    monkeypatch.setenv("JUVAL_RUNTIME_DB_URL", dsn)                                    # the disposable schema
     monkeypatch.delenv("JUVAL_MAX_UPLOAD_BYTES", raising=False)
     monkeypatch.setattr(service, "now_utc", lambda: datetime(2026, 3, 1, 12, tzinfo=timezone.utc))
     monkeypatch.setattr(service, "new_execution_id", iter(f"api-run-{n}" for n in range(100)).__next__)

@@ -20,8 +20,12 @@
   aislamiento de fallos de persistencia/exportación por archivo), ADR-047
   (evidencia financiera, opt-in en batches desde 2026-10-16), ADR-013/017/019
   (persistencia de runs y records), ADR-026 (CSV).
-- Numeración: ADR-048 no existe en este repositorio y ADR-049 identifica el
-  aislamiento del agente fuera de él; se usa 050 para no colisionar.
+- Numeración: ADR-048 (frontera de acceso PostgreSQL, rol runtime
+  `juval_backend`) y ADR-049 proceden de la línea del operador; se usa 050
+  para no colisionar. La persistencia atómica de este ADR (D2) funciona bajo
+  ADR-048 sin cambios: verificado en PostgreSQL desechable el 2026-10-27
+  (batch real como `juval_backend`, fallo en cualquiera de los seis INSERT ⇒
+  0 filas, escenarios de la unidad 1, UPDATE/DELETE/TRUNCATE denegados).
 
 ## 1. Contexto y problema
 

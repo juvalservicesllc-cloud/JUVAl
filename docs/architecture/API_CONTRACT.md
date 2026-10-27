@@ -482,9 +482,10 @@ presente:
 - `JUVAL_EXECUTION_STORE=sqlite` — requiere `JUVAL_EXECUTION_DB_PATH`
   (ruta a un archivo SQLite); si falta, error explícito. Usa
   `SqliteExecutionRunStore` (ADR-013) sin cambios.
-- `JUVAL_EXECUTION_STORE=supabase` — requiere `JUVAL_SUPABASE_DB_URL`
-  (connection string de Postgres, vía el Connection Pooler de
-  Supabase); si falta, error explícito. Usa `SupabaseExecutionRunStore`
+- `JUVAL_EXECUTION_STORE=supabase` — requiere `JUVAL_RUNTIME_DB_URL`
+  (connection string de Postgres del rol runtime `juval_backend` de
+  ADR-048, vía el Connection Pooler de Supabase; nunca recurre a
+  `JUVAL_SUPABASE_DB_URL` ni a un DSN de administración); si falta, error explícito. Usa `SupabaseExecutionRunStore`
   (ADR-017), validado con integración real contra un proyecto Supabase
   (ver `docs/architecture/SUPABASE.md` §1).
 - Cualquier otro valor de `JUVAL_EXECUTION_STORE` — error explícito, no
@@ -495,7 +496,7 @@ presente:
   y `persist=true` devuelve 500 explícito en vez de fallar en silencio.
 - **Producción** (Railway, ADR-018) no debe depender del modo legacy —
   debe fijar `JUVAL_EXECUTION_STORE=supabase` explícitamente junto con
-  `JUVAL_SUPABASE_DB_URL`.
+  `JUVAL_RUNTIME_DB_URL` (ADR-048).
 
 En todos los casos, `run_pipeline()` sigue sin persistir por sí mismo
 (Opción B, vigente) — la selección de store vive enteramente en

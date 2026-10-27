@@ -163,7 +163,8 @@ que exista autenticación (Fase 9) — no se decide aquí.
 | `SUPABASE_URL` | Backend (y frontend, es pública por diseño de Supabase) | — |
 | `SUPABASE_ANON_KEY` | Backend y frontend — es la clave pública, protegida por RLS | — |
 | `SUPABASE_SERVICE_ROLE_KEY` | **Solo backend**, nunca el proceso del navegador | Frontend, `VITE_*`, Git, logs |
-| `JUVAL_SUPABASE_DB_URL` (o el connection string que `SupabaseExecutionRunStore` reciba) | Solo backend | Frontend, Git |
+| `JUVAL_RUNTIME_DB_URL` (DSN del rol runtime `juval_backend`, ADR-048; lo que `SupabaseExecutionRunStore` recibe en la API) | Solo backend | Frontend, Git |
+| `JUVAL_SUPABASE_DB_URL` (solo tests de integración contra un proyecto Supabase vivo; la API no lo lee) | Solo entorno de pruebas | Frontend, Git |
 
 Regla dura, sin excepción: ninguna variable prefijada `VITE_` (o
 equivalente de build-time del frontend) debe contener
