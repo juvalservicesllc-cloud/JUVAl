@@ -306,6 +306,21 @@ def _build_dimension_field(
         )
 
     canonical_unit = CANONICAL_WEIGHT_UNIT if is_weight else CANONICAL_LENGTH_UNIT
+    if normalized <= 0:
+        # A physical size cannot be zero or negative: INVALID with the value
+        # kept, never VERIFIED. Same issue validate_dimensions reports for any
+        # other source (code, level and message unchanged).
+        issues.append(
+            ProcessingIssue(
+                level=IssueLevel.RECORD_ERROR, code=f"IMPOSSIBLE_{field_canonical.upper()}",
+                message=f"{field_canonical} must be positive, got {normalized} {canonical_unit}.",
+                field=field_canonical, record_ref=row_ref,
+            )
+        )
+        return FieldValue.invalid(
+            str(value), source=source, method="direct_read", retrieved_at=now,
+            source_type=SourceType.SUPPLIER_FILE, source_reference=source_reference,
+        )
     return FieldValue.verified(
         normalized, source=source, method="unit_normalized_read", retrieved_at=now,
         source_type=SourceType.SUPPLIER_FILE, unit=canonical_unit, source_reference=source_reference,

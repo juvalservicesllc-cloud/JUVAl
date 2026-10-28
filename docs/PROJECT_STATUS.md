@@ -1,5 +1,22 @@
 # Juval — Project Status
 
+## 2026-10-28 — Zero or negative dimensions are INVALID, not VERIFIED
+
+**IMPLEMENTED (data validation fix; issue contract unchanged).**
+
+Defect: a weight or dimension ≤ 0 stayed VERIFIED, for example "-2 lb VERIFIED"
+in the API. `validate_dimensions` only added an IMPOSSIBLE_* issue beside it.
+
+Fix (`importer.py::_build_dimension_field`): the field is now INVALID and keeps
+its value in `raw_value`. The importer emits the same IMPOSSIBLE_* issue (code,
+level, message and field), and only once. Dimensions do not feed profitability
+or decisions, so results are identical (test).
+
+Tests: `tests/integration/test_impossible_dimensions.py`, 9 tests. 8 of them
+fail without the fix. Targeted gate for the three changes of the day: 45 files
+plus `tests/compliance` give 1125 passed, 93 skipped (86 nginx, 7 live
+Supabase), 0 failed. Docs: EXCEL_PROCESSING.md §4.
+
 ## 2026-10-28 — Risk severity provenance made unambiguous (ADR-020)
 
 **IMPLEMENTED (domain invariant + additive API field; no decision or severity change).**
