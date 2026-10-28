@@ -46,7 +46,7 @@ import juval
 import openpyxl
 from juval.application.batch_persistence import BatchChild, save_batch_with_runs
 from juval.application.import_preview import preview_import
-from juval.application.record_snapshot import record_to_snapshot
+from juval.application.record_snapshot import record_to_snapshot, severity_provenance_cells
 from juval.application.run_pipeline import run_pipeline, run_pipeline_with_financial_evidence
 from juval.domain.execution_run import ExecutionStatus
 from juval.domain.batch import Batch, BatchFile, BatchFileStatus, aggregate_batch_status
@@ -68,7 +68,7 @@ from juval.application.record_snapshot_store import RecordSnapshotQuery
 from juval.application.review_classification import review_classification as classify_review
 from juval.application.demand_evidence import demand_export_cells
 from juval.application.suggested_price_evidence import suggested_price_export_cells
-from juval.infrastructure.excel.exporter import DEMAND_EXPORT_HEADERS, SUGGESTED_PRICE_EXPORT_HEADERS
+from juval.infrastructure.excel.exporter import DEMAND_EXPORT_HEADERS, SEVERITY_PROVENANCE_EXPORT_HEADERS, SUGGESTED_PRICE_EXPORT_HEADERS
 from juval.infrastructure.excel.exporter import append_literal_row, export_excel
 from juval.infrastructure.excel.importer import SUPPORTED_INPUT_SUFFIXES, UnsupportedInputFormat
 from juval.infrastructure.logging.sqlite_execution_run_store import SqliteExecutionRunStore
@@ -764,12 +764,12 @@ async def export_filtered_records(
     workbook = openpyxl.Workbook()
     sheet = workbook.active
     sheet.title = "catalog_export"
-    headers = ("record_ref", "supplier_sku", "asin", "asin_status", "title", "brand", "selling_price", "selling_price_status", "cog", "profit", "profit_status", "roi", "roi_status", "margin", "margin_status", "hazmat_status", "hazmat_severity", "bulky_status", "bulky_severity", "decision", "review_classification", "issue_count", "issues", *DEMAND_EXPORT_HEADERS, *SUGGESTED_PRICE_EXPORT_HEADERS)
+    headers = ("record_ref", "supplier_sku", "asin", "asin_status", "title", "brand", "selling_price", "selling_price_status", "cog", "profit", "profit_status", "roi", "roi_status", "margin", "margin_status", "hazmat_status", "hazmat_severity", "bulky_status", "bulky_severity", "decision", "review_classification", "issue_count", "issues", *DEMAND_EXPORT_HEADERS, *SUGGESTED_PRICE_EXPORT_HEADERS, *SEVERITY_PROVENANCE_EXPORT_HEADERS)
     append_literal_row(sheet, list(headers))
     for record in page.items:
         def value(field): return record.get(field, {}).get("value") if isinstance(record.get(field), dict) else record.get(field)
         def status(field): return record.get(field, {}).get("status") if isinstance(record.get(field), dict) else None
-        append_literal_row(sheet, [record.get("record_ref"), record.get("supplier_sku"), value("asin"), status("asin"), value("title"), value("brand"), value("selling_price"), status("selling_price"), record.get("cog"), value("profit"), status("profit"), value("roi"), status("roi"), value("margin"), status("margin"), record.get("hazmat_status"), record.get("hazmat_severity"), record.get("bulky_status"), record.get("bulky_severity"), record.get("decision"), classify_review(record) or "", record.get("issue_count", 0), " ; ".join(record.get("issues", [])), *demand_export_cells(record), *suggested_price_export_cells(record)])
+        append_literal_row(sheet, [record.get("record_ref"), record.get("supplier_sku"), value("asin"), status("asin"), value("title"), value("brand"), value("selling_price"), status("selling_price"), record.get("cog"), value("profit"), status("profit"), value("roi"), status("roi"), value("margin"), status("margin"), record.get("hazmat_status"), record.get("hazmat_severity"), record.get("bulky_status"), record.get("bulky_severity"), record.get("decision"), classify_review(record) or "", record.get("issue_count", 0), " ; ".join(record.get("issues", [])), *demand_export_cells(record), *suggested_price_export_cells(record), *severity_provenance_cells(record)])
     metadata = workbook.create_sheet("query_metadata")
     append_literal_row(metadata, ["execution_id", execution_id])
     append_literal_row(metadata, ["generated_at", datetime.now(timezone.utc).isoformat()])

@@ -86,3 +86,27 @@ def test_process_record_preserves_prior_issues():
     record = _valid_record().with_issues(ProcessingIssue(level=IssueLevel.WARNING, code="PRIOR", message="from import"))
     result = process_record(record, _thresholds(), fees=_fees(), now=NOW)
     assert any(i.code == "PRIOR" for i in result.issues)
+
+
+def test_a_price_copied_into_selling_price_used_yields_one_negative_price_issue():
+    # The importer's own shape (current_buy_box and selling_price_used are one datum).
+    price = FieldValue.verified(Decimal("-5"), source="s", method="m", retrieved_at=NOW)
+    base = _valid_record()
+    record = SourcingRecord(record_ref="row_1", costs=base.costs, product=Product(
+        identification=base.product.identification,
+        price=Price(current_buy_box=price, selling_price_used=price, selling_price_source=SellingPriceSource.CURRENT_BUY_BOX)))
+
+    processed = process_record(record, _thresholds(), fees=_fees(), now=NOW)
+
+    negatives = [i for i in processed.issues if i.code == "NEGATIVE_PRICE"]
+    assert [(i.field, i.level, i.record_ref) for i in negatives] == [("selling_price_used", IssueLevel.RECORD_ERROR, "row_1")]
+
+
+def test_issue_deduplication_does_not_touch_profitability_or_decision():
+    from juval.processing.profitability import compute_profitability
+
+    record = process_record(_valid_record(), _thresholds(), fees=_fees(), now=NOW)
+    direct = compute_profitability(selling_price=_valid_record().product.price.selling_price_used, costs=CostInputs(cog=Decimal("8")),
+                                   fees=_fees(), target_profit=Decimal("5"), target_roi=Decimal("0.3"), now=NOW)
+    assert record.profitability == direct
+    assert "NEGATIVE_PRICE" not in [i.code for i in record.issues]  # (the fixture ASIN has its own format issue)

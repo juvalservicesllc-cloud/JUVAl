@@ -1,5 +1,181 @@
 # Juval — Project Status
 
+## 2026-10-28 — "Profitable, demand pending": existing contract proven, not rebuilt
+
+**IMPLEMENTED (tests + contract only; no code, decision or API change).**
+
+**Analysis.** The engine evaluates every REVIEW rule (`evaluate_decision`), so
+the existing `review_classification == PENDING_DEMAND_VERIFICATION` (D7-D)
+already identifies records with:
+- usable profit and ROI at or above the run's targets;
+- no other blocker.
+
+The API already serves it through the field, the filter, the export and the
+analytics. With `min_roi` + `confidence=VERIFIED_ONLY` it gives "verified ROI
+≥ x, demand pending". A new projection would have duplicated it.
+
+**New tests:** `tests/integration/test_pending_demand_profitability.py` runs the
+real import, engine and API on 8 rows:
+- favourable, exactly on target, just below target;
+- HazMat PASS, Bulky at the maximum, unknown risk, invalid price;
+- a million declared units.
+
+They check that decisions and codes are unchanged, no BUY appears, pending
+implies usable economics ≥ targets, declared demand changes nothing, and the API
+filters, export and analytics compose. A mutation of the classification rule
+(contains instead of equals `DEMAND_UNKNOWN`) fails 2 of them.
+
+**Docs:** API_CONTRACT §2c (guarantee, queries, limit) and the frontend handoff.
+
+## 2026-10-28 — One NEGATIVE_PRICE per price, not one per copy
+
+**IMPLEMENTED (data quality only; no decision, profitability or rule change).**
+
+`validate_price` reported a negative price twice when `selling_price_used` was
+the same value as the field its `selling_price_source` names, which is the shape
+the importer builds. Such a copy is now reported once, on `selling_price_used`,
+with the same code, level and message. A different price in another field is
+still reported, and so is a declared source whose value or provenance differs.
+
+Tests: 6 unit and 2 pipeline tests. The 3 duplicate tests fail without the
+fix; the 3 tests against over-suppression pass both ways. Pipeline decisions
+and profit are identical before and after (probe with -5, 0 and 40). Targeted
+gate: 30 files plus `tests/compliance` give 801 passed, 86 skipped (nginx),
+0 failed.
+
+## 2026-10-28 — frontend-next shows where HazMat/Bulky severity comes from
+
+**IMPLEMENTED in `frontend-next/`.** No backend change; decisions are untouched.
+
+**What changed.** `RecordOut` gains four optional fields typed as nullable. A new
+`SeverityProvenance` component only puts the backend pair into words; nothing
+is derived in the browser:
+- INFERRED/CALCULATED → "JUVAl classification (inferred)";
+- VERIFIED/SUPPLIER_FILE → "Absence declared in supplier file";
+- NOT_FOUND → "Not found";
+- INVALID/SUPPLIER_FILE → "Invalid in supplier file";
+- an unexpected pair is shown literally;
+- null/absent renders nothing.
+
+Every title says "not an Amazon verification". Product Detail shows the full
+label. The Catalog shows a compact tag in the existing risk cells (same `.prov`
+tones). Filters, sorting, export and columns are unchanged. UI text is English,
+like the rest of the app.
+
+**Tests:**
+- tsc and typecheck clean; oxlint clean; build OK.
+- vitest: 9 new component tests, plus 3 Product Detail and 1 Catalog tests.
+  Without the wiring, the 3 page-level tests fail. The directed set of
+  record-consuming pages gives 87 passed, 9 skipped (opt-in live contract).
+- E2E Chromium: the new spec passes 4/4, with screenshots in dark and light at
+  desktop and phone width. The full suite passed 21/21 twice. A first full run
+  had one transient `socket hang up` on a direct API GET in D7 test 11, after
+  all its UI assertions had passed.
+
+## 2026-10-28 — Severity provenance in the .xlsx exports
+
+**IMPLEMENTED (four columns appended last; no earlier column moved).**
+
+`hazmat_severity_status`, `hazmat_severity_source_type`, `bulky_severity_status`
+and `bulky_severity_source_type` are now the last columns of:
+- the run workbook, written by the CLI and the API `/download` through the same
+  `export_excel`;
+- the catalog export (`/records/export`), built from snapshots.
+
+Both read one derivation, `record_snapshot.severity_provenance`, which the
+snapshot/API also uses. A historical snapshot gives empty cells, never
+VERIFIED/NONE. There is no CSV export: CSV is input only (ADR-026), so none was
+added. No migration. Decisions, economics and the frontend are untouched.
+
+Tests: `tests/integration/test_severity_provenance_export.py`, 7 tests, all
+failing without the change. They cover:
+- headers pinned against d9f8085;
+- INFERRED/CALCULATED, VERIFIED/SUPPLIER_FILE, NOT_FOUND and INVALID;
+- CLI, download and catalog values equal to the API fields;
+- a whole-workbook identity between the CLI and the download;
+- historical snapshots.
+
+Targeted gate: 47 files plus `tests/compliance` give 1169 passed, 93 skipped
+(86 nginx, 7 live Supabase), 0 failed. secret_scan PASS.
+
+## 2026-10-28 — Zero or negative dimensions are INVALID, not VERIFIED
+
+**IMPLEMENTED (data validation fix; issue contract unchanged).**
+
+Defect: a weight or dimension ≤ 0 stayed VERIFIED, for example "-2 lb VERIFIED"
+in the API. `validate_dimensions` only added an IMPOSSIBLE_* issue beside it.
+
+Fix (`importer.py::_build_dimension_field`): the field is now INVALID and keeps
+its value in `raw_value`. The importer emits the same IMPOSSIBLE_* issue (code,
+level, message and field), and only once. Dimensions do not feed profitability
+or decisions, so results are identical (test).
+
+Tests: `tests/integration/test_impossible_dimensions.py`, 9 tests. 8 of them
+fail without the fix. Targeted gate for the three changes of the day: 45 files
+plus `tests/compliance` give 1125 passed, 93 skipped (86 nginx, 7 live
+Supabase), 0 failed. Docs: EXCEL_PROCESSING.md §4.
+
+## 2026-10-28 — Risk severity provenance made unambiguous (ADR-020)
+
+**IMPLEMENTED (domain invariant + additive API field; no decision or severity change).**
+
+- `RiskFlag` now enforces the ADR-020 table. An ABSENT flag needs presence
+  VERIFIED or INFERRED: an absence that could not be read is UNKNOWN. A VERIFIED
+  NONE needs a VERIFIED absence. No existing constructor violated it: unit and
+  integration ran 1642 passed, 0 failed.
+- `RecordOut` and the snapshot add `hazmat_severity_source_type` and
+  `bulky_severity_source_type`. VERIFIED NONE is SUPPLIER_FILE, a reading of the
+  file, never an authorized source. The policy HIGH/MEDIUM is CALCULATED; blank is
+  NOT_FOUND; unreadable is SUPPLIER_FILE with INVALID.
+- New test: a zero price keeps its previous end-to-end result (PASS /
+  NEGATIVE_PROFIT, margin NOT_FOUND). It passes both with the importer from
+  `ccfb1a8` and with this branch.
+
+## 2026-10-28 — API exposes the verification status of risk severity (ADR-020 follow-up)
+
+**IMPLEMENTED (additive contract field; no decision, severity or rule change).**
+
+`RecordOut` and the record snapshot add `hazmat_severity_status` and
+`bulky_severity_status`, the additive field ADR-020 anticipated. Values:
+- INFERRED for the policy-derived HIGH/MEDIUM (ADR-044);
+- VERIFIED for the NONE of an absent risk;
+- NOT_FOUND for a blank cell, INVALID for an unreadable one;
+- null without the column, and on snapshots written before today (never
+  reconstructed).
+
+Before, a client could only show `HIGH` as if it were read from the file.
+`hazmat_severity`/`bulky_severity` are unchanged. The Excel/CSV export is
+unchanged (FUTURE). No migration: the snapshot is JSON/JSONB. Frontend untouched;
+the handoff note for Codex is updated.
+
+Tests: 4 new unit tests, 2 new API tests (CSV with yes/no/blank/invalid; persist
+and read back) and 2 extended (fixture upload; old snapshot gives null). 8 fail
+without the change. All
+39 files that touch snapshots, records, the importer or the pipeline pass:
+852 passed, 7 skipped (live Supabase), including the disposable PostgreSQL tests.
+
+## 2026-10-28 — Negative selling_price is invalid input, not a verified loss
+
+**IMPLEMENTED (data validation fix; no formula, threshold or rule change).**
+
+Defect: the legacy importer kept a negative `selling_price` as VERIFIED.
+`validate_price` raised `NEGATIVE_PRICE` but the pipeline still used the price,
+so profit and ROI came out VERIFIED negatives and the engine answered
+PASS / NEGATIVE_PROFIT ("would lose money") from bad data.
+
+Fix (`infrastructure/excel/importer.py::_build_price`): a negative price now
+follows the existing non-numeric path: `INVALID_PRICE` RECORD_ERROR, no price
+used, profit/ROI NOT_FOUND, REVIEW (PROFIT_UNKNOWN). Same rule as the native
+price (`domain/financial_evidence.py`, value < 0 is INVALID). Zero is still a
+declared value, as in the native path. HazMat/Bulky blocks and a real loss
+from a valid price still give PASS (tests). API contract unchanged.
+
+Tests: `tests/integration/test_negative_selling_price.py`, 11 new (import,
+CSV/XLSX parity, pipeline, HTTP upload). 6 of them fail without the fix. All
+31 test files that use the importer, the pipeline or the API record pass:
+678 passed, 4 skipped (live Supabase); tests/compliance 182 passed, 86 skipped
+(no nginx binary). Docs: EXCEL_PROCESSING.md §4.
+
 ## 2026-10-27 — GOLDEN 17 final audit
 
 **IMPLEMENTED (audit fixes only; no decision, formula or threshold change).**

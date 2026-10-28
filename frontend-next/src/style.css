@@ -18,6 +18,8 @@
 .prov-not-found { background:#6670801a; color:var(--muted); border-color:#66708055; }
 .prov-invalid { background:#bd3c521a; color:var(--danger); border-color:#bd3c5255; }
 .prov-demo-fixture { background:#6d5dfc1a; color:var(--accent); border-color:#6d5dfc55; }
+/* Severity provenance (ADR-020): same tones as .prov; a full label in Product Detail stays readable and on one line. */
+.severity-prov { font-size:10px; white-space:nowrap; }
 .fv { white-space:nowrap; }
 
 .result-count { color:var(--muted); font-size:12px; margin:12px 0 6px; }

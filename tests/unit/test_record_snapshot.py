@@ -16,7 +16,7 @@ from decimal import Decimal
 
 from juval.application.record_snapshot import record_to_snapshot
 from juval.domain.product import Dimensions, Identification, Product, ProductInfo
-from juval.domain.provenance import FieldValue
+from juval.domain.provenance import FieldValue, SourceType, VerificationStatus
 from juval.domain.risk import RiskFlag, RiskProfile, RiskStatus, RiskType, Severity
 from juval.domain.sourcing_record import SourcingRecord
 
@@ -176,3 +176,44 @@ def test_issue_codes_travel_alongside_the_rendered_issue_strings():
     assert snapshot["issue_codes"] == ["UNKNOWN_COLUMN", "INVALID_NUMBER"]
     assert snapshot["issue_count"] == 2
     assert snapshot["issues"][0].startswith("[WARNING] UNKNOWN_COLUMN")
+
+
+# -- severity verification status (additive field anticipated by ADR-020) ------
+
+def _hazmat(status, severity_fv):
+    # Presence is read from the file (VERIFIED) unless it is unknown (NOT_FOUND).
+    presence = severity_fv.status if status is RiskStatus.UNKNOWN else VerificationStatus.VERIFIED
+    return RiskFlag(risk_type=RiskType.HAZMAT, status=status, verification_status=presence,
+                    severity=severity_fv, source="s", timestamp=NOW)
+
+
+def test_policy_severity_is_reported_as_inferred_next_to_the_unchanged_value():
+    flag = _hazmat(RiskStatus.PRESENT, FieldValue.inferred(
+        Severity.HIGH, source="DEFAULT_RISK_SEVERITY", method="ADR-044", retrieved_at=NOW,
+        source_type=SourceType.CALCULATED))  # as the importer builds it
+    snapshot = record_to_snapshot(_record_with_risk(flag))
+
+    assert snapshot["hazmat_severity"] == "HIGH"
+    assert snapshot["hazmat_severity_status"] == "INFERRED"
+    assert snapshot["hazmat_severity_source_type"] == "CALCULATED"
+
+
+def test_absent_risk_severity_none_is_verified():
+    flag = _hazmat(RiskStatus.ABSENT, FieldValue.verified(Severity.NONE, source="s", method="no_risk_present", retrieved_at=NOW))
+    snapshot = record_to_snapshot(_record_with_risk(flag))
+
+    assert (snapshot["hazmat_severity"], snapshot["hazmat_severity_status"]) == ("NONE", "VERIFIED")
+
+
+def test_unassessable_severity_reports_not_found_never_a_guess():
+    flag = _hazmat(RiskStatus.UNKNOWN, FieldValue.not_found(source="s", method="risk_presence_unknown", retrieved_at=NOW))
+    snapshot = record_to_snapshot(_record_with_risk(flag))
+
+    assert (snapshot["hazmat_severity"], snapshot["hazmat_severity_status"]) == (None, "NOT_FOUND")
+
+
+def test_missing_risk_column_has_no_severity_status():
+    snapshot = record_to_snapshot(_record_with_risk())
+
+    assert snapshot["hazmat_severity_status"] is None and snapshot["bulky_severity_status"] is None
+    assert snapshot["hazmat_severity_source_type"] is None and snapshot["bulky_severity_source_type"] is None

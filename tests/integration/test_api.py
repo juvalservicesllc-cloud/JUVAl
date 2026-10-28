@@ -250,6 +250,23 @@ def test_disqualifying_hazmat_risk_is_pass_with_reason(client):
     assert sup004["decision"] == "PASS"
     assert any("RISK_ABOVE_MAXIMUM" in reason for reason in sup004["decision_reasons"])
     assert sup004["hazmat_severity"] == "HIGH"  # unchanged, still provisional (ADR-010)
+    # ADR-020: the severity is policy-derived, so the API says so instead of
+    # letting a client present HIGH as a fact read from the file.
+    assert sup004["hazmat_status"] == "PRESENT" and sup004["hazmat_severity_status"] == "INFERRED"
+
+
+def test_severity_status_survives_persistence_and_old_snapshots_stay_none(client):
+    body = _upload(client, persist="true").json()
+    stored = client.get(f"/api/v1/runs/{body['execution_id']}/records").json()["records"]
+    fresh = {r["record_ref"]: r for r in body["records"]}
+    assert stored, "the persisted run must return its records"
+    for record in stored:
+        expected = fresh[record["record_ref"]]
+        assert record["hazmat_severity_status"] == expected["hazmat_severity_status"]
+        assert record["bulky_severity_status"] == expected["bulky_severity_status"]
+        assert record["hazmat_severity_source_type"] == expected["hazmat_severity_source_type"]
+    sup004 = next(r for r in stored if r["record_ref"].endswith("SUP-004"))
+    assert sup004["hazmat_severity_status"] == "INFERRED"
 
 
 def test_thresholds_are_required(client):
@@ -491,6 +508,9 @@ def test_old_snapshot_missing_new_fields_still_loads(client, tmp_path):
     assert record["asin"]["value"] == "B0OLDSHAPE1"
     assert record["asin"]["status"] == "VERIFIED"
     assert record["asin"]["provenance"] is None
+    # Not in the old snapshot -> null, never reconstructed from hazmat_severity.
+    for key in ("hazmat_severity_status", "bulky_severity_status", "hazmat_severity_source_type", "bulky_severity_source_type"):
+        assert record[key] is None, key
     for field_name in ("title", "brand", "category", "height", "width", "length"):
         assert record[field_name]["value"] is None, field_name
         assert record[field_name]["status"] is None, field_name
@@ -658,3 +678,17 @@ def test_nonfinite_upload_keeps_valid_rows_and_reports_invalid_input(client, fie
     if field in ("cost", "shipping_per_unit", "selling_price"):
         assert body["records"][0]["profit"]["value"] is None
     assert body["records"][1]["profit"]["value"] is not None
+
+
+def test_severity_status_for_each_hazmat_cell_from_a_csv_upload(client):
+    rows = [("yes", "INFERRED", "HIGH", "CALCULATED"), ("no", "VERIFIED", "NONE", "SUPPLIER_FILE"),
+            ("", "NOT_FOUND", None, "NOT_FOUND"), ("maybe", "INVALID", None, "SUPPLIER_FILE")]
+    lines = ["marketplace,asin,sku,cost,selling_price,hazmat,bulky"] + [
+        f"US,B00000000{i},S{i},10,40,{cell},no" for i, (cell, *_) in enumerate(rows, start=1)]
+    body = _upload(client, filename="risk.csv", content=("\n".join(lines) + "\n").encode()).json()
+
+    got = [(r["hazmat_severity_status"], r["hazmat_severity"], r["hazmat_severity_source_type"]) for r in body["records"]]
+    assert got == [row[1:] for row in rows]
+    # VERIFIED here means "declared absent in the supplier file", never an authorized source.
+    assert all((r["bulky_severity_status"], r["bulky_severity_source_type"]) == ("VERIFIED", "SUPPLIER_FILE")
+               for r in body["records"])

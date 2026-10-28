@@ -6,6 +6,7 @@ import { fieldMoney, fieldPercent } from "../format"
 import { METRIC_EXPLANATIONS } from "../metricExplanations"
 import { DeclaredDemandPanel } from "./DeclaredDemand"
 import { SuggestedPricePanel } from "./SuggestedPrice"
+import { SeverityProvenance } from "./SeverityProvenance"
 import { FinancialEvidenceView } from "./FinancialEvidence"
 import { Badge, PendingDemandTag, ProvenanceBadge } from "./shared"
 
@@ -244,7 +245,9 @@ export function ProductDetailPage({ executionId, recordRef, go }: { executionId:
     <section className="panel" aria-label="Risks">
       <h2>Risks</h2>
       <p>HazMat <Badge>{record.hazmat_status ?? "UNKNOWN"}</Badge>{record.hazmat_severity && record.hazmat_severity !== "NONE" && <> severity <Badge>{record.hazmat_severity}</Badge></>}
-        {" · "}Bulky <Badge>{record.bulky_status ?? "UNKNOWN"}</Badge>{record.bulky_severity && record.bulky_severity !== "NONE" && <> severity <Badge>{record.bulky_severity}</Badge></>}</p>
+        {" "}<SeverityProvenance risk="HazMat" status={record.hazmat_severity_status} sourceType={record.hazmat_severity_source_type} />
+        {" · "}Bulky <Badge>{record.bulky_status ?? "UNKNOWN"}</Badge>{record.bulky_severity && record.bulky_severity !== "NONE" && <> severity <Badge>{record.bulky_severity}</Badge></>}
+        {" "}<SeverityProvenance risk="Bulky" status={record.bulky_severity_status} sourceType={record.bulky_severity_source_type} /></p>
       <p className="local-note">Severity is derived by the run's risk policy (ADR-020), not verified externally.</p>
     </section>
 

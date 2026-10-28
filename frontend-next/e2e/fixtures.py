@@ -1,6 +1,6 @@
 """Inputs for the frontend-next E2E suite (run with the repository's .venv).
 
-    build <dir>          write the five XLSX supplier files the specs upload
+    build <dir>          write the XLSX supplier files the specs upload
     seed-history <db>    store one run whose snapshot predates reason codes and
                          declared demand (D7-D NOT_CLASSIFIABLE, D7-B NOT_CAPTURED)
     dump <xlsx>          print a workbook's first sheet as JSON rows
@@ -43,6 +43,13 @@ FILES = {
          "supplier_suggested_price": "19.50", "supplier_suggested_price_currency": "usd"},
         {"asin": "B0E2E00043", "title": "E2E suggested zero", "selling_price": 30,
          "supplier_suggested_price": 0, "supplier_suggested_price_currency": "USD"},
+    ],
+    # Severity provenance (ADR-020): hazmat declared true, false, blank and unreadable; bulky false on every row.
+    "severity-provenance.xlsx": [
+        {"asin": "B0E2E00051", "title": "E2E hazmat yes", "selling_price": 30, "hazmat": "true"},
+        {"asin": "B0E2E00052", "title": "E2E hazmat no", "selling_price": 30, "hazmat": "false"},
+        {"asin": "B0E2E00053", "title": "E2E hazmat blank", "selling_price": 30, "hazmat": None},
+        {"asin": "B0E2E00054", "title": "E2E hazmat unreadable", "selling_price": 30, "hazmat": "maybe"},
     ],
     # The observed_at cell is present but empty: incomplete context.
     "demand-incomplete.xlsx": [{"asin": "B0E2E00031", "title": "E2E declared incomplete", "selling_price": 30,

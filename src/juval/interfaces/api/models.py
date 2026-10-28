@@ -102,8 +102,15 @@ class RecordOut(BaseModel):
     max_cog_target_roi: FieldValueOut
     hazmat_status: Optional[str] = None
     hazmat_severity: Optional[str] = None
+    # Verification status of the severity itself and its source type (ADR-020):
+    # INFERRED/CALCULATED for the policy HIGH/MEDIUM, VERIFIED/SUPPLIER_FILE for a
+    # declared absence. None on snapshots written before 2026-10-28.
+    hazmat_severity_status: Optional[str] = None
+    hazmat_severity_source_type: Optional[str] = None
     bulky_status: Optional[str] = None
     bulky_severity: Optional[str] = None
+    bulky_severity_status: Optional[str] = None
+    bulky_severity_source_type: Optional[str] = None
     decision: Optional[str] = None
     decision_reasons: list[str] = []
     # Structured reason codes; None on snapshots written before they existed.

@@ -7,6 +7,7 @@ import { favoriteKey, loadFavorites, saveFavorites, toggleFavorite } from "../fa
 import { count, fieldMoney, fieldPercent } from "../format"
 import { DeclaredDemandCell } from "./DeclaredDemand"
 import { SuggestedPriceCell } from "./SuggestedPrice"
+import { SeverityProvenance } from "./SeverityProvenance"
 import { Badge, PendingDemandTag, ProvenanceBadge } from "./shared"
 import { ProductThumbnail } from "./ProductThumbnail"
 import "./catalog-controls.css"
@@ -252,8 +253,8 @@ export function CatalogPage({ initialRunId = "", initialPendingDemand = false }:
                 <td><Cell value={record.profit} format={fieldMoney} /></td>
                 <td><Cell value={record.roi} format={fieldPercent} /></td>
                 <td><Cell value={record.margin} format={fieldPercent} /></td>
-                <td>{record.hazmat_status ?? "UNKNOWN"}</td>
-                <td>{record.bulky_status ?? "UNKNOWN"}</td>
+                <td>{record.hazmat_status ?? "UNKNOWN"} <SeverityProvenance compact risk="HazMat" status={record.hazmat_severity_status} sourceType={record.hazmat_severity_source_type} /></td>
+                <td>{record.bulky_status ?? "UNKNOWN"} <SeverityProvenance compact risk="Bulky" status={record.bulky_severity_status} sourceType={record.bulky_severity_source_type} /></td>
                 <td>{record.decision ? <Badge>{record.decision}</Badge> : "—"}{record.review_classification === "PENDING_DEMAND_VERIFICATION" && <> <PendingDemandTag /></>}</td>
                 <td><DeclaredDemandCell record={record} /></td>
                 <td><button className="favorite-button" aria-label={`${starred ? "Remove" : "Add"} ${text(record.title) || record.record_ref} ${starred ? "from" : "to"} favorites`} aria-pressed={starred} title={starred ? "Starred in this browser" : "Star in this browser"} onClick={() => star(record.record_ref)}>{starred ? "★" : "☆"}</button></td>

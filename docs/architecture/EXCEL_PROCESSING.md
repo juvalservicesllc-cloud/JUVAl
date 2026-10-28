@@ -156,6 +156,8 @@ esto pasará a `source_type=AUTHORIZED_EXTERNAL_SOURCE`.
 | `shipping_per_unit` vacío | `CostInputs.shipping_per_unit = 0` | 0 es el valor documentado de "no aplica" para un costo opcional configurable (ver `domain/costs.py`), no una invención |
 | `hazmat`/`bulky` vacío | `RiskFlag(status=UNKNOWN, verification_status=NOT_FOUND)` | ausencia de dato, nunca se asume `ABSENT` (sería asumir que un producto no es peligroso sin evidencia) |
 | `weight` con número pero sin `weight_unit` | `FieldValue.invalid(...)` + `RECORD_ERROR` (`MISSING_UNIT`) | no se asume una unidad (ej. "seguro es lb") |
+| `weight`/`height`/`width`/`length` ≤ 0 | `FieldValue.invalid(...)` con el valor en `raw_value` + `RECORD_ERROR` (`IMPOSSIBLE_<CAMPO>`, la misma incidencia que `validate_dimensions`) | un tamaño físico imposible no es un dato verificado; las dimensiones no alimentan rentabilidad ni decisión |
+| `selling_price` no numérico o negativo | sin precio usado + `RECORD_ERROR` (`INVALID_PRICE`) → profit/ROI `NOT_FOUND`, REVIEW (`PROFIT_UNKNOWN`) | un precio negativo es un dato inválido, no una pérdida verificada (misma regla que `fin_selling_price_amount`: `domain/financial_evidence.py`, `value < 0` → INVALID; probado en `test_native_price_and_fees.py`); `0` se conserva como valor declarado, como allí |
 
 ## 5. Severidad por defecto para riesgos declarados por el proveedor
 
@@ -199,6 +201,18 @@ verification status, e issues (conteo + texto). Nada del input se
 descarta silenciosamente: `record_ref`, `marketplace` y `supplier_sku`
 viajan siempre, e `issues` incluye tanto los generados en import como en
 processing.
+
+Al final, tras las columnas de demanda y de precio sugerido, van
+`hazmat_severity_status`, `hazmat_severity_source_type`, `bulky_severity_status`
+y `bulky_severity_source_type` (ADR-020, 2026-10-28). Tienen los mismos valores
+que los campos de la API y salen de una sola derivación,
+`record_snapshot.severity_provenance`. Valores: `INFERRED`/`CALCULATED` para la
+política HIGH/MEDIUM, `VERIFIED`/`SUPPLIER_FILE` para el `NONE` de una ausencia
+declarada en el archivo, y `NOT_FOUND`/`NOT_FOUND` para una celda vacía. Sin
+columna, la celda queda vacía. El CLI y el `download` del run usan esta misma
+función; el export filtrado del catálogo añade las mismas cuatro columnas al
+final, leídas del snapshot. Un snapshot histórico sin esas claves da celdas
+vacías, nunca `VERIFIED`/`NONE`.
 
 ## 7. Fixture de pruebas
 

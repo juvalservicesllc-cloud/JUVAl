@@ -60,7 +60,15 @@ Campos con esta forma: `asin`, `upc`, `weight`, `selling_price`,
 provenance por diseño, igual que en `exporter.py`): `record_ref`,
 `marketplace`, `supplier_sku`, `cog`, `shipping_per_unit`,
 `hazmat_status`/`hazmat_severity`, `bulky_status`/`bulky_severity`,
-`decision`, `decision_reasons` (lista de `"CODE: message"`),
+`hazmat_severity_status`/`bulky_severity_status` y
+`hazmat_severity_source_type`/`bulky_severity_source_type` (estado de verificación
+de la severidad y su origen, ADR-020: `INFERRED`/`CALCULATED` para la severidad de
+política HIGH/MEDIUM; `VERIFIED`/`SUPPLIER_FILE` para el `NONE` de una ausencia
+declarada en el archivo — verificado *como lectura del archivo*, no por una fuente
+autorizada; `NOT_FOUND`/`NOT_FOUND` celda vacía; `INVALID`/`SUPPLIER_FILE` celda
+ilegible; `null` sin columna o en snapshots anteriores al 2026-10-28, nunca
+reconstruido; el export filtrado y el download del run añaden estas cuatro
+columnas al final, con celdas vacías para snapshots históricos), `decision`, `decision_reasons` (lista de `"CODE: message"`),
 `issue_count`, `issues` (lista de `"[LEVEL] CODE: message"`),
 `issue_codes` (los `ProcessingIssue.code` canónicos, para agrupar por tipo
 sin re-parsear la cadena de presentación), y los términos intermedios del
@@ -300,6 +308,32 @@ PostgreSQL (cualquier otro valor da 422); el export añade la columna
 añade `review_classification: {pending_demand_verification,
 review_not_classifiable}`. No requiere migración: es una clave más del JSON del
 snapshot.
+
+**Garantía (probada en `tests/integration/test_pending_demand_profitability.py`).**
+El motor evalúa todas las reglas de REVIEW. Por eso, un registro
+`PENDING_DEMAND_VERIFICATION` tiene:
+- `profit` y `roi` utilizables (VERIFIED o INFERRED), con valores ≥
+  `target_profit` y ≥ `target_roi` del run;
+- ninguna regla PASS disparada;
+- ningún otro bloqueo de REVIEW: riesgo desconocido o en el máximo, aprobación.
+
+Es la forma existente de encontrar **oportunidades rentables con la demanda
+pendiente de verificar**. No hace falta, ni existe, otro campo.
+
+**Consultas.** Los filtros existentes se combinan en `/records` y
+`/records/export`:
+- todas las oportunidades: `review_classification=PENDING_DEMAND_VERIFICATION`;
+- con un ROI mínimo y solo economía VERIFIED: añadir
+  `&min_roi=0.5&confidence=VERIFIED_ONLY`. `confidence` solo actúa junto a
+  `min_roi`/`min_profit`/`min_margin`.
+
+**Lo que no es:** ni BUY ni una predicción de BUY. La demanda declarada
+(ADR-052, INFERRED `USER_INPUT`) nunca entra en el motor: un millón de unidades
+declaradas deja el registro igual.
+
+**Límite:** "≥ objetivo" se refiere a los umbrales enviados al procesar el run,
+que aún no se guardan (ADR-051, Propuesta). El snapshot no puede decir cuáles
+eran. Un consumidor no debe mostrarlos como si los conociera.
 
 ### Demanda declarada (ADR-052, D7-B, 2026-10-26)
 

@@ -83,6 +83,22 @@ class RiskFlag:
             raise ValueError("RiskFlag.source must not be empty")
         if self.status == RiskStatus.ABSENT and self.severity.value != Severity.NONE:
             raise ValueError("An ABSENT RiskFlag must have severity NONE")
+        if self.status == RiskStatus.ABSENT and self.verification_status not in (
+            VerificationStatus.VERIFIED,
+            VerificationStatus.INFERRED,
+        ):
+            raise ValueError(
+                "An ABSENT RiskFlag must carry verification_status VERIFIED or INFERRED "
+                "(an absence that could not be read is UNKNOWN, never ABSENT)"
+            )
+        if (
+            self.status == RiskStatus.ABSENT
+            and self.severity.status == VerificationStatus.VERIFIED
+            and self.verification_status != VerificationStatus.VERIFIED
+        ):
+            # ADR-020: NONE is VERIFIED only as the certain consequence of a
+            # VERIFIED absence; an inferred absence cannot yield a verified NONE.
+            raise ValueError("A VERIFIED NONE severity requires a VERIFIED absence")
         if self.status == RiskStatus.PRESENT and self.severity.value is None:
             raise ValueError("A PRESENT RiskFlag must carry a non-None severity")
         if self.status == RiskStatus.UNKNOWN and self.verification_status not in (

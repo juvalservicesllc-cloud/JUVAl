@@ -6,6 +6,9 @@
  */
 export type ProvenanceStatus = "VERIFIED" | "INFERRED" | "NOT_FOUND" | "INVALID"
 export type Decision = "BUY" | "REVIEW" | "PASS"
+/** `source_type` of a risk severity's provenance as the API reports it (ADR-020).
+ *  Other values may appear later; they are shown as stored. */
+export type SeveritySourceType = "CALCULATED" | "SUPPLIER_FILE" | "NOT_FOUND" | (string & {})
 export type SortDirection = "asc" | "desc"
 export type RecordSort =
   | "record_ref" | "sku" | "asin" | "title" | "price" | "cog"
@@ -61,8 +64,14 @@ export interface RecordOut {
   max_cog_target_roi?: FieldValueOut
   hazmat_status: string | null
   hazmat_severity?: string | null
+  /** Severity provenance (ADR-020): INFERRED/CALCULATED = JUVAl policy, VERIFIED/SUPPLIER_FILE =
+   *  absence declared in the file. null/absent on older snapshots -- never inferred here. */
+  hazmat_severity_status?: ProvenanceStatus | null
+  hazmat_severity_source_type?: SeveritySourceType | null
   bulky_status: string | null
   bulky_severity?: string | null
+  bulky_severity_status?: ProvenanceStatus | null
+  bulky_severity_source_type?: SeveritySourceType | null
   decision: string | null
   decision_reasons: string[]
   /** Structured reason codes; null/absent on snapshots written before them. */
