@@ -135,7 +135,7 @@ def test_main_passes_secret_only_via_child_environment(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    secret = "postgresql://user:secret@example.com/db"
+    secret = "postgresql://user:secret@example.com/synthetic_preflight_child_env_fixture"
     path = write_candidate(
         tmp_path,
         f"JUVAL_SUPABASE_DB_URL={secret}\n",
@@ -187,7 +187,7 @@ def test_controlled_child_start_failure_does_not_print_secret(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    secret = "postgresql://user:secret@example.com/db"
+    secret = "postgresql://user:secret@example.com/synthetic_preflight_start_failure_fixture"
     path = write_candidate(
         tmp_path,
         f"JUVAL_SUPABASE_DB_URL={secret}\n",
