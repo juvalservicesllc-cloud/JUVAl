@@ -183,7 +183,11 @@ cambiar, este ADR cierra su ítem diferido), `domain/risk.py`,
 ## Seguimiento (2026-10-28)
 
 Se aplica el cambio aditivo previsto en "Qué NO resuelve": `RecordOut` y el
-snapshot añaden `hazmat_severity_status`/`bulky_severity_status`. El consumidor
+snapshot añaden `hazmat_severity_status`/`bulky_severity_status` y
+`*_severity_source_type` (para que `VERIFIED` del `NONE` se lea como "leído del
+archivo", `SUPPLIER_FILE`, y no como fuente autorizada). La tabla de arriba pasa a
+ser invariante de `RiskFlag`: un flag `ABSENT` exige presencia VERIFIED o INFERRED,
+y un `NONE` VERIFIED exige una ausencia VERIFIED. El consumidor
 es el requisito de que la API indique la procedencia de cada dato y el frontend
 no presente la severidad de política (`HIGH`/`MEDIUM`) como un dato del archivo.
 `hazmat_severity`/`bulky_severity` no cambian; el export Excel/CSV no cambia

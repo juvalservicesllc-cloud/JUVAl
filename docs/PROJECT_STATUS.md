@@ -1,5 +1,21 @@
 # Juval — Project Status
 
+## 2026-10-28 — Risk severity provenance made unambiguous (ADR-020)
+
+**IMPLEMENTED (domain invariant + additive API field; no decision or severity change).**
+
+- `RiskFlag` now enforces the ADR-020 table. An ABSENT flag needs presence
+  VERIFIED or INFERRED: an absence that could not be read is UNKNOWN. A VERIFIED
+  NONE needs a VERIFIED absence. No existing constructor violated it: unit and
+  integration ran 1642 passed, 0 failed.
+- `RecordOut` and the snapshot add `hazmat_severity_source_type` and
+  `bulky_severity_source_type`. VERIFIED NONE is SUPPLIER_FILE, a reading of the
+  file, never an authorized source. The policy HIGH/MEDIUM is CALCULATED; blank is
+  NOT_FOUND; unreadable is SUPPLIER_FILE with INVALID.
+- New test: a zero price keeps its previous end-to-end result (PASS /
+  NEGATIVE_PROFIT, margin NOT_FOUND). It passes both with the importer from
+  `ccfb1a8` and with this branch.
+
 ## 2026-10-28 — API exposes the verification status of risk severity (ADR-020 follow-up)
 
 **IMPLEMENTED (additive contract field; no decision, severity or rule change).**

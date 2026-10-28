@@ -97,6 +97,14 @@ def _severity_status(flag: Optional[RiskFlag]) -> Optional[str]:
     return None if flag is None else flag.severity.status.value
 
 
+def _severity_source_type(flag: Optional[RiskFlag]) -> Optional[str]:
+    """Where that status comes from, so VERIFIED is never read as "verified by
+    an authorized source": SUPPLIER_FILE for the NONE of a declared absence,
+    CALCULATED for the policy HIGH/MEDIUM, NOT_FOUND for a blank cell."""
+
+    return None if flag is None else flag.severity.provenance.source_type.value
+
+
 def record_to_snapshot(record: SourcingRecord) -> dict[str, Any]:
     """Same shape as interfaces/api/models.py::RecordOut, as a plain dict."""
 
@@ -169,9 +177,11 @@ def record_to_snapshot(record: SourcingRecord) -> dict[str, Any]:
         "hazmat_status": hazmat_flag.status.value if hazmat_flag is not None else None,
         "hazmat_severity": _severity_value(hazmat_flag),
         "hazmat_severity_status": _severity_status(hazmat_flag),
+        "hazmat_severity_source_type": _severity_source_type(hazmat_flag),
         "bulky_status": bulky_flag.status.value if bulky_flag is not None else None,
         "bulky_severity": _severity_value(bulky_flag),
         "bulky_severity_status": _severity_status(bulky_flag),
+        "bulky_severity_source_type": _severity_source_type(bulky_flag),
         "decision": decision,
         "decision_reasons": decision_reasons,
         # The engine's DecisionReason codes, in order, beside the rendered

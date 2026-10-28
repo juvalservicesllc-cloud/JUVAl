@@ -66,3 +66,29 @@ def test_flag_for_returns_matching_type():
     profile = RiskProfile(flags=(flag,))
     assert profile.flag_for(RiskType.RESTRICTED) is flag
     assert profile.flag_for(RiskType.HAZMAT) is None
+
+
+# -- ADR-020: a VERIFIED NONE needs a VERIFIED absence ------------------------------
+
+def _absent(presence, severity_status):
+    severity = (FieldValue.verified if severity_status is VerificationStatus.VERIFIED else FieldValue.inferred)(
+        Severity.NONE, source="s", method="no_risk_present", retrieved_at=NOW)
+    return RiskFlag(risk_type=RiskType.HAZMAT, status=RiskStatus.ABSENT, verification_status=presence,
+                    severity=severity, source="s", timestamp=NOW)
+
+
+def test_verified_absence_gives_a_verified_none():
+    assert _absent(VerificationStatus.VERIFIED, VerificationStatus.VERIFIED).severity.status is VerificationStatus.VERIFIED
+
+
+def test_inferred_absence_cannot_claim_a_verified_none():
+    with pytest.raises(ValueError, match="VERIFIED NONE severity requires a VERIFIED absence"):
+        _absent(VerificationStatus.INFERRED, VerificationStatus.VERIFIED)
+    # the honest form is accepted: inferred absence, inferred NONE
+    assert _absent(VerificationStatus.INFERRED, VerificationStatus.INFERRED).severity.status is VerificationStatus.INFERRED
+
+
+@pytest.mark.parametrize("presence", [VerificationStatus.NOT_FOUND, VerificationStatus.INVALID])
+def test_an_unread_presence_is_never_absent(presence):
+    with pytest.raises(ValueError, match="never ABSENT"):
+        _absent(presence, VerificationStatus.INFERRED)

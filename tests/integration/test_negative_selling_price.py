@@ -178,3 +178,16 @@ def test_api_upload_reports_the_negative_price_as_review_with_its_issue(tmp_path
     assert any("selling_price must not be negative" in text for text in negative["issues"])
     # The valid row in the same file is unaffected: profit and ROI computed and VERIFIED.
     assert valid["profit"]["status"] == "VERIFIED" and valid["roi"]["status"] == "VERIFIED"
+
+
+def test_zero_price_keeps_the_previous_end_to_end_behaviour(tmp_path):
+    # Unchanged by the negative-price fix: 0 is a declared price, so the loss is
+    # computed (VERIFIED) and PASS; only margin is undefined.
+    record = _run(_csv(tmp_path, _row("0")))
+    out = record_to_json(record)
+
+    assert record.decision.decision is Decision.PASS
+    assert out.decision_reason_codes == ["NEGATIVE_PROFIT"]
+    assert out.profit.status == VerificationStatus.VERIFIED.value and Decimal(out.profit.value) == Decimal("-15")
+    assert out.margin.value is None and out.margin.status == VerificationStatus.NOT_FOUND.value
+    assert "INVALID_PRICE" not in _codes(record)

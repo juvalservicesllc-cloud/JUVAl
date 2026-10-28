@@ -60,11 +60,14 @@ Campos con esta forma: `asin`, `upc`, `weight`, `selling_price`,
 provenance por diseño, igual que en `exporter.py`): `record_ref`,
 `marketplace`, `supplier_sku`, `cog`, `shipping_per_unit`,
 `hazmat_status`/`hazmat_severity`, `bulky_status`/`bulky_severity`,
-`hazmat_severity_status`/`bulky_severity_status` (estado de verificación de la
-severidad, ADR-020: `INFERRED` para la severidad de política HIGH/MEDIUM,
-`VERIFIED` para el `NONE` de un riesgo ausente, `NOT_FOUND`/`INVALID` si no se
-pudo leer la presencia; `null` sin columna o en snapshots anteriores al
-2026-10-28, nunca reconstruido), `decision`, `decision_reasons` (lista de `"CODE: message"`),
+`hazmat_severity_status`/`bulky_severity_status` y
+`hazmat_severity_source_type`/`bulky_severity_source_type` (estado de verificación
+de la severidad y su origen, ADR-020: `INFERRED`/`CALCULATED` para la severidad de
+política HIGH/MEDIUM; `VERIFIED`/`SUPPLIER_FILE` para el `NONE` de una ausencia
+declarada en el archivo — verificado *como lectura del archivo*, no por una fuente
+autorizada; `NOT_FOUND`/`NOT_FOUND` celda vacía; `INVALID`/`SUPPLIER_FILE` celda
+ilegible; `null` sin columna o en snapshots anteriores al 2026-10-28, nunca
+reconstruido), `decision`, `decision_reasons` (lista de `"CODE: message"`),
 `issue_count`, `issues` (lista de `"[LEVEL] CODE: message"`),
 `issue_codes` (los `ProcessingIssue.code` canónicos, para agrupar por tipo
 sin re-parsear la cadena de presentación), y los términos intermedios del
