@@ -39,7 +39,7 @@ def test_sqlite_selected_without_db_path_fails_explicitly(monkeypatch):
 
 def test_supabase_selected_with_runtime_db_url(monkeypatch):
     monkeypatch.setenv("JUVAL_EXECUTION_STORE", "supabase")
-    monkeypatch.setenv("JUVAL_RUNTIME_DB_URL", "postgresql://runtime:synthetic@localhost:5432/postgres")
+    monkeypatch.setenv("JUVAL_RUNTIME_DB_URL", "postgresql://user:pass@localhost:5432/postgres")
 
     store = _execution_run_store()
 
@@ -55,7 +55,7 @@ def test_supabase_selected_without_runtime_db_url_fails_explicitly(monkeypatch):
 
 def test_admin_or_legacy_db_url_never_falls_back_to_runtime(monkeypatch):
     monkeypatch.setenv("JUVAL_EXECUTION_STORE", "supabase")
-    monkeypatch.setenv("JUVAL_SUPABASE_DB_URL", "postgresql://admin:synthetic@localhost:5432/postgres")
+    monkeypatch.setenv("JUVAL_SUPABASE_DB_URL", "postgresql://postgres:postgres@localhost:5432/postgres")
 
     with pytest.raises(RuntimeError, match="JUVAL_RUNTIME_DB_URL"):
         _execution_run_store()
@@ -83,8 +83,8 @@ def test_legacy_behavior_when_nothing_is_set_returns_none():
 def test_explicit_selector_wins_supabase_when_both_connection_vars_present(monkeypatch, tmp_path):
     monkeypatch.setenv("JUVAL_EXECUTION_STORE", "supabase")
     monkeypatch.setenv("JUVAL_EXECUTION_DB_PATH", str(tmp_path / "runs.db"))
-    monkeypatch.setenv("JUVAL_RUNTIME_DB_URL", "postgresql://runtime:synthetic@localhost:5432/postgres")
-    monkeypatch.setenv("JUVAL_SUPABASE_DB_URL", "postgresql://admin:synthetic@localhost:5432/postgres")
+    monkeypatch.setenv("JUVAL_RUNTIME_DB_URL", "postgresql://user:pass@localhost:5432/postgres")
+    monkeypatch.setenv("JUVAL_SUPABASE_DB_URL", "postgresql://postgres:postgres@localhost:5432/postgres")
 
     store = _execution_run_store()
 
@@ -94,8 +94,8 @@ def test_explicit_selector_wins_supabase_when_both_connection_vars_present(monke
 def test_explicit_selector_wins_sqlite_when_both_connection_vars_present(monkeypatch, tmp_path):
     monkeypatch.setenv("JUVAL_EXECUTION_STORE", "sqlite")
     monkeypatch.setenv("JUVAL_EXECUTION_DB_PATH", str(tmp_path / "runs.db"))
-    monkeypatch.setenv("JUVAL_RUNTIME_DB_URL", "postgresql://runtime:synthetic@localhost:5432/postgres")
-    monkeypatch.setenv("JUVAL_SUPABASE_DB_URL", "postgresql://admin:synthetic@localhost:5432/postgres")
+    monkeypatch.setenv("JUVAL_RUNTIME_DB_URL", "postgresql://user:pass@localhost:5432/postgres")
+    monkeypatch.setenv("JUVAL_SUPABASE_DB_URL", "postgresql://postgres:postgres@localhost:5432/postgres")
 
     store = _execution_run_store()
 

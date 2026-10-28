@@ -38,12 +38,12 @@ def write_candidate(
 def test_valid_0600_candidate_is_accepted(tmp_path: Path) -> None:
     path = write_candidate(
         tmp_path,
-        "JUVAL_SUPABASE_DB_URL=postgresql://fake-user:fake-password@example.invalid/db\n",
+        "JUVAL_SUPABASE_DB_URL=postgresql://user:secret@example.com/db\n",
     )
 
     value = runner.read_authorized_candidate(str(path))
 
-    assert value == "postgresql://fake-user:fake-password@example.invalid/db"
+    assert value == "postgresql://user:secret@example.com/db"
 
 
 def test_candidate_with_wrong_permissions_is_rejected(tmp_path: Path) -> None:
@@ -135,7 +135,7 @@ def test_main_passes_secret_only_via_child_environment(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    secret = "postgresql://fake-user:JUVAL-SANITIZED-FIXTURE@example.invalid/db"
+    secret = "postgresql://user:secret@example.com/db"
     path = write_candidate(
         tmp_path,
         f"JUVAL_SUPABASE_DB_URL={secret}\n",
@@ -187,7 +187,7 @@ def test_controlled_child_start_failure_does_not_print_secret(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    secret = "postgresql://fake-user:JUVAL-SANITIZED-FIXTURE@example.invalid/db"
+    secret = "postgresql://user:secret@example.com/db"
     path = write_candidate(
         tmp_path,
         f"JUVAL_SUPABASE_DB_URL={secret}\n",
