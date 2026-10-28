@@ -202,6 +202,18 @@ descarta silenciosamente: `record_ref`, `marketplace` y `supplier_sku`
 viajan siempre, e `issues` incluye tanto los generados en import como en
 processing.
 
+Al final, tras las columnas de demanda y de precio sugerido, van
+`hazmat_severity_status`, `hazmat_severity_source_type`, `bulky_severity_status`
+y `bulky_severity_source_type` (ADR-020, 2026-10-28). Tienen los mismos valores
+que los campos de la API y salen de una sola derivación,
+`record_snapshot.severity_provenance`. Valores: `INFERRED`/`CALCULATED` para la
+política HIGH/MEDIUM, `VERIFIED`/`SUPPLIER_FILE` para el `NONE` de una ausencia
+declarada en el archivo, y `NOT_FOUND`/`NOT_FOUND` para una celda vacía. Sin
+columna, la celda queda vacía. El CLI y el `download` del run usan esta misma
+función; el export filtrado del catálogo añade las mismas cuatro columnas al
+final, leídas del snapshot. Un snapshot histórico sin esas claves da celdas
+vacías, nunca `VERIFIED`/`NONE`.
+
 ## 7. Fixture de pruebas
 
 `tests/fixtures/sample_sourcing_TEST_DATA.xlsx` (generado por

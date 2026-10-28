@@ -1,5 +1,31 @@
 # Juval — Project Status
 
+## 2026-10-28 — Severity provenance in the .xlsx exports
+
+**IMPLEMENTED (four columns appended last; no earlier column moved).**
+
+`hazmat_severity_status`, `hazmat_severity_source_type`, `bulky_severity_status`
+and `bulky_severity_source_type` are now the last columns of:
+- the run workbook, written by the CLI and the API `/download` through the same
+  `export_excel`;
+- the catalog export (`/records/export`), built from snapshots.
+
+Both read one derivation, `record_snapshot.severity_provenance`, which the
+snapshot/API also uses. A historical snapshot gives empty cells, never
+VERIFIED/NONE. There is no CSV export: CSV is input only (ADR-026), so none was
+added. No migration. Decisions, economics and the frontend are untouched.
+
+Tests: `tests/integration/test_severity_provenance_export.py`, 7 tests, all
+failing without the change. They cover:
+- headers pinned against d9f8085;
+- INFERRED/CALCULATED, VERIFIED/SUPPLIER_FILE, NOT_FOUND and INVALID;
+- CLI, download and catalog values equal to the API fields;
+- a whole-workbook identity between the CLI and the download;
+- historical snapshots.
+
+Targeted gate: 47 files plus `tests/compliance` give 1169 passed, 93 skipped
+(86 nginx, 7 live Supabase), 0 failed. secret_scan PASS.
+
 ## 2026-10-28 — Zero or negative dimensions are INVALID, not VERIFIED
 
 **IMPLEMENTED (data validation fix; issue contract unchanged).**

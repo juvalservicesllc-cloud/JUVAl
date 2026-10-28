@@ -67,7 +67,8 @@ política HIGH/MEDIUM; `VERIFIED`/`SUPPLIER_FILE` para el `NONE` de una ausencia
 declarada en el archivo — verificado *como lectura del archivo*, no por una fuente
 autorizada; `NOT_FOUND`/`NOT_FOUND` celda vacía; `INVALID`/`SUPPLIER_FILE` celda
 ilegible; `null` sin columna o en snapshots anteriores al 2026-10-28, nunca
-reconstruido), `decision`, `decision_reasons` (lista de `"CODE: message"`),
+reconstruido; el export filtrado y el download del run añaden estas cuatro
+columnas al final, con celdas vacías para snapshots históricos), `decision`, `decision_reasons` (lista de `"CODE: message"`),
 `issue_count`, `issues` (lista de `"[LEVEL] CODE: message"`),
 `issue_codes` (los `ProcessingIssue.code` canónicos, para agrupar por tipo
 sin re-parsear la cadena de presentación), y los términos intermedios del

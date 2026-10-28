@@ -22,7 +22,7 @@ from __future__ import annotations
 from decimal import Decimal
 from datetime import datetime
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 
 from juval.domain.provenance import FieldValue
 from juval.application.demand_evidence import serialize_demand_evidence
@@ -105,6 +105,34 @@ def _severity_source_type(flag: Optional[RiskFlag]) -> Optional[str]:
     return None if flag is None else flag.severity.provenance.source_type.value
 
 
+#: Snapshot keys of the severity provenance, in export order. The same names
+#: are the export column headers (CLI/run workbook and catalog export).
+SEVERITY_PROVENANCE_KEYS: tuple[str, ...] = (
+    "hazmat_severity_status", "hazmat_severity_source_type",
+    "bulky_severity_status", "bulky_severity_source_type",
+)
+
+
+def severity_provenance(record: SourcingRecord) -> dict[str, Optional[str]]:
+    """The one derivation of severity provenance, used by the snapshot/API and
+    by the workbook export."""
+
+    hazmat, bulky = record.risk.flag_for(RiskType.HAZMAT), record.risk.flag_for(RiskType.BULKY)
+    return {
+        "hazmat_severity_status": _severity_status(hazmat),
+        "hazmat_severity_source_type": _severity_source_type(hazmat),
+        "bulky_severity_status": _severity_status(bulky),
+        "bulky_severity_source_type": _severity_source_type(bulky),
+    }
+
+
+def severity_provenance_cells(snapshot: Mapping[str, Any]) -> tuple[Optional[str], ...]:
+    """Export cells from a stored snapshot. A snapshot written before these
+    keys existed gives empty cells: nothing is reconstructed or assumed."""
+
+    return tuple(snapshot.get(key) for key in SEVERITY_PROVENANCE_KEYS)
+
+
 def record_to_snapshot(record: SourcingRecord) -> dict[str, Any]:
     """Same shape as interfaces/api/models.py::RecordOut, as a plain dict."""
 
@@ -176,12 +204,9 @@ def record_to_snapshot(record: SourcingRecord) -> dict[str, Any]:
         "max_cog_target_roi": max_cog_target_roi,
         "hazmat_status": hazmat_flag.status.value if hazmat_flag is not None else None,
         "hazmat_severity": _severity_value(hazmat_flag),
-        "hazmat_severity_status": _severity_status(hazmat_flag),
-        "hazmat_severity_source_type": _severity_source_type(hazmat_flag),
         "bulky_status": bulky_flag.status.value if bulky_flag is not None else None,
         "bulky_severity": _severity_value(bulky_flag),
-        "bulky_severity_status": _severity_status(bulky_flag),
-        "bulky_severity_source_type": _severity_source_type(bulky_flag),
+        **severity_provenance(record),
         "decision": decision,
         "decision_reasons": decision_reasons,
         # The engine's DecisionReason codes, in order, beside the rendered

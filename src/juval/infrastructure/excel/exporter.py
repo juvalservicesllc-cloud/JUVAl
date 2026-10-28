@@ -17,6 +17,7 @@ import openpyxl
 from openpyxl.cell import Cell
 from openpyxl.worksheet.worksheet import Worksheet
 
+from juval.application.record_snapshot import SEVERITY_PROVENANCE_KEYS, severity_provenance
 from juval.domain.provenance import FieldValue
 from juval.domain.risk import RiskFlag, RiskType
 from juval.domain.sourcing_record import SourcingRecord
@@ -79,7 +80,10 @@ SUGGESTED_PRICE_EXPORT_HEADERS: tuple[str, ...] = (
     "supplier_suggested_price_status", "supplier_suggested_price_raw", "supplier_suggested_price_currency_raw",
     "supplier_suggested_price_source_reference", "supplier_suggested_price_diagnostics",
 )
-HEADERS = HEADERS + DEMAND_EXPORT_HEADERS + SUGGESTED_PRICE_EXPORT_HEADERS
+#: Severity provenance (ADR-020), appended last in both exports. Same names and
+#: values as the API fields; an absent value is an empty cell, never VERIFIED/NONE.
+SEVERITY_PROVENANCE_EXPORT_HEADERS: tuple[str, ...] = SEVERITY_PROVENANCE_KEYS
+HEADERS = HEADERS + DEMAND_EXPORT_HEADERS + SUGGESTED_PRICE_EXPORT_HEADERS + SEVERITY_PROVENANCE_EXPORT_HEADERS
 
 
 def demand_cells_from_capture(capture) -> tuple[Any, ...]:
@@ -115,8 +119,8 @@ def _value_and_status(fv: Optional[FieldValue]) -> tuple[Any, Any]:
 def _severity_value(flag: Optional[RiskFlag]) -> Optional[str]:
     """A RiskFlag's severity is its own FieldValue[Severity] (ADR-020) --
     this unwraps to the plain enum-value string a cell can hold, distinct
-    from that FieldValue's own verification status (not exported here,
-    same scope as before this ADR: only presence status is a column)."""
+    from that FieldValue's own verification status (exported separately in
+    the SEVERITY_PROVENANCE_EXPORT_HEADERS columns)."""
 
     if flag is None or flag.severity.value is None:
         return None
@@ -209,7 +213,8 @@ def _row_for_record(record: SourcingRecord) -> tuple[Any, ...]:
         decision_reasons,
         len(record.issues),
         issues_text,
-    ) + demand_cells_from_capture(record.market_evidence) + suggested_price_cells_from_capture(record.supplier_suggested_price)
+    ) + demand_cells_from_capture(record.market_evidence) + suggested_price_cells_from_capture(record.supplier_suggested_price) \
+        + tuple(severity_provenance(record)[key] for key in SEVERITY_PROVENANCE_EXPORT_HEADERS)
 
 
 def append_literal_row(sheet: Worksheet, values: Sequence[Any]) -> None:
