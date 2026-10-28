@@ -228,7 +228,9 @@ def test_unsafe_filename_rejected(catalog, lifecycle, tmp_path, stamp):
 
 
 def test_unsafe_existing_directory_permissions_rejected(catalog, lifecycle, tmp_path):
-    (tmp_path / ".local-evidence").mkdir(mode=0o755)
+    unsafe = tmp_path / ".local-evidence"
+    unsafe.mkdir()
+    unsafe.chmod(0o755)  # explicit: mkdir(mode=) is masked by the umask
     with pytest.raises(evidence.EvidencePathError):
         evidence.write_evidence_artifact(document(catalog, lifecycle), repository_root=tmp_path)
 
