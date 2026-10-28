@@ -11,19 +11,47 @@ from the product — only from the production candidate's runtime.
 
 ## Status
 
-| Surface | State |
-|---|---|
-| Golden shell / navigation | **DONE** (m1) |
-| Catalog on the real API | **DONE** (m1) — server-side search, filters, sort, pagination, export |
-| Favourites | **DONE** (m1) — browser-local, run-scoped, labelled, no request |
-| Provenance | **DONE** (m1) — every economic value renders with its verification status |
-| Dependency reproducibility | **DONE** (m2) — lockfile + verified `npm ci` |
-| Upload → real batch | **DONE** (m2) |
-| Batch detail | **DONE** (m2) |
-| Runs list | **DONE** (m2) |
-| Run detail (minimum) | **DONE** (m2) |
-| Catalog filter persistence | **DONE** (m2B) — sessionStorage, validated on restore |
-| Dashboard, Product Detail, Appearance, Compare, Favorites page | **NOT WIRED** — honest placeholder, no fixture data |
+**Re-inventoried 2026-10-28 from the code** (`src/app/App.tsx` routes) at
+master `46a5c9a`. The previous table (2026-08-26) still listed Dashboard,
+Product Detail and the Favorites page as not wired; the code wires them.
+
+Evidence of the 2026-10-28 operator run (logs kept privately outside APP):
+`npm ci` from the lockfile, `typecheck` 0 errors, `lint` 0, `vitest` 190 passed
+/ 10 skipped (9 need `JUVAL_LIVE_API`, 1 needs `JUVAL_FINANCIAL_JSON`: by
+design, not verified), `build` OK, Playwright E2E 21/21 against a disposable
+API (temporary SQLite, auth disabled, loopback, synthetic fixtures).
+
+Legend: **VERIFIED** = exercised in a real browser (E2E and/or its
+screenshots) plus unit tests; **IMPLEMENTED** = wired and unit-tested, not
+exercised in a browser; **PARTIAL** = part of the target is missing;
+**PENDING** = not built, no external blocker; **BLOCKED** = needs a decision,
+contract or authorized source first.
+
+| Surface | State | Evidence / blocker |
+|---|---|---|
+| Shell, navigation (same tab, Back) | **VERIFIED** | E2E d7 tests 4–5 and 14 |
+| Light/Dark (shell toggle, browser-local) | **VERIFIED** | E2E screenshots dark/light, desktop/phone; `App.test` |
+| Dashboard on the run analytics endpoint | **VERIFIED** | E2E d7 test 4 + screenshot; `DashboardPage.test` (13) |
+| Catalog: server-side search, filters, sort, pagination, filter persistence | **VERIFIED** | E2E (d7, g17, severity); `CatalogPage` (14), `CatalogBrandFilter` (8), `catalogQuery` (11) |
+| Catalog: ROI/profit/margin entered as percentages | **IMPLEMENTED** | Unit only (`percentInputToRatio`); no E2E types 30 → `min_roi=0.3` yet |
+| Filtered export | **VERIFIED** | E2E (export = run download = API); concurrency fixed in backend `46a5c9a` |
+| Import with preview (XLSX and CSV, one tabular contract, ADR-026) | **VERIFIED** | E2E preview + upload of single synthetic files; `UploadPage` (11), `ImportPreview` (8) |
+| Batch of up to 10 files, Batch Detail, per-file analytics | **IMPLEMENTED** | `UploadPage`, `BatchAnalytics` (7) and backend batch tests; no multi-file E2E yet |
+| Runs list, Run Detail | **IMPLEMENTED** | `RunsFlow` (16); E2E only passes through "Open run" |
+| Product Detail (decision, reasons, economics with status, financial evidence, declared demand, suggested price, severity source) | **VERIFIED** | E2E + screenshots; `ProductDetailPage` (17), `FinancialEvidence` (10) |
+| Provenance badges (VERIFIED / INFERRED / NOT_FOUND / INVALID) and severity source | **VERIFIED** | E2E + screenshots; `SeverityProvenance` (9) |
+| BUY rendering | **IMPLEMENTED** | Backend and unit only: the E2E fixtures produce REVIEW and PASS, no BUY |
+| Favorites page (browser-local, run-scoped) | **IMPLEMENTED** | `FavoritesPage` (12); no E2E |
+| Appearance page (accent, logo, background) | **PENDING** | `/appearance` is a placeholder; only the shell Light/Dark toggle exists |
+| Catalog column visibility and order | **PENDING** | Not built (parity matrix: PRESERVE, preference only) |
+| Methodology page | **PENDING** | `/about` is a placeholder |
+| Images / thumbnails | **BLOCKED** | Thumbnail slot always shows "No image" (`src=""`): no image contract, rights or provenance |
+| Market history chart | **BLOCKED** | No authorized provider. Golden's simulated series deliberately not carried (`ProductDetailPage.tsx` header); whether to show a `DEMO_FIXTURE`-labelled series is an open decision |
+| Compare | **BLOCKED** | Placeholder; needs a comparable-identity ADR (ADR-011/012) and a batch-scoped cross-run query |
+| External supplier/marketplace links | **BLOCKED** | No approved URL field or rights policy |
+| Threshold editor / read-only bands | **BLOCKED** | ADR-051 is still Propuesta |
+| Server-side saved favorites | **BLOCKED** | Needs auth, ownership and isolation |
+| Dependency reproducibility | **VERIFIED** | Lockfile + `npm ci`; `npm audit` reports 5 dev-only advisories (vite, undici, source-map-js high; vitest, @vitest/mocker moderate), not remediated |
 
 ## Dependency reproducibility (milestone 2)
 
@@ -212,13 +240,17 @@ request.
 
 ## Next milestones
 
-| # | Scope | Depends on | Blockers |
+State as of 2026-10-28 (see Status above).
+
+| # | Scope | Depends on | Blockers / state |
 |---|---|---|---|
-| 3 | Product Detail, data quality, field trace, price-history UX with fixture label | 2 | raw row / process trace need backend fields |
-| 4 | Dashboard analytics | 2 | none |
-| 5 | Appearance | — | none |
-| 6 | Favorites page | 3 | cross-run record lookup |
-| 7 | Compare | 3 | ADR + batch-scoped cross-run query |
-| 8 | Supplier image / URL contract | — | backend contract + rights policy |
-| 9 | `ExecutionRun.thresholds` + read-only bands + re-run | — | ADR |
+| 3 | Product Detail, data quality, field trace, price-history UX with fixture label | 2 | **Done** except price history: blocked by provider; `DEMO_FIXTURE` label is an open decision |
+| 4 | Dashboard analytics | 2 | **Done** |
+| 5 | Appearance (accent, logo, background) | — | **Pending** — authorized 2026-10-28 for Codex (block C1) |
+| 6 | Favorites page | 3 | **Done**, browser-local and run-scoped |
+| 7 | Compare | 3 | Blocked: ADR + batch-scoped cross-run query |
+| 8 | Supplier image / URL contract | — | Blocked: backend contract + rights policy |
+| 9 | `ExecutionRun.thresholds` + read-only bands + re-run | — | Blocked: ADR-051 Propuesta |
 | 10 | Cutover `frontend-next/` → `frontend/` | full parity + user approval | user decision |
+| 11 | E2E coverage of batch ≤10, ROI percent, BUY, consecutive/concurrent exports | — | **Pending** — authorized 2026-10-28 for Codex (block B) |
+| 12 | Catalog column visibility/order; Methodology page | — | **Pending** — authorized 2026-10-28 for Codex (blocks C2, C3) |

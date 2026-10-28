@@ -1,5 +1,64 @@
 # Juval — Project Status
 
+## 2026-10-28 — Sanitized candidate adopted, filtered export fixed, frontend-next validated
+
+**IMPLEMENTED locally (no push, deploy or migration).** Nothing was pushed: the
+last fetched `origin/master` is `f03574b`, behind local master.
+
+**Adoption.** The isolated reconciliation (operator scripts 11 and 12, verdict
+`UNVERIFIED_REMOVED`, ADR-054) produced candidate `a64b5ba` (tree
+`c3fca38…`), built from the sanitized lineage only. It was adopted by
+fast-forward from `a174825`:
+- the 21 local changes were backed up privately outside APP, the backup was
+  verified by restoring it in a separate clone, and the changes were then
+  retired from the working tree;
+- all 21 are in the candidate: 13 identical, 4 included plus the functional
+  improvements, 4 differ only where fixture credentials were sanitized;
+- 0 commits of the original lineage are reachable, and 0 of APP's objects hold
+  an original value.
+
+The historical risk of the original values stays **PENDING**: they were
+neither rotated nor proven fictitious.
+
+Incident: retiring the local `.gitignore` change briefly un-ignored
+`.local-evidence/gate_b2/`. Its content was untouched (fingerprint equal
+before/after), and it is ignored again by the adopted `.gitignore`. A future
+adoption procedure must fingerprint ignored operational data and evaluate
+ignore rules under local, HEAD and candidate rules.
+
+**Filtered export race fixed (`46a5c9a`, introduced in `d64bace`).**
+`GET /records/export` wrote every export of a run to one shared
+`filtered-export.xlsx` and streamed it after the handler returned. In an
+isolated reproduction, concurrent exports of one run silently returned the
+other request's filters/sort in up to half the responses, or broke with
+`Content-Length` errors. Each export is now built in memory and returned as
+bytes; headers, filters, sort, columns and `/download` are unchanged.
+- `tests/integration/test_filtered_export_concurrency.py`: 6 tests, 4 of which
+  fail on the previous code.
+- After the fix the reproduction gave 840/840 correct responses and the E2E log
+  has no `LocalProtocolError`.
+- The export's memory ceiling is a recorded PENDING risk: API_CONTRACT §8
+  item 5.
+
+**Evidence at `46a5c9a`** (isolated audited Python env; APP `.venv` untouched):
+- Backend pytest: 2093 passed, 0 failed, 129 skipped. The skips are 86 nginx
+  (no binary), 33 without a disposable/runtime DSN and 2 by design: none of them
+  verified.
+- Compliance: `deps.audit` PASS and `secret_scan` PASS.
+- frontend-next: `npm ci`, typecheck, lint, 190 unit (10 skipped by design),
+  build and E2E 21/21.
+
+**frontend-next state.** Re-inventoried in `FRONTEND_NEXT_MIGRATION.md`
+§Status:
+- Dashboard, Catalog, export, Product Detail, provenance and Light/Dark are
+  browser-verified.
+- Batch ≤10, ROI percent input, BUY rendering, Runs and Favorites are unit-only.
+- Appearance, column configuration and Methodology are pending; they were
+  authorized for Codex on 2026-10-28 (frontend freeze exception limited to
+  blocks B/C).
+- Images, market history, Compare, external links and the threshold editor
+  remain blocked by decisions or sources.
+
 ## 2026-10-28 — "Profitable, demand pending": existing contract proven, not rebuilt
 
 **IMPLEMENTED (tests + contract only; no code, decision or API change).**

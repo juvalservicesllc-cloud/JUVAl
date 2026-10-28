@@ -595,6 +595,20 @@ por defecto (ningún origen permitido), **nunca** `"*"`.
    `docs/PROJECT_STATUS.md` §Sesión 2026-08-17 (bloque 5) para las
    opciones presentadas, ninguna aplicada todavía, pendientes de tu
    aprobación.
+5. **Memoria del export filtrado — PENDING (registrado 2026-10-28).**
+   `GET /api/v1/runs/{execution_id}/records/export` admite hasta
+   `_EXPORT_MAX_RECORDS = 100 000` filas y construye el workbook completo
+   con openpyxl en memoria. Medición sintética (100 000 filas × 54
+   columnas, fuera de APP): pico de ~1,1 GB con el workbook en memoria y
+   ~1,5 GB al guardarlo; XLSX resultante de ~17 MB. La corrección de
+   concurrencia de 2026-10-28 (bytes en memoria en lugar de un fichero
+   compartido) solo añade el buffer del XLSX (~35 MB); el coste dominante
+   ya existía. Riesgos: varios exports grandes simultáneos pueden agotar
+   la memoria del proceso, y el endpoint (`async def`) hace trabajo
+   bloqueante (consulta y openpyxl) que retiene el event loop mientras
+   genera. Alternativas sin decidir: openpyxl `write_only` (sin
+   dependencia nueva) o un límite de exports concurrentes. No se cambió
+   la implementación.
 
 ## 9. Listados persistentes — `[IMPLEMENTADO 2026-08-17, ADR-019]`
 
