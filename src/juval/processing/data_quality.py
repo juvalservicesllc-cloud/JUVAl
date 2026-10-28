@@ -20,7 +20,7 @@ from typing import Optional
 
 from juval.domain.identifiers import is_valid_asin, is_valid_ean, is_valid_gtin, is_valid_upc
 from juval.domain.issues import IssueLevel, ProcessingIssue
-from juval.domain.product import Competition, Dimensions, Identification, Price
+from juval.domain.product import Competition, Dimensions, Identification, Price, SellingPriceSource
 from juval.domain.provenance import FieldValue
 from juval.processing.profitability import ProfitabilityResult
 
@@ -103,6 +103,17 @@ def validate_dimensions(
     return issues
 
 
+# Which Price field `selling_price_used` is a copy of, per `selling_price_source`.
+_PRICE_FIELD_FOR_SOURCE = {
+    SellingPriceSource.CURRENT_BUY_BOX: "current_buy_box",
+    SellingPriceSource.AVERAGE_BUY_BOX_30D: "average_buy_box_30d",
+    SellingPriceSource.AVERAGE_BUY_BOX_90D: "average_buy_box_90d",
+    SellingPriceSource.AVERAGE_BUY_BOX_180D: "average_buy_box_180d",
+    SellingPriceSource.MIN_FBA: "min_fba_price",
+    SellingPriceSource.MIN_FBM: "min_fbm_price",
+}
+
+
 def validate_price(price: Price, *, record_ref: Optional[str] = None) -> list[ProcessingIssue]:
     issues: list[ProcessingIssue] = []
     candidates = {
@@ -114,6 +125,12 @@ def validate_price(price: Price, *, record_ref: Optional[str] = None) -> list[Pr
         "min_fbm_price": price.min_fbm_price,
         "selling_price_used": price.selling_price_used,
     }
+    # `selling_price_used` is a copy of the price its source names (Price docs,
+    # DATA_DICTIONARY). When it is that same value, it is one datum: report it
+    # once, on the field profitability reads. A different price is still checked.
+    source_field = _PRICE_FIELD_FOR_SOURCE.get(price.selling_price_source)
+    if source_field is not None and price.selling_price_used is not None and candidates[source_field] == price.selling_price_used:
+        del candidates[source_field]
     for field_name, fv in candidates.items():
         if fv is not None and fv.is_usable and fv.value < 0:
             issues.append(

@@ -1,5 +1,21 @@
 # Juval — Project Status
 
+## 2026-10-28 — One NEGATIVE_PRICE per price, not one per copy
+
+**IMPLEMENTED (data quality only; no decision, profitability or rule change).**
+
+`validate_price` reported a negative price twice when `selling_price_used` was
+the same value as the field its `selling_price_source` names, which is the shape
+the importer builds. Such a copy is now reported once, on `selling_price_used`,
+with the same code, level and message. A different price in another field is
+still reported, and so is a declared source whose value or provenance differs.
+
+Tests: 6 unit and 2 pipeline tests. The 3 duplicate tests fail without the
+fix; the 3 tests against over-suppression pass both ways. Pipeline decisions
+and profit are identical before and after (probe with -5, 0 and 40). Targeted
+gate: 30 files plus `tests/compliance` give 801 passed, 86 skipped (nginx),
+0 failed.
+
 ## 2026-10-28 — frontend-next shows where HazMat/Bulky severity comes from
 
 **IMPLEMENTED in `frontend-next/`.** No backend change; decisions are untouched.
