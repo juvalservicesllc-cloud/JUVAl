@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import contextlib
 import csv
+import io
 import json
 import logging
 import os
@@ -35,10 +36,11 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Literal, Optional
+from urllib.parse import quote
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from openpyxl.utils.exceptions import InvalidFileException
 from pydantic import ValidationError
 
@@ -753,14 +755,12 @@ async def export_filtered_records(
     provenance_status: Optional[Literal["VERIFIED", "INFERRED", "NOT_FOUND", "INVALID"]] = None,
     review_classification: Optional[Literal["PENDING_DEMAND_VERIFICATION"]] = None,
     _principal=Depends(require(RUNS_EXPORT)),
-) -> FileResponse:
+) -> Response:
     store = _require_execution_run_store()
     if store.load_execution_run(execution_id) is None:
         raise HTTPException(status_code=404, detail="unknown execution_id")
     query = _query_from_params(search=search, brand=brand, decision=decision, sort=sort, direction=direction, min_roi=min_roi, min_profit=min_profit, min_margin=min_margin, confidence=confidence, hazmat=hazmat, bulky=bulky, provenance_field=provenance_field, provenance_status=provenance_status, review_classification=review_classification, limit=_EXPORT_MAX_RECORDS)
     page = store.list_records(execution_id, query)
-    path = service.run_dir(execution_id) / "filtered-export.xlsx"
-    path.parent.mkdir(parents=True, exist_ok=True)
     workbook = openpyxl.Workbook()
     sheet = workbook.active
     sheet.title = "catalog_export"
@@ -780,8 +780,15 @@ async def export_filtered_records(
     # 0.3 in this sheet is the 30% the operator typed. Without this line a
     # reader could take 0.3 for 0.3% and misjudge a sourcing threshold.
     append_literal_row(metadata, ["units", "min_roi and min_margin are ratios (0.30 = 30%); min_profit and prices are absolute currency amounts"])
-    workbook.save(path)
-    return FileResponse(path, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename=f"{execution_id}-filtered.xlsx")
+    # Each export is its own bytes: a file shared by the run would let a
+    # concurrent export overwrite it while this one is still being sent.
+    buffer = io.BytesIO()
+    workbook.save(buffer)
+    filename = f"{execution_id}-filtered.xlsx"
+    quoted = quote(filename)  # same Content-Disposition FileResponse produced
+    disposition = f'attachment; filename="{filename}"' if quoted == filename else f"attachment; filename*=utf-8''{quoted}"
+    return Response(buffer.getvalue(), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": disposition})
 
 
 @app.get("/api/v1/runs/{execution_id}/records/{record_ref}", response_model=RecordOut)

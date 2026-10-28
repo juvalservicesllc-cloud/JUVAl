@@ -271,7 +271,12 @@ los existentes). Todo se aplica en persistencia, nunca sobre la página.
 
 `GET /api/v1/runs/{execution_id}/records/export` usa los mismos parámetros y
 devuelve un XLSX filtrado/ordenado con metadatos (`execution_id`, timestamp
-UTC, filtros, sort y direction).
+UTC, filtros, sort y direction). Cada petición genera su XLSX en memoria y no
+escribe ningún fichero en el directorio del run, así que dos exports
+simultáneos del mismo run no se mezclan (corrección 2026-10-28; antes
+compartían `filtered-export.xlsx`). La respuesta lleva `Content-Length` y
+`Content-Disposition: attachment; filename="{execution_id}-filtered.xlsx"`,
+sin `ETag`, `Last-Modified` ni soporte de `Range`.
 
 `brand` (2026-10-26, 1–200 caracteres) es una igualdad exacta y sensible a
 mayúsculas sobre el valor de marca guardado en el snapshot, sin recortes ni
