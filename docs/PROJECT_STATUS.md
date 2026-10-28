@@ -1,5 +1,27 @@
 # Juval — Project Status
 
+## 2026-10-28 — Negative selling_price is invalid input, not a verified loss
+
+**IMPLEMENTED (data validation fix; no formula, threshold or rule change).**
+
+Defect: the legacy importer kept a negative `selling_price` as VERIFIED.
+`validate_price` raised `NEGATIVE_PRICE` but the pipeline still used the price,
+so profit and ROI came out VERIFIED negatives and the engine answered
+PASS / NEGATIVE_PROFIT ("would lose money") from bad data.
+
+Fix (`infrastructure/excel/importer.py::_build_price`): a negative price now
+follows the existing non-numeric path: `INVALID_PRICE` RECORD_ERROR, no price
+used, profit/ROI NOT_FOUND, REVIEW (PROFIT_UNKNOWN). Same rule as the native
+price (`domain/financial_evidence.py`, value < 0 is INVALID). Zero is still a
+declared value, as in the native path. HazMat/Bulky blocks and a real loss
+from a valid price still give PASS (tests). API contract unchanged.
+
+Tests: `tests/integration/test_negative_selling_price.py`, 11 new (import,
+CSV/XLSX parity, pipeline, HTTP upload). 6 of them fail without the fix. All
+31 test files that use the importer, the pipeline or the API record pass:
+678 passed, 4 skipped (live Supabase); tests/compliance 182 passed, 86 skipped
+(no nginx binary). Docs: EXCEL_PROCESSING.md §4.
+
 ## 2026-10-27 — GOLDEN 17 final audit
 
 **IMPLEMENTED (audit fixes only; no decision, formula or threshold change).**
