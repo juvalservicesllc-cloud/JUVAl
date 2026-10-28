@@ -68,6 +68,33 @@ describe("CatalogPage on the real backend", () => {
     expect(within(table).getAllByLabelText("Status: VERIFIED")[0]).toHaveTextContent("VER")
   })
 
+  it("adds a compact severity source to the risk cells without changing them", async () => {
+    stubFetch()
+    const withProvenance = [
+      { ...recordFor(0, "VERIFIED"), hazmat_severity_status: "VERIFIED", hazmat_severity_source_type: "SUPPLIER_FILE",
+        bulky_severity_status: "NOT_FOUND", bulky_severity_source_type: "NOT_FOUND" },
+      { ...recordFor(1, "INFERRED"), hazmat_status: "PRESENT", hazmat_severity: "HIGH",
+        hazmat_severity_status: "INFERRED", hazmat_severity_source_type: "CALCULATED" },  // bulky: historical, no fields
+    ]
+    records.splice(0, records.length, ...withProvenance)
+    try {
+      render(<CatalogPage />)
+      const alpha = (await screen.findByText("Alpha anchor")).closest("tr") as HTMLElement
+      const beta = screen.getByText("Beta anchor").closest("tr") as HTMLElement
+
+      const declared = within(alpha).getByLabelText("HazMat severity provenance: Absence declared in supplier file")
+      expect(declared).toHaveTextContent("file")
+      expect(declared.closest("td")).toHaveTextContent("ABSENT")
+      expect(within(alpha).getByLabelText("Bulky severity provenance: Not found")).toHaveTextContent("N/F")
+      expect(within(beta).getByLabelText("HazMat severity provenance: JUVAl classification (inferred)")).toHaveAttribute(
+        "title", "Severity: JUVAl classification (inferred) — not an Amazon verification")
+      expect(within(beta).queryByLabelText(/Bulky severity provenance/)).not.toBeInTheDocument()
+      expect(within(beta).getByText("UNKNOWN")).toBeInTheDocument()
+    } finally {
+      records.splice(0, records.length, recordFor(0, "VERIFIED"), recordFor(1, "INFERRED"))
+    }
+  })
+
   it("renders ROI and margin as percentages, never as the stored ratio", async () => {
     stubFetch()
     render(<CatalogPage />)

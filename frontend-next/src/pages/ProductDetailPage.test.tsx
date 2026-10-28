@@ -24,12 +24,12 @@ const record = {
 const noFinancial = { execution_id: "run-1", record_ref: record.record_ref, financial_document: null, capture_diagnostics: null, inconsistencies: [] }
 
 const json = (status: number, body: unknown) => Promise.resolve(new Response(JSON.stringify(body), { status }))
-function stub({ recordStatus = 200, financial = noFinancial as unknown, financialStatus = 200 } = {}) {
+function stub({ recordStatus = 200, financial = noFinancial as unknown, financialStatus = 200, body = record as unknown } = {}) {
   const mock = vi.fn((url: string) => {
     const path = new URL(String(url)).pathname
     if (path.endsWith("/auth/session")) return json(200, { authenticated: false })
     if (path.endsWith("/financial")) return json(financialStatus, financial)
-    return recordStatus === 200 ? json(200, record) : json(recordStatus, { detail: recordStatus === 404 ? "unknown record for execution" : "internal server error" })
+    return recordStatus === 200 ? json(200, body) : json(recordStatus, { detail: recordStatus === 404 ? "unknown record for execution" : "internal server error" })
   })
   vi.stubGlobal("fetch", mock)
   return mock
@@ -58,6 +58,35 @@ describe("Product Detail (one record within one run)", () => {
     expect(within(decision).getByText("■ PASS")).toBeInTheDocument()
     expect(within(decision).getByText("HazMat severity HIGH exceeds maximum LOW")).toBeInTheDocument()
     expect(within(screen.getByLabelText("Risks")).getByText("HIGH")).toBeInTheDocument()
+  })
+
+  it("says where each risk severity comes from, as the backend stored it (ADR-020)", async () => {
+    stub({ body: { ...record, hazmat_severity_status: "INFERRED", hazmat_severity_source_type: "CALCULATED",
+      bulky_severity_status: "VERIFIED", bulky_severity_source_type: "SUPPLIER_FILE" } })
+    page()
+    const risks = await screen.findByLabelText("Risks")
+    expect(within(risks).getByText("HIGH")).toBeInTheDocument()
+    expect(within(risks).getByLabelText("HazMat severity provenance: JUVAl classification (inferred)")).toHaveTextContent("JUVAl classification (inferred)")
+    expect(within(risks).getByLabelText("Bulky severity provenance: Absence declared in supplier file")).toHaveTextContent("Absence declared in supplier file")
+    expect(risks.textContent).not.toMatch(/verified by amazon|VERIFIED_SOURCE/i)
+  })
+
+  it("shows a not-found and an invalid severity source without guessing", async () => {
+    stub({ body: { ...record, hazmat_status: "UNKNOWN", hazmat_severity: null, hazmat_severity_status: "NOT_FOUND", hazmat_severity_source_type: "NOT_FOUND",
+      bulky_status: "UNKNOWN", bulky_severity: null, bulky_severity_status: "INVALID", bulky_severity_source_type: "SUPPLIER_FILE" } })
+    page()
+    const risks = await screen.findByLabelText("Risks")
+    expect(within(risks).getByLabelText("HazMat severity provenance: Not found")).toBeInTheDocument()
+    expect(within(risks).getByLabelText("Bulky severity provenance: Invalid in supplier file")).toBeInTheDocument()
+  })
+
+  it("keeps a historical snapshot without severity provenance as it was", async () => {
+    stub()  // `record` predates the fields
+    page()
+    const risks = await screen.findByLabelText("Risks")
+    expect(within(risks).getByText("HIGH")).toBeInTheDocument()
+    expect(within(risks).queryByLabelText(/severity provenance/)).not.toBeInTheDocument()
+    expect(within(risks).getByText(/not verified externally/)).toBeInTheDocument()
   })
 
   it("keeps every value beside its own verification status and never shows a missing amount as zero", async () => {

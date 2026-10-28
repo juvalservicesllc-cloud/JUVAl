@@ -1,5 +1,34 @@
 # Juval — Project Status
 
+## 2026-10-28 — frontend-next shows where HazMat/Bulky severity comes from
+
+**IMPLEMENTED in `frontend-next/`.** No backend change; decisions are untouched.
+
+**What changed.** `RecordOut` gains four optional fields typed as nullable. A new
+`SeverityProvenance` component only puts the backend pair into words; nothing
+is derived in the browser:
+- INFERRED/CALCULATED → "JUVAl classification (inferred)";
+- VERIFIED/SUPPLIER_FILE → "Absence declared in supplier file";
+- NOT_FOUND → "Not found";
+- INVALID/SUPPLIER_FILE → "Invalid in supplier file";
+- an unexpected pair is shown literally;
+- null/absent renders nothing.
+
+Every title says "not an Amazon verification". Product Detail shows the full
+label. The Catalog shows a compact tag in the existing risk cells (same `.prov`
+tones). Filters, sorting, export and columns are unchanged. UI text is English,
+like the rest of the app.
+
+**Tests:**
+- tsc and typecheck clean; oxlint clean; build OK.
+- vitest: 9 new component tests, plus 3 Product Detail and 1 Catalog tests.
+  Without the wiring, the 3 page-level tests fail. The directed set of
+  record-consuming pages gives 87 passed, 9 skipped (opt-in live contract).
+- E2E Chromium: the new spec passes 4/4, with screenshots in dark and light at
+  desktop and phone width. The full suite passed 21/21 twice. A first full run
+  had one transient `socket hang up` on a direct API GET in D7 test 11, after
+  all its UI assertions had passed.
+
 ## 2026-10-28 — Severity provenance in the .xlsx exports
 
 **IMPLEMENTED (four columns appended last; no earlier column moved).**

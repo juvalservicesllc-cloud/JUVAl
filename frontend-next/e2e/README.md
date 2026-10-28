@@ -65,3 +65,13 @@ It reuses `support.ts`, and seeds the historical run itself when it runs alone.
 
 Every test fails on a console error, an uncaught exception or an HTTP status
 ≥ 400 that it did not declare as expected.
+
+## What `severity-provenance.spec.ts` covers
+
+Severity provenance (ADR-020) through the real pipeline, using `severity-provenance.xlsx`
+with hazmat `true`/`false`/blank/`maybe`:
+- the compact tags in the Catalog risk cells, with the Hazmat filter and sorting still working;
+- the full labels in Product Detail, with no Amazon claim;
+- a historical snapshot with no source shown.
+
+It writes screenshots in dark and light, at desktop and phone width.
