@@ -1,3 +1,8 @@
 # pip-audit -> requests -> urllib3: keep audit tooling above the security floor.
 # This constrains an existing transitive dependency, not JUVAl runtime imports.
 urllib3>=2.8.0
+# 2026-10-28: certifi (requests, also httpx [dev]), filelock and msgpack
+# (pip-audit -> CacheControl[filecache]); see docs/research/DEPENDENCY_AUDIT_REMEDIATION_20261028.md.
+certifi>=2026.10.19
+filelock>=4.2.1
+msgpack>=1.2.3
