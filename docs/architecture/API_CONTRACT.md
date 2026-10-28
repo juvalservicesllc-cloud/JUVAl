@@ -60,7 +60,11 @@ Campos con esta forma: `asin`, `upc`, `weight`, `selling_price`,
 provenance por diseño, igual que en `exporter.py`): `record_ref`,
 `marketplace`, `supplier_sku`, `cog`, `shipping_per_unit`,
 `hazmat_status`/`hazmat_severity`, `bulky_status`/`bulky_severity`,
-`decision`, `decision_reasons` (lista de `"CODE: message"`),
+`hazmat_severity_status`/`bulky_severity_status` (estado de verificación de la
+severidad, ADR-020: `INFERRED` para la severidad de política HIGH/MEDIUM,
+`VERIFIED` para el `NONE` de un riesgo ausente, `NOT_FOUND`/`INVALID` si no se
+pudo leer la presencia; `null` sin columna o en snapshots anteriores al
+2026-10-28, nunca reconstruido), `decision`, `decision_reasons` (lista de `"CODE: message"`),
 `issue_count`, `issues` (lista de `"[LEVEL] CODE: message"`),
 `issue_codes` (los `ProcessingIssue.code` canónicos, para agrupar por tipo
 sin re-parsear la cadena de presentación), y los términos intermedios del

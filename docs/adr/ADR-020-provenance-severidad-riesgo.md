@@ -179,3 +179,12 @@ cambiar, este ADR cierra su ítem diferido), `domain/risk.py`,
 `domain/provenance.py::FieldValue`,
 `infrastructure/excel/importer.py::_build_risk_flag`,
 `docs/architecture/DATA_PROVENANCE.md`.
+
+## Seguimiento (2026-10-28)
+
+Se aplica el cambio aditivo previsto en "Qué NO resuelve": `RecordOut` y el
+snapshot añaden `hazmat_severity_status`/`bulky_severity_status`. El consumidor
+es el requisito de que la API indique la procedencia de cada dato y el frontend
+no presente la severidad de política (`HIGH`/`MEDIUM`) como un dato del archivo.
+`hazmat_severity`/`bulky_severity` no cambian; el export Excel/CSV no cambia
+(FUTURE si se pide). Decisión, severidades y motor intactos.

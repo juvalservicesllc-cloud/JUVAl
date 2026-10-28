@@ -1,5 +1,28 @@
 # Juval — Project Status
 
+## 2026-10-28 — API exposes the verification status of risk severity (ADR-020 follow-up)
+
+**IMPLEMENTED (additive contract field; no decision, severity or rule change).**
+
+`RecordOut` and the record snapshot add `hazmat_severity_status` and
+`bulky_severity_status`, the additive field ADR-020 anticipated. Values:
+- INFERRED for the policy-derived HIGH/MEDIUM (ADR-044);
+- VERIFIED for the NONE of an absent risk;
+- NOT_FOUND for a blank cell, INVALID for an unreadable one;
+- null without the column, and on snapshots written before today (never
+  reconstructed).
+
+Before, a client could only show `HIGH` as if it were read from the file.
+`hazmat_severity`/`bulky_severity` are unchanged. The Excel/CSV export is
+unchanged (FUTURE). No migration: the snapshot is JSON/JSONB. Frontend untouched;
+the handoff note for Codex is updated.
+
+Tests: 4 new unit tests, 2 new API tests (CSV with yes/no/blank/invalid; persist
+and read back) and 2 extended (fixture upload; old snapshot gives null). 8 fail
+without the change. All
+39 files that touch snapshots, records, the importer or the pipeline pass:
+852 passed, 7 skipped (live Supabase), including the disposable PostgreSQL tests.
+
 ## 2026-10-28 — Negative selling_price is invalid input, not a verified loss
 
 **IMPLEMENTED (data validation fix; no formula, threshold or rule change).**

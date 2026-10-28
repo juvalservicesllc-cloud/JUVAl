@@ -218,7 +218,7 @@ Do not collapse these concepts:
 1. `RiskFlag.status`: `PRESENT`, `ABSENT`, or `UNKNOWN`.
 2. `RiskFlag.verification_status`: `VERIFIED`, `INFERRED`, `NOT_FOUND`, or `INVALID`.
 
-Current `RecordOut` exposes risk status/severity (`hazmat_status`, `hazmat_severity`, `bulky_status`, `bulky_severity`) but no separate risk verification status. Before Products claims Hazmat/Bulky provenance, the backend contract needs an explicit decision on whether to expose it. `BUY`/`REVIEW`/`PASS` remains an application/domain result, never a React classification.
+`RecordOut` exposes risk status/severity (`hazmat_status`, `hazmat_severity`, `bulky_status`, `bulky_severity`) and, since 2026-10-28 (ADR-020 follow-up), `hazmat_severity_status`/`bulky_severity_status`: `INFERRED` for the policy severity HIGH/MEDIUM (show it as Juval's classification, not as supplier data), `VERIFIED` for the NONE of an absent risk, `NOT_FOUND` for a blank cell, `INVALID` for an unreadable one; `null` without the column or on older snapshots (do not infer it). `BUY`/`REVIEW`/`PASS` remains an application/domain result, never a React classification.
 
 ## 10. Error Contract
 
