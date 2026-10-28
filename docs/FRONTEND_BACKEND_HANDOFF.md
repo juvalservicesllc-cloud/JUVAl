@@ -117,6 +117,24 @@ The actual decorators in `src/juval/interfaces/api/main.py` register these PWA-f
 - **Errors:** `404 { "detail": "unknown execution_id" }`; safe `500` when no execution-run store is configured.
 - **Frontend state:** connected (2026-08-17) — `RunDetailPage.tsx` via `api/records.ts::getRunRecords`, rendered with the existing `ResultsTable.tsx` (reused unchanged, no second table component). ADR-019 defines this as the record boundary, not a global Products API; `ProductsPage.tsx` itself remains demo (see §15 Priority 2 — title/brand still not in the contract, unchanged).
 
+### Profitable records pending demand verification (contract, 2026-10-28)
+
+Use the existing fields; no new endpoint or field:
+- `review_classification === "PENDING_DEMAND_VERIFICATION"` means that the
+  decision is REVIEW and its only reason is `DEMAND_UNKNOWN`. Profit and ROI are
+  usable and at or above the run's targets, and there is no other blocker.
+- Server-side query: `GET /api/v1/runs/{id}/records?review_classification=PENDING_DEMAND_VERIFICATION`.
+  Optionally add `&min_roi=<ratio>&confidence=VERIFIED_ONLY`. The same parameters
+  work on `/records/export`. `GET /analytics` gives
+  `review_classification.pending_demand_verification`.
+
+Show it as REVIEW with "demand not verified". Never show it as BUY, as "likely
+BUY", or with a demand number taken from `demand_evidence`, which is declared
+evidence and not used.
+
+The run's thresholds are not stored (ADR-051, Proposed), so do not display
+them. Historical snapshots without reason codes are `NOT_CLASSIFIABLE`.
+
 ## 6. Contracts Pending or Requiring Reconciliation
 
 There is no missing approved Runs list endpoint: `GET /api/v1/runs` is implemented. `GET /api/v1/products` is **NOT IMPLEMENTED / NOT APPROVED** because the domain currently has no cross-run product identity. `GET /api/v1/dashboard` is **NOT IMPLEMENTED / NO FRONTEND CONTRACT**; Dashboard remains a demo until a concrete UI need exists.

@@ -1,5 +1,32 @@
 # Juval — Project Status
 
+## 2026-10-28 — "Profitable, demand pending": existing contract proven, not rebuilt
+
+**IMPLEMENTED (tests + contract only; no code, decision or API change).**
+
+**Analysis.** The engine evaluates every REVIEW rule (`evaluate_decision`), so
+the existing `review_classification == PENDING_DEMAND_VERIFICATION` (D7-D)
+already identifies records with:
+- usable profit and ROI at or above the run's targets;
+- no other blocker.
+
+The API already serves it through the field, the filter, the export and the
+analytics. With `min_roi` + `confidence=VERIFIED_ONLY` it gives "verified ROI
+≥ x, demand pending". A new projection would have duplicated it.
+
+**New tests:** `tests/integration/test_pending_demand_profitability.py` runs the
+real import, engine and API on 8 rows:
+- favourable, exactly on target, just below target;
+- HazMat PASS, Bulky at the maximum, unknown risk, invalid price;
+- a million declared units.
+
+They check that decisions and codes are unchanged, no BUY appears, pending
+implies usable economics ≥ targets, declared demand changes nothing, and the API
+filters, export and analytics compose. A mutation of the classification rule
+(contains instead of equals `DEMAND_UNKNOWN`) fails 2 of them.
+
+**Docs:** API_CONTRACT §2c (guarantee, queries, limit) and the frontend handoff.
+
 ## 2026-10-28 — One NEGATIVE_PRICE per price, not one per copy
 
 **IMPLEMENTED (data quality only; no decision, profitability or rule change).**

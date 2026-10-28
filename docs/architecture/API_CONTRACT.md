@@ -309,6 +309,32 @@ añade `review_classification: {pending_demand_verification,
 review_not_classifiable}`. No requiere migración: es una clave más del JSON del
 snapshot.
 
+**Garantía (probada en `tests/integration/test_pending_demand_profitability.py`).**
+El motor evalúa todas las reglas de REVIEW. Por eso, un registro
+`PENDING_DEMAND_VERIFICATION` tiene:
+- `profit` y `roi` utilizables (VERIFIED o INFERRED), con valores ≥
+  `target_profit` y ≥ `target_roi` del run;
+- ninguna regla PASS disparada;
+- ningún otro bloqueo de REVIEW: riesgo desconocido o en el máximo, aprobación.
+
+Es la forma existente de encontrar **oportunidades rentables con la demanda
+pendiente de verificar**. No hace falta, ni existe, otro campo.
+
+**Consultas.** Los filtros existentes se combinan en `/records` y
+`/records/export`:
+- todas las oportunidades: `review_classification=PENDING_DEMAND_VERIFICATION`;
+- con un ROI mínimo y solo economía VERIFIED: añadir
+  `&min_roi=0.5&confidence=VERIFIED_ONLY`. `confidence` solo actúa junto a
+  `min_roi`/`min_profit`/`min_margin`.
+
+**Lo que no es:** ni BUY ni una predicción de BUY. La demanda declarada
+(ADR-052, INFERRED `USER_INPUT`) nunca entra en el motor: un millón de unidades
+declaradas deja el registro igual.
+
+**Límite:** "≥ objetivo" se refiere a los umbrales enviados al procesar el run,
+que aún no se guardan (ADR-051, Propuesta). El snapshot no puede decir cuáles
+eran. Un consumidor no debe mostrarlos como si los conociera.
+
 ### Demanda declarada (ADR-052, D7-B, 2026-10-26)
 
 `RecordOut` añade dos campos:
