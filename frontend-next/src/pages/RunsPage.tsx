@@ -18,10 +18,14 @@ import { Badge, DecisionCounts } from "./shared"
  * that no ADR covers yet.
  */
 type State = { kind: "loading" } | { kind: "error"; message: string } | { kind: "empty" } | { kind: "ready"; runs: RunSummaryOut[] }
+const SORTS = { started_at: "Started at", input_filename: "Input file", execution_id: "Execution ID", status: "Status", records_total: "Total records", records_processed: "Processed", records_successful: "Successful", records_with_errors: "Errors", warnings: "Warnings" } as const
+type Sort = keyof typeof SORTS
 
 export function RunsPage({ go }: { go: (path: string) => void }) {
   const [state, setState] = useState<State>({ kind: "loading" })
   const [reload, setReload] = useState(0)
+  const [sort, setSort] = useState<Sort>("started_at")
+  const [direction, setDirection] = useState<"asc" | "desc">("desc")
 
   useEffect(() => {
     const controller = new AbortController()
@@ -38,8 +42,20 @@ export function RunsPage({ go }: { go: (path: string) => void }) {
     {state.kind === "error" && <section className="panel"><p role="alert" className="notice">{state.message}</p><button onClick={() => setReload((n) => n + 1)}>Retry</button></section>}
     {state.kind === "empty" && <p className="panel">No persisted runs yet. Process a batch with persistence enabled to see it here.</p>}
     {state.kind === "ready" && <section className="panel">
-      <p>{count(state.runs.length)} persisted run{state.runs.length === 1 ? "" : "s"}, newest first. Each run is one supplier file.</p>
-      {state.runs.map((run) => <article key={run.execution_id}>
+      <p aria-live="polite">{count(state.runs.length)} persisted run{state.runs.length === 1 ? "" : "s"} (up to 100), ordered by {SORTS[sort]}, {direction === "asc" ? "ascending" : "descending"}. Each run is one supplier file.</p>
+      <div className="chart-controls">
+        <label>Sort runs<select value={sort} onChange={(event) => {
+          const key = event.target.value as Sort
+          setSort(key); setDirection(["input_filename", "execution_id", "status"].includes(key) ? "asc" : "desc")
+        }}>{Object.entries(SORTS).map(([key, label]) => <option value={key} key={key}>{label}</option>)}</select></label>
+        <label>Run sort direction<select value={direction} onChange={(event) => setDirection(event.target.value as "asc" | "desc")}><option value="asc">Ascending</option><option value="desc">Descending</option></select></label>
+      </div>
+      {[...state.runs].sort((a, b) => {
+        const av = sort === "started_at" ? Date.parse(a.started_at) : a[sort]
+        const bv = sort === "started_at" ? Date.parse(b.started_at) : b[sort]
+        const compared = typeof av === "number" && typeof bv === "number" ? av - bv : String(av).localeCompare(String(bv))
+        return (direction === "asc" ? compared : -compared) || a.execution_id.localeCompare(b.execution_id)
+      }).map((run) => <article key={run.execution_id}>
         <b>{run.input_filename}</b>
         <p>
           <Badge>{run.status}</Badge>{" "}

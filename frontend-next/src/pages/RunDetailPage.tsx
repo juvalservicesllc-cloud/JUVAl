@@ -4,6 +4,7 @@ import { getRun } from "../api/runs"
 import type { RunSummaryOut } from "../api/types"
 import { count } from "../format"
 import { Badge, DecisionCounts } from "./shared"
+import { RunContext } from "./RunContext"
 
 /**
  * Minimum run detail needed to close the navigation loop
@@ -22,10 +23,12 @@ type State =
 export function RunDetailPage({ executionId, go }: { executionId: string; go: (path: string) => void }) {
   const [state, setState] = useState<State>({ kind: "loading" })
   const [reload, setReload] = useState(0)
+  const [showContext, setShowContext] = useState(false)
 
   useEffect(() => {
     const controller = new AbortController()
     setState({ kind: "loading" })
+    setShowContext(false)
     getRun(executionId, controller.signal)
       .then((run) => setState({ kind: "ready", run }))
       .catch((error: unknown) => {
@@ -70,5 +73,6 @@ export function RunDetailPage({ executionId, go }: { executionId: string; go: (p
       <button onClick={() => go(`/catalog?run=${encodeURIComponent(run.execution_id)}`)}>Open in Catalog</button>
       <button onClick={() => go("/runs")}>All runs</button>
     </section>
+    {showContext ? <RunContext key={executionId} executionId={executionId} /> : <button onClick={() => setShowContext(true)}>Load batch context and record preview</button>}
   </>
 }

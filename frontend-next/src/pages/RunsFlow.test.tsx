@@ -31,6 +31,27 @@ const okJson = (body: unknown) => vi.fn(() => Promise.resolve({ ok: true, status
 describe("RunsPage on real persisted runs", () => {
   afterEach(() => vi.unstubAllGlobals())
 
+  it("orders loaded metadata numerically and chronologically without refetching", async () => {
+    const fetch = okJson({ items: [
+      { ...run, execution_id: "old", input_filename: "Zulu.csv", started_at: "2026-08-26T11:00:00+02:00", records_total: 12 },
+      { ...run, execution_id: "new", input_filename: "Alpha.csv", started_at: "2026-08-26T10:00:00Z", records_total: 3 },
+    ] })
+    vi.stubGlobal("fetch", fetch)
+    render(<RunsPage go={vi.fn()} />)
+    await screen.findByText("Alpha.csv")
+    const names = () => screen.getAllByRole("article").map((article) => article.querySelector("b")?.textContent)
+    expect(names()).toEqual(["Alpha.csv", "Zulu.csv"])
+    expect(screen.getByRole("combobox", { name: "Sort runs" })).toHaveAccessibleName("Sort runs")
+    expect(screen.getByRole("combobox", { name: "Run sort direction" })).toHaveAccessibleName("Run sort direction")
+    const user = userEvent.setup()
+    await user.selectOptions(screen.getByLabelText("Sort runs"), "records_total")
+    expect(names()).toEqual(["Zulu.csv", "Alpha.csv"])
+    await user.selectOptions(screen.getByLabelText("Run sort direction"), "asc")
+    expect(names()).toEqual(["Alpha.csv", "Zulu.csv"])
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(screen.getByLabelText("Sort runs")).toHaveValue("records_total")
+  })
+
   it("shows a loading state, then the real run list", async () => {
     vi.stubGlobal("fetch", okJson({ items: [run] }))
     render(<RunsPage go={vi.fn()} />)
