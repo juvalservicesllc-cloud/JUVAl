@@ -5,6 +5,7 @@ import { CatalogPage } from "../pages/CatalogPage"
 import { DashboardPage } from "../pages/DashboardPage"
 import { FavoritesPage } from "../pages/FavoritesPage"
 import { NotWiredPage } from "../pages/NotWiredPage"
+import { MethodologyPage } from "../pages/MethodologyPage"
 import { ProductDetailPage } from "../pages/ProductDetailPage"
 import { RunDetailPage } from "../pages/RunDetailPage"
 import { RunsPage } from "../pages/RunsPage"
@@ -86,7 +87,7 @@ export function App() {
     : pathname === "/compare" ? <NotWiredPage title="Compare matched products" capability="Side-by-side comparison of records sharing an identifier across the source files of one batch." blocker="A comparable-identity ADR (ADR-011/ADR-012 refuse a global product identity) and a batch-scoped cross-run record query." />
     : pathname === "/favorites" ? <FavoritesPage initialRunId={search.get("run") ?? ""} go={go} />
     : pathname === "/appearance" ? <NotWiredPage title="Appearance & branding" capability="Light/dark, accent and brand assets, stored in this browser." />
-    : pathname === "/about" ? <NotWiredPage title="Methodology" capability="How JUVAl derives a decision: import, normalize, validate, calculate profitability, apply risk, decide." />
+    : pathname === "/about" ? <MethodologyPage />
     : <NotWiredPage title="Page not found" capability="No JUVAl route matches this address. Nothing was processed and no run was affected." />
 
   return <div className={dark ? "app dark" : "app"}>
