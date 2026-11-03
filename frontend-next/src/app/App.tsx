@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, type CSSProperties } from "react"
+import { accentColors, DEFAULT_APPEARANCE, loadAppearance, resetAppearance, saveAppearance, type Appearance } from "../appearance"
+import { AppearancePage } from "../pages/AppearancePage"
 import { loginUrl, onAuthRequired } from "../api/client"
 import { BatchPage } from "../pages/BatchPage"
 import { CatalogPage } from "../pages/CatalogPage"
@@ -36,7 +38,12 @@ const NAVIGATION: [path: string, label: string][] = [
 
 export function App() {
   const [route, setRoute] = useState(() => location.pathname + location.search)
-  const [dark, setDark] = useState(() => localStorage.getItem("juval.appearance.dark") !== "false")
+  const [appearance, setAppearance] = useState(loadAppearance)
+  const { dark } = appearance
+  const changeAppearance = (patch: Partial<Appearance>) => {
+    saveAppearance(patch)
+    setAppearance((current) => ({ ...current, ...patch }))
+  }
 
   const go = (path: string) => { history.pushState({}, "", path); setRoute(path) }
 
@@ -45,8 +52,6 @@ export function App() {
     addEventListener("popstate", onPop)
     return () => removeEventListener("popstate", onPop)
   }, [])
-
-  useEffect(() => { localStorage.setItem("juval.appearance.dark", String(dark)) }, [dark])
 
   // The API answered 401: offer sign-in, never redirect on our own -- an
   // automatic redirect on every 401 is how login loops start.
@@ -86,19 +91,27 @@ export function App() {
     : pathname === "/" ? <DashboardPage initialRunId={search.get("run") ?? ""} go={go} />
     : pathname === "/compare" ? <NotWiredPage title="Compare matched products" capability="Side-by-side comparison of records sharing an identifier across the source files of one batch." blocker="A comparable-identity ADR (ADR-011/ADR-012 refuse a global product identity) and a batch-scoped cross-run record query." />
     : pathname === "/favorites" ? <FavoritesPage initialRunId={search.get("run") ?? ""} go={go} />
-    : pathname === "/appearance" ? <NotWiredPage title="Appearance & branding" capability="Light/dark, accent and brand assets, stored in this browser." />
+    : pathname === "/appearance" ? <AppearancePage appearance={appearance} onChange={changeAppearance} onReset={() => { resetAppearance(); setAppearance({ ...DEFAULT_APPEARANCE }) }} />
     : pathname === "/about" ? <MethodologyPage />
     : <NotWiredPage title="Page not found" capability="No JUVAl route matches this address. Nothing was processed and no run was affected." />
 
-  return <div className={dark ? "app dark" : "app"}>
+  const colors = accentColors(appearance.accent || (dark ? "#9c92ff" : "#6d5dfc"), dark)
+  const appearanceStyle = {
+    ...(appearance.accent ? { "--accent": appearance.accent } : {}),
+    "--on-accent": colors.onAccent,
+    "--accent-text": colors.textAccent,
+    ...(appearance.background ? { backgroundImage: `url("${appearance.background}")` } : {}),
+  } as CSSProperties
+  return <div className={`app${dark ? " dark" : ""}${appearance.background ? " has-custom-background" : ""}`} style={appearanceStyle}>
     <aside>
+      {appearance.logo && <img className="appearance-logo" src={appearance.logo} alt="Custom JUVAl logo" />}
       <b>JUVAl</b>
       {NAVIGATION.map(([path, label]) => <button key={path} onClick={() => go(path)} aria-current={pathname === path ? "page" : undefined}>{label}</button>)}
     </aside>
     <main>
       <header>
         <span>LIVE — real backend, real persisted runs</span>
-        <button onClick={() => setDark(!dark)} role="switch" aria-checked={dark}>{dark ? "Light" : "Dark"}</button>
+        <button onClick={() => changeAppearance({ dark: !dark })} role="switch" aria-checked={dark}>{dark ? "Light" : "Dark"}</button>
       </header>
       {signInNeeded && <p role="alert" className="notice">
         You are not signed in or your session has expired. <a href={loginUrl()}>Sign in</a> to continue; nothing on this page was changed.

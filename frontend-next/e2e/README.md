@@ -117,6 +117,11 @@ light/dark screenshots under the E2E output directory. Column settings use
 `juval.catalog.columns.v1`, with Title always visible; neither records
 requests nor export URLs change.
 
+`recovery-c1` covers Appearance, with light/dark screenshots. Appearance
+assets are browser-local PNG/JPEG/WebP only, at most 512 KiB (524288 bytes)
+each; SVG and external URLs are rejected. Reset removes only
+`juval.appearance.*`.
+
 Run the suite outside the Codex sandbox: inside it, Node's `spawnSync`
 returns EPERM, so the config cannot start the fixture generator. Keep
 `TMPDIR` short: Chromium aborts with "Socket path too long" when its

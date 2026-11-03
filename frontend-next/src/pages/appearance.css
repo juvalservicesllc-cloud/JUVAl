@@ -1,0 +1,19 @@
+.appearance-inputs { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 14px 0; }
+.appearance-inputs label { display: flex; flex-direction: column; gap: 6px; max-width: 100%; }
+.appearance-inputs input[type=file] { box-sizing: border-box; max-width: 100%; width: 340px; }
+.appearance-preview, .app { background-size: cover; background-position: center; }
+.appearance-preview > div { padding: 20px; background: var(--surface); border-radius: var(--radius); max-width: 420px; }
+.appearance-logo { display: block; max-width: 150px; max-height: 80px; object-fit: contain; }
+aside .appearance-logo { margin: 4px 10px 10px; }
+/* The image stays visible around the reading surface and in the preview.
+   Every page's text, header and controls have an opaque theme background. */
+.has-custom-background > main {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin: 16px auto;
+  width: calc(100% - 32px);
+}
+@media (max-width: 760px) {
+  .has-custom-background > main { margin: 8px auto; width: calc(100% - 16px); }
+}
