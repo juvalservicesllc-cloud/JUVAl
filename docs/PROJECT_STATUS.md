@@ -1,5 +1,195 @@
 # Juval — Project Status
 
+## 2026-11-03 (later) — B/C recovery: browser E2E run, local commits
+
+**Overall: PARTIALLY IMPLEMENTED.** The two blockers in the entry below were
+both caused by the Codex sandbox, not by the project:
+
+- **E2E EPERM.** Inside Codex's `workspace-write` sandbox, Node's
+  `spawnSync('/usr/bin/true')` returns `EPERM`; on the host it succeeds. The
+  sandbox was not changed (no AppArmor or sandbox edit). The suite was run
+  by Claude Code outside it, with only disposable local services: uvicorn on
+  127.0.0.1:18771 (`JUVAL_AUTH_MODE=disabled`, SQLite in a fresh private
+  temp dir, `JUVAL_SUPABASE_DB_URL` stripped), Vite on 127.0.0.1:18772,
+  headless snap Chromium. A first attempt failed before any test because the
+  `TMPDIR` path was too long for Chromium's singleton socket ("Socket path
+  too long", 12 failed / 18 not run); it is not counted. The rerun used a
+  short private `TMPDIR`.
+- **Git `index.lock`.** No stale lock existed. Codex's sandbox keeps `.git`
+  read-only by design; commits were made from the host.
+
+**E2E result (rerun): 29 passed / 1 failed / 0 skipped, 2.5 min.** Command:
+README's documented `env -i ... npm run e2e` with `JUVAL_E2E_SERVER_LOG` and
+`DEBUG=pw:webserver`, plus `JUVAL_CHROME_BIN`.
+
+| Spec | Result |
+|---|---|
+| Regression: `d7-demand` (12), `g17-suggested-price` (5), `severity-provenance` (4) | 21 passed |
+| `recovery-b1` (2 files, 10 files, 11-file overflow with no request) | 3 passed |
+| `recovery-b2` (30% → `min_roi=0.3`, XLSX metadata/rows = API) | passed |
+| `recovery-b3` (synthetic BUY, empty reasons, INFERRED provenance) | passed |
+| `recovery-b4` (consecutive + concurrent exports = `/records`) | passed; captured server log checked by the spec: no `LocalProtocolError` (24 export requests logged) |
+| `recovery-c2` (columns, both themes, query/export unchanged) | passed |
+| `recovery-c3` (Methodology, both themes, same tab) | passed |
+| `recovery-c1` (Appearance) | **FAILED**: timeout at `getByLabel("Theme", { exact: true })` (spec line 20) |
+
+C1 failure analysis: the page renders and its accessibility tree shows
+`combobox "Theme"`, but the `<select>` is nested in its `<label>`, so the
+label's text also contains the option texts and Playwright's exact
+`getByLabel` never matches. The logo upload step before it passed; the
+light/dark, rejection, persistence and reset steps after it **did not run**.
+This is a selector defect in the spec, not an observed product defect, but
+C1 is not browser-verified.
+
+Re-measured on the host before committing (from `frontend-next/`): `npm test
+-- --maxWorkers=2` 209 passed / 0 failed / 10 skipped (same conditional
+skips as below); `typecheck`, `lint`, `build` (to a temp outDir) exit 0.
+Manifest and lockfile untouched. No backend, migration, real database,
+dependency or AppArmor change; no push or deploy.
+
+| Block | State | Evidence |
+|---|---|---|
+| B1 | **IMPLEMENTED** | E2E 3/3 + unit |
+| B2 | **IMPLEMENTED** | E2E + unit |
+| B3 | **IMPLEMENTED** | E2E + unit (synthetic rendering fixture, not a pipeline BUY) |
+| B4 | **IMPLEMENTED** | E2E + server-log assertion |
+| C2 | **IMPLEMENTED** | E2E + unit; screenshots not reviewed visually by a human |
+| C3 | **IMPLEMENTED** | E2E + unit; screenshots not reviewed visually by a human |
+| C1 | **PARTIALLY IMPLEMENTED** | Unit only; E2E fails on spec selector. **Not committed**: `appearance.*`, `AppearancePage.*`, `appearance.css`, `recovery-c1.spec.ts`, the Appearance part of `App.tsx` and its README paragraph stay in the working tree |
+
+Commits: local only, one per accepted block (B2, B3, C2, C3, B1, B4) plus
+this documentation. Hunks shared between blocks were staged as exact
+intermediate file versions; the working tree was never rewritten.
+
+**Next step (Codex, frontend only).** In `e2e/recovery-c1.spec.ts`, select
+the Theme control by role (`getByRole("combobox", { name: "Theme" })`) or
+give the select an explicit label association; rerun the suite outside the
+Codex sandbox; commit C1 if it passes.
+
+---
+
+## 2026-11-03 — Frontend B/C recovery implemented; browser and Git gates blocked
+
+**Overall: PARTIALLY IMPLEMENTED.** Authorized frontend-only recovery from
+`CODEX_FRONTEND_NEXT_B_C_20261028.md`, in the requested order B2 → B3 → C2 →
+C1 → C3 → B1 → B4. No backend, infrastructure, AppArmor, real database,
+dependency, legacy frontend or demo change. No push, deploy or migration.
+
+Initial checks: clean `master`, HEAD
+`e7186c3e8f6cd5db147e701b15e90954d82d511e`, manifest/lock hashes matching the
+handoff. No concurrent modifications were observed. The user explicitly
+approved this exception to the frontend freeze (**APPROVED**).
+
+| Block | State | Result / missing gate |
+|---|---|---|
+| B2 | PARTIALLY IMPLEMENTED | Explicit minimum ROI percentage summary; browser test for 30 → min_roi=0.3, equivalent export URL, query_metadata filters/units and XLSX/API row equality. Unit tests pass; E2E blocked |
+| B3 | PARTIALLY IMPLEMENTED | `seed-buy` stores a synthetic BUY snapshot with no reasons/codes, coherent economics and INFERRED provenance/methods; unit rendering and disposable fixture validation pass; browser color/provenance checks pending |
+| C2 | IMPLEMENTED | Local visible/order preferences, validated restore with unknown ids discarded/new ids added, mandatory Title, reset. No query/export changes from preferences. Page default/obsolete stored 20 now fall back to 25, consistent with 25/50/100 selector. Browser/visual acceptance pending |
+| C1 | IMPLEMENTED | Local accent selector/hex, logo/background preview and persistence, guarded storage, validated restore, raster MIME/signature checks, 512 KiB (524288 bytes) per image, SVG excluded, WCAG contrast warning, scoped reset. Browser/visual acceptance pending |
+| C3 | IMPLEMENTED | `/about` explains real pipeline, separate risk provenance (including accepted ADR-044 amendment), PASS/REVIEW/BUY, ADR-052 demand gate, verification/demo labels, experimental score and absent external sources/AI. Browser/visual acceptance pending |
+| B1 | PARTIALLY IMPLEMENTED | Browser scenarios for 2 and 10 XLSX files, previews, per-file submitted/result states, Batch Detail and analytics; selecting 11 queues 10, names rejected overflow and sends no API request (existing behavior). Fixtures importer-validated; E2E pending |
+| B4 | PARTIALLY IMPLEMENTED | Browser-generated REVIEW/PASS URLs, consecutive/concurrent response workbook parsing, metadata/records comparisons. Server-log assertion when real capture supplied; browser and zero-LocalProtocolError evidence pending |
+
+C-block IMPLEMENTED follows the migration document's definition: wired and
+unit-tested, **not browser-verified or visually accepted**. Nine new E2E
+scenarios were written; none is counted as passed. Existing 21 scenarios and
+their assertions remain in source; they were not re-run successfully here.
+
+**Changed files.** All application/test code is under `frontend-next/`:
+- `src/appearance.ts`, `src/pages/AppearancePage.tsx`, `appearance.css` and
+  their tests; `src/app/App.tsx` wires settings and guards the existing theme.
+- `src/catalogColumns.ts`, its tests, `pages/CatalogColumnControls.tsx`,
+  `CatalogPage.tsx`, `catalog-controls.css`, `catalogQuery.ts` and affected
+  Catalog/query/brand tests. Every original column and its cell renderer is
+  preserved in the default order, including image fallback, evidence and favorites.
+- `src/pages/MethodologyPage.tsx` and its tests;
+  ProductDetailPage/UploadPage test additions (no production renderer/engine change).
+- `e2e/recovery-b1.spec.ts` through `recovery-b4.spec.ts`,
+  `recovery-c1.spec.ts` through `recovery-c3.spec.ts`, `fixtures.py`,
+  `support.ts` and `README.md`. Helpers reuse existing isolated setup.
+- Documentation: this entry and `FRONTEND_NEXT_MIGRATION.md` Status/milestones.
+
+**Evidence.** Private log/build directory: `/tmp/juval-codex-bc-20261103/`
+(mode 0700, outside APP; not durable across host cleanup). Commands used the
+handoff's isolated Python, Node 24.19.0, empty environment plus explicit
+HOME/PATH/LANG/TMPDIR; no dependencies were installed. Paths below are relative
+to that directory. Counts overlap between focused and full runs.
+
+| Command (from frontend-next unless noted) | Exit | Passed / failed / skipped | Duration | Log |
+|---|---:|---|---|---|
+| npm test -- src/pages/CatalogPage.test.tsx src/api/catalog.test.ts | 0 | 22 / 0 / 0 | 4.28 s | b2-unit.log |
+| npm test -- src/pages/ProductDetailPage.test.tsx | 0 | 18 / 0 / 0 | 3.51 s | b3-unit.log |
+| npm test -- src/catalogColumns.test.ts src/pages/CatalogPage.test.tsx src/catalogQuery.test.tsx | 0 | 32 / 0 / 0 | 8.72 s | c2-unit.log |
+| npm test -- src/appearance.test.ts src/pages/AppearancePage.test.tsx src/app/App.test.tsx | 0 | 16 / 0 / 0 | 3.29 s | c1-unit.log |
+| npm test -- src/pages/MethodologyPage.test.tsx | 0 | 3 / 0 / 0 | 1.97 s | c3-unit.log |
+| npm test -- src/pages/UploadPage.test.tsx src/pages/BatchAnalytics.test.tsx | 0 | 18 / 0 / 0 | 3.19 s | b1-unit.log |
+| npm test -- src/pages/CatalogBrandFilter.test.tsx | 0 | 8 / 0 / 0 | 5.36 s | c2-brand-unit.log |
+| npm test -- --maxWorkers=2 | 0 | 209 / 0 / 10 | 35.71 s | frontend-unit-final.log |
+| npm run typecheck | 0 | 0 type errors | 7.252 s | typecheck-close.log |
+| npm run lint | 0 | 0 warnings/errors | 0.254 s | lint-close.log |
+| npm run build -- --outDir /tmp/juval-codex-bc-20261103/dist --emptyOutDir | 0 | build passed | 8.084 s | build-close.log |
+| TypeScript transpileModule syntax check of e2e/*.ts | 0 | 12 files / 0 syntax errors; not semantic/browser verification | 0.934 s (tool wall time) | e2e-syntax.log |
+| Direct isolated Python fixture/API validation (APP cwd, disposable SQLite only) | 0 | BUY shape, economic consistency, empty reasons and INFERRED methods checked | 0.428 s (tool wall time) | b3-fixture.log |
+| Direct isolated Python batch fixture/import validation (APP cwd) | 0 | 11 XLSX files / 11 importer-readable records | 0.553 s (tool wall time) | b1-fixtures-final.log |
+| npm run e2e -- e2e/recovery-b2.spec.ts | 1 | No browser tests started | Not captured | b2-e2e.log |
+
+The 10 skips are unchanged conditional tests: nine require
+`JUVAL_LIVE_API`, one requires `JUVAL_FINANCIAL_JSON`. They are not evidence
+of live contract verification. No backend suite or comprehensive compliance
+/dependency audit was run under this turn's frontend-only/no-integral-audit scope.
+
+Initial failures are retained: `typecheck.log`/`build.log` caught an invalid
+Testing Library `exact` option in a new unit test (fixed); `frontend-unit.log`
+had 207 passes, 2 failures and 10 skips (38.83 s): one stale page-size assertion
+updated from 20 to the specified 25, plus a brand-loading timeout under default
+worker concurrency. The focused brand run and full two-worker run passed;
+no assertions/timeouts were weakened. `b1-fixtures.log` records a validation
+invocation missing the importer's required `now` argument, corrected in the
+final fixture check. These initial failures are not represented as successes.
+
+**Blockers and commits.**
+- E2E stops in Playwright config: Node `execFileSync`/`spawnSync` reports
+  `EPERM` for the isolated Python fixture generator. Python runs directly;
+  the second diagnostic reproduces Node's EPERM with both that Python and
+  `/usr/bin/true` (`spawn-diagnostic.log`). The process can produce stdout
+  before the error; no root cause was inferred from that alone. No server,
+  browser or socket verification was reached. Stopped diagnostics at the
+  requested two-attempt bound; no permission/infrastructure workaround.
+- **0 commits created.** The first atomic B2 `git add`/commit attempt failed
+  before staging: `Unable to create .../.git/index.lock: Read-only file system`.
+  No hash can be supplied; HEAD remains the initial commit, changes remain in
+  the working tree. No alternate Git directory or sandbox change attempted.
+- No screenshots exist for this session. The C specs define light/dark output
+  paths for a later permitted run. B4's protocol-error count is **unverified**.
+  `JUVAL_E2E_SERVER_LOG` + `DEBUG=pw:webserver` usage is documented in e2e/README.
+
+**Reproducibility hashes (unchanged):**
+- package.json: `9465f86c3d9b2b49860f2034ec1684c08c089904e25069a43e55a2c0904f1424`
+- package-lock.json: `412abefc85f5fee521e55d8b184650c0c82df0f7426b77137c6a2724129a792f`
+
+**Self-review / Ponytail.** No Ponytail tool/skill is exposed in this session;
+no plugin review claimed. Manual diff review checked correctness, field-status
+preservation, synthetic provenance, contracts, storage failure handling,
+scoped reset, no image network submission, accessible controls/disclosures and
+all default columns/navigation/export/filter features. No dependencies or
+business calculations added. Unit results support regressions/contracts;
+real-browser layout, accessibility, contrast appearance and no feature loss
+still need browser/visual review. No comprehensive audit was performed.
+
+**Decisions.** APPROVED: browser-only preferences, static Methodology and
+synthetic isolated rendering fixtures per the handoff/user instruction and
+accepted ADRs. No new architecture, API or commercial policy. PENDING:
+product-image/URL source, real market history, Compare/identity, ranking,
+server favorites, thresholds/editor and production cutover remain outside scope.
+
+**Next step.** In an environment where Git writes and E2E subprocesses are
+permitted, run the new scenarios plus the retained suite, inspect light/dark
+screenshots and captured server log, then create local atomic commits by block.
+B2/C2 share Catalog edits and B1/B3/B4 share helpers: split those hunks carefully.
+Do not push/deploy. The end-of-day comprehensive audit remains separate.
+
+---
+
 ## 2026-10-28 — Sanitized candidate adopted, filtered export fixed, frontend-next validated
 
 **IMPLEMENTED locally (no push, deploy or migration).** Nothing was pushed: the

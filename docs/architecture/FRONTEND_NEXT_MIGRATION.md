@@ -11,6 +11,25 @@ from the product — only from the production candidate's runtime.
 
 ## Status
 
+**2026-11-03 — B/C recovery (frontend-only, no push/deploy).** Overall
+**PARTIAL**. Browser E2E, run outside the Codex sandbox (whose Node
+`spawnSync` returns EPERM) against disposable local services only:
+**29 passed / 1 failed** (21 regression + 8 recovery scenarios passed;
+`recovery-c1` failed on its `getByLabel("Theme", { exact: true })` selector).
+Unit 209 / 0 / 10 skipped; typecheck, lint, build pass. Details, commands and
+the C1 analysis: PROJECT_STATUS's 2026-11-03 entries. B1-B4, C2 and C3 are
+committed locally; C1 stays uncommitted in the working tree.
+
+| Block | Current status | Evidence |
+|---|---|---|
+| B2 ROI percentage | **VERIFIED** | E2E: 30% → `min_roi=0.3`, XLSX metadata/rows = API; unit |
+| B3 BUY | **VERIFIED** | E2E on a synthetic seeded snapshot (INFERRED, empty reasons); unit |
+| C2 Catalog columns | **VERIFIED** | E2E both themes, query/export unchanged; unit |
+| C1 Appearance | **IMPLEMENTED** | Unit only; E2E fails on a spec selector; not committed |
+| C3 Methodology | **VERIFIED** | E2E both themes, same tab; unit |
+| B1 batches | **VERIFIED** | E2E 2 and 10 files, 11-file overflow sends no request; unit |
+| B4 browser exports | **VERIFIED** | E2E consecutive/concurrent = `/records`; captured server log has no `LocalProtocolError` |
+
 **Re-inventoried 2026-10-28 from the code** (`src/app/App.tsx` routes) at
 master `46a5c9a`. The previous table (2026-08-26) still listed Dashboard,
 Product Detail and the Favorites page as not wired; the code wires them.
@@ -33,18 +52,18 @@ contract or authorized source first.
 | Light/Dark (shell toggle, browser-local) | **VERIFIED** | E2E screenshots dark/light, desktop/phone; `App.test` |
 | Dashboard on the run analytics endpoint | **VERIFIED** | E2E d7 test 4 + screenshot; `DashboardPage.test` (13) |
 | Catalog: server-side search, filters, sort, pagination, filter persistence | **VERIFIED** | E2E (d7, g17, severity); `CatalogPage` (14), `CatalogBrandFilter` (8), `catalogQuery` (11) |
-| Catalog: ROI/profit/margin entered as percentages | **IMPLEMENTED** | Unit only (`percentInputToRatio`); no E2E types 30 → `min_roi=0.3` yet |
+| Catalog: ROI/profit/margin entered as percentages | **VERIFIED** | E2E `recovery-b2` (2026-11-03); unit `percentInputToRatio` |
 | Filtered export | **VERIFIED** | E2E (export = run download = API); concurrency fixed in backend `46a5c9a` |
 | Import with preview (XLSX and CSV, one tabular contract, ADR-026) | **VERIFIED** | E2E preview + upload of single synthetic files; `UploadPage` (11), `ImportPreview` (8) |
-| Batch of up to 10 files, Batch Detail, per-file analytics | **IMPLEMENTED** | `UploadPage`, `BatchAnalytics` (7) and backend batch tests; no multi-file E2E yet |
+| Batch of up to 10 files, Batch Detail, per-file analytics | **VERIFIED** | E2E `recovery-b1` (2 and 10 files, overflow); `UploadPage`, `BatchAnalytics` |
 | Runs list, Run Detail | **IMPLEMENTED** | `RunsFlow` (16); E2E only passes through "Open run" |
 | Product Detail (decision, reasons, economics with status, financial evidence, declared demand, suggested price, severity source) | **VERIFIED** | E2E + screenshots; `ProductDetailPage` (17), `FinancialEvidence` (10) |
 | Provenance badges (VERIFIED / INFERRED / NOT_FOUND / INVALID) and severity source | **VERIFIED** | E2E + screenshots; `SeverityProvenance` (9) |
-| BUY rendering | **IMPLEMENTED** | Backend and unit only: the E2E fixtures produce REVIEW and PASS, no BUY |
+| BUY rendering | **VERIFIED** | E2E `recovery-b3` on a synthetic seeded snapshot (not a pipeline BUY); unit |
 | Favorites page (browser-local, run-scoped) | **IMPLEMENTED** | `FavoritesPage` (12); no E2E |
-| Appearance page (accent, logo, background) | **PENDING** | `/appearance` is a placeholder; only the shell Light/Dark toggle exists |
-| Catalog column visibility and order | **PENDING** | Not built (parity matrix: PRESERVE, preference only) |
-| Methodology page | **PENDING** | `/about` is a placeholder |
+| Appearance page (accent, logo, background) | **IMPLEMENTED** | C1 unit-tested, uncommitted; E2E fails on a spec selector (2026-11-03) |
+| Catalog column visibility and order | **VERIFIED** | E2E `recovery-c2` both themes; unit |
+| Methodology page | **VERIFIED** | E2E `recovery-c3` both themes; unit |
 | Images / thumbnails | **BLOCKED** | Thumbnail slot always shows "No image" (`src=""`): no image contract, rights or provenance |
 | Market history chart | **BLOCKED** | No authorized provider. Golden's simulated series deliberately not carried (`ProductDetailPage.tsx` header); whether to show a `DEMO_FIXTURE`-labelled series is an open decision |
 | Compare | **BLOCKED** | Placeholder; needs a comparable-identity ADR (ADR-011/012) and a batch-scoped cross-run query |
@@ -240,17 +259,17 @@ request.
 
 ## Next milestones
 
-State as of 2026-10-28 (see Status above).
+State as of 2026-11-03 (see Status above).
 
 | # | Scope | Depends on | Blockers / state |
 |---|---|---|---|
 | 3 | Product Detail, data quality, field trace, price-history UX with fixture label | 2 | **Done** except price history: blocked by provider; `DEMO_FIXTURE` label is an open decision |
 | 4 | Dashboard analytics | 2 | **Done** |
-| 5 | Appearance (accent, logo, background) | — | **Pending** — authorized 2026-10-28 for Codex (block C1) |
+| 5 | Appearance (accent, logo, background) | — | **Implemented, uncommitted** — C1 E2E spec selector fails; fix and rerun |
 | 6 | Favorites page | 3 | **Done**, browser-local and run-scoped |
 | 7 | Compare | 3 | Blocked: ADR + batch-scoped cross-run query |
 | 8 | Supplier image / URL contract | — | Blocked: backend contract + rights policy |
 | 9 | `ExecutionRun.thresholds` + read-only bands + re-run | — | Blocked: ADR-051 Propuesta |
 | 10 | Cutover `frontend-next/` → `frontend/` | full parity + user approval | user decision |
-| 11 | E2E coverage of batch ≤10, ROI percent, BUY, consecutive/concurrent exports | — | **Pending** — authorized 2026-10-28 for Codex (block B) |
-| 12 | Catalog column visibility/order; Methodology page | — | **Pending** — authorized 2026-10-28 for Codex (blocks C2, C3) |
+| 11 | E2E coverage of batch ≤10, ROI percent, BUY, consecutive/concurrent exports | — | **Done** — B1–B4 E2E passed 2026-11-03 |
+| 12 | Catalog column visibility/order; Methodology page | — | **Done** — C2/C3 E2E passed 2026-11-03; human visual review pending |

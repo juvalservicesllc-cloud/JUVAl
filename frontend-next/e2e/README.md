@@ -75,3 +75,50 @@ with hazmat `true`/`false`/blank/`maybe`:
 - a historical snapshot with no source shown.
 
 It writes screenshots in dark and light, at desktop and phone width.
+
+## Recovery blocks B/C (2026-11-03)
+
+`recovery-b1` covers 2/10 synthetic XLSX files, each preview, submitted status,
+Batch Detail and per-file analytics. Selecting 11 queues the first 10, names
+the overflow using the existing contract message, and sends no API request.
+Selection itself never submits files. CSV support is unchanged.
+
+`recovery-b2` checks 30% → `min_roi=0.3`, the visible percentage, filtered
+XLSX rows and `query_metadata` filters/units. `recovery-b3` uses `seed-buy`
+against the disposable SQLite store: an explicitly synthetic rendering
+snapshot, not an uploaded BUY outcome (ADR-052). Its economics are coherent;
+FieldValues remain INFERRED with synthetic methods. Plain monetary fields
+have no status on the API contract; the test does not invent one.
+
+`recovery-b4` captures REVIEW/PASS URLs from the browser's export button,
+checks consecutive responses, then starts two requests together and parses
+those actual responses. Each workbook's metadata and rows are compared to
+the equivalent `/records` query. To also check server protocol errors, capture
+the runner's server output in a private directory outside APP:
+
+```bash
+# Set LOG to an existing private directory outside the repository.
+env -i HOME=/home/juval \
+  PATH=/home/juval/.nvm/versions/node/v24.19.0/bin:/usr/bin:/bin \
+  LANG=C.UTF-8 TMPDIR="$LOG/tmp" \
+  JUVAL_PYTHON=/home/juval/juval-recon/venv-auditfix-20261028/bin/python \
+  PYTHONPATH=/home/juval/JUVAl/APP/src PYTHONDONTWRITEBYTECODE=1 \
+  JUVAL_E2E_OUTPUT="$LOG/e2e-out" JUVAL_E2E_SERVER_LOG="$LOG/e2e.log" \
+  DEBUG=pw:webserver npm run e2e >"$LOG/e2e.log" 2>&1
+```
+
+Without `JUVAL_E2E_SERVER_LOG`, B4 explicitly annotates the protocol-error
+count as unverified. Capture must contain the real server output; a successful
+download alone is not evidence of zero server errors. The full suite must
+also finish successfully before accepting that log.
+
+`recovery-c2` and `recovery-c3` cover Catalog columns and Methodology, with
+light/dark screenshots under the E2E output directory. Column settings use
+`juval.catalog.columns.v1`, with Title always visible; neither records
+requests nor export URLs change.
+
+Run the suite outside the Codex sandbox: inside it, Node's `spawnSync`
+returns EPERM, so the config cannot start the fixture generator. Keep
+`TMPDIR` short: Chromium aborts with "Socket path too long" when its
+singleton socket path does not fit a Unix socket address (108 bytes).
+Results of the 2026-11-03 run are in `docs/PROJECT_STATUS.md`.
