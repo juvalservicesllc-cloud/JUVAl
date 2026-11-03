@@ -3,6 +3,9 @@
 /* ---- frontend-next: production additions on top of the Golden stylesheet
    (ADR-030). Golden's own rules above are untouched. ---- */
 
+/* Remove the browser's outer inset so mobile sticky navigation starts at y=0. */
+body { margin: 0; }
+
 /* Golden's :root sets a light palette and `.dark` only overrides the custom
    properties on `.app`, so text colour was still resolved from :root and
    headings rendered dark-on-dark in dark mode. Scoping the colour to `.app`
