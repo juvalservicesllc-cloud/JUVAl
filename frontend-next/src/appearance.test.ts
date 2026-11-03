@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest"
-import { accentColors, APPEARANCE_PREFIX, contrastRatio, DEFAULT_APPEARANCE, loadAppearance, MAX_IMAGE_BYTES, readAppearanceImage, resetAppearance, saveAppearance, validImage } from "./appearance"
+import { accentColors, appearanceTokens, APPEARANCE_PREFIX, contrastRatio, DEFAULT_APPEARANCE, loadAppearance, MAX_IMAGE_BYTES, readAppearanceImage, resetAppearance, saveAppearance, validImage } from "./appearance"
 
 const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9xkAAAAASUVORK5CYII="
 afterEach(() => { vi.restoreAllMocks(); localStorage.clear() })
@@ -36,6 +36,20 @@ it("computes WCAG contrast against known values", () => {
   expect(contrastRatio("#000000", "#ffffff")).toBe(21)
   expect(contrastRatio("#ffffff", "#ffffff")).toBe(1)
   expect(contrastRatio("#172033", "#f1f5f9")).toBeGreaterThan(4.5)
+})
+
+it("restores new validated controls and protects custom surface text without discarding choices", () => {
+  saveAppearance({ surfaceColor: "#ffffff", textColor: "#ffffff", backgroundFit: "contain", backgroundPosition: "bottom", overlayOpacity: 0.35 })
+  const appearance = loadAppearance()
+  expect(appearance.surfaceColor).toBe("#ffffff")
+  expect(appearance.backgroundFit).toBe("contain")
+  expect(appearance.backgroundPosition).toBe("bottom")
+  expect(appearance.overlayOpacity).toBe(0.35)
+  expect(contrastRatio(appearance.surfaceColor, appearanceTokens(appearance)["--panel-text"])).toBeGreaterThanOrEqual(4.5)
+  localStorage.setItem(APPEARANCE_PREFIX + "overlayOpacity", "9")
+  localStorage.setItem(APPEARANCE_PREFIX + "surfaceColor", "url(unsafe)")
+  expect(loadAppearance().overlayOpacity).toBe(0)
+  expect(loadAppearance().surfaceColor).toBe("")
 })
 
 it.each(["#ffffff", "#000000", "#757575", "#ffff00", "#00ff00", "#ff0000", "#6d5dfc", "#9c92ff"])("keeps readable fill and surface text for accent %s in both themes", (accent) => {

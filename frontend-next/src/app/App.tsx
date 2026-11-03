@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties } from "react"
-import { accentColors, DEFAULT_APPEARANCE, loadAppearance, resetAppearance, saveAppearance, type Appearance } from "../appearance"
+import { accentColors, appearanceTokens, COLOR_LABELS, DEFAULT_APPEARANCE, loadAppearance, resetAppearance, saveAppearance, type Appearance } from "../appearance"
 import { AppearancePage } from "../pages/AppearancePage"
 import { loginUrl, onAuthRequired } from "../api/client"
 import { BatchPage } from "../pages/BatchPage"
@@ -101,9 +101,11 @@ export function App() {
     ...(appearance.accent ? { "--accent": appearance.accent } : {}),
     "--on-accent": colors.onAccent,
     "--accent-text": colors.textAccent,
-    ...(appearance.background ? { backgroundImage: `url("${appearance.background}")` } : {}),
+    ...appearanceTokens(appearance),
+    ...(appearance.background ? { backgroundImage: `linear-gradient(rgb(0 0 0 / ${appearance.overlayOpacity}), rgb(0 0 0 / ${appearance.overlayOpacity})), url("${appearance.background}")`, backgroundSize: appearance.backgroundFit, backgroundPosition: appearance.backgroundPosition } : {}),
   } as CSSProperties
-  return <div className={`app${dark ? " dark" : ""}${appearance.background ? " has-custom-background" : ""}`} style={appearanceStyle}>
+  const customColors = Object.keys(COLOR_LABELS).some((key) => appearance[key as keyof typeof COLOR_LABELS])
+  return <div className={`app${dark ? " dark" : ""}${appearance.background ? " has-custom-background" : ""}${customColors ? " has-custom-colors" : ""}`} style={appearanceStyle}>
     <aside>
       <nav aria-label="Main navigation">
         {appearance.logo && <img className="appearance-logo" src={appearance.logo} alt="Custom JUVAl logo" />}

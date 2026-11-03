@@ -17,3 +17,13 @@ aside .appearance-logo { margin: 4px 10px 10px; }
 @media (max-width: 760px) {
   .has-custom-background > main { margin: 8px auto; width: calc(100% - 16px); }
 }
+
+/* Custom surfaces must beat the single-class .dark palette even when the
+   base stylesheet is loaded last. Keep this override local to customized apps. */
+.app.has-custom-colors { --text: var(--page-text); --focus-color: var(--page-text); --muted: var(--page-muted); --success: var(--page-success); --warning: var(--page-warning); --danger: var(--page-danger); }
+.app.has-custom-colors :is(.panel, .table, .kpis article, .grid article) { --text: var(--panel-text); --focus-color: var(--panel-text); --muted: var(--panel-muted); --success: var(--panel-success); --warning: var(--panel-warning); --danger: var(--panel-danger); color: var(--text); }
+.app.has-custom-colors aside { --text: var(--nav-text); --focus-color: var(--nav-text); --muted: var(--nav-muted); color: var(--text); }
+.app.has-custom-colors header { --text: var(--header-text); --focus-color: var(--header-text); --muted: var(--header-muted); color: var(--text); }
+.app header { background: var(--header, transparent); }
+.app.has-custom-colors header > span { color: var(--panel-text); }
+.appearance-color { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; max-width: 100%; }
