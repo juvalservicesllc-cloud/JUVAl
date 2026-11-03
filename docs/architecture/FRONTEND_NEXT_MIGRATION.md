@@ -11,6 +11,13 @@ from the product — only from the production candidate's runtime.
 
 ## Status
 
+**2026-11-03 — G1–G12 recovery:** implementation/evidence and remaining external
+checks are now tracked in [FRONTEND_NEXT_PARITY_RECOVERY](FRONTEND_NEXT_PARITY_RECOVERY.md).
+The owner explicitly authorized an isolated 90-day DEMO_FIXTURE presentation in
+G12, without production record/price inputs. This supersedes only the historical
+"market chart omitted" entries below; real provider integration remains blocked.
+No cutover, dependency installation, backend or infrastructure changes.
+
 **2026-11-03 — Owner acceptance / cutover preparation:** walkthrough and
 [acceptance checklist](FRONTEND_NEXT_VISUAL_ACCEPTANCE.md) prepared. Source
 comparison against `frontend/` found protected capability gaps (Dashboard

@@ -1,5 +1,64 @@
 # Juval — Project Status
 
+## 2026-11-03 — G1–G12 recovery implemented locally; external acceptance pending
+
+**PARTIALLY IMPLEMENTED overall.** Baseline `9eb461a`; no new commit, push,
+deploy or cutover. Source-based matrix created before code changes, then
+updated with per-gate evidence and owner checklist:
+[FRONTEND_NEXT_PARITY_RECOVERY](architecture/FRONTEND_NEXT_PARITY_RECOVERY.md).
+
+- G1: Donut/Bars, provenance/issues/spread bars (tables preserved), Recent Runs.
+- G2/G3: identity/record/SKU/issues, server-side sorts, full provenance controls;
+  canonical filtered export and column preferences retained.
+- G4/G5: accessible metadata ordering; explicit, bounded batch/record preview.
+- G6/G7: eight colors/fit/position/overlay with surface-specific contrast and
+  focus protection; desktop collapse, parent active states and local-page context.
+- G8: manifest, reproducible 192/512 PNG icons, production-only SW registration;
+  caches only anonymous public offline notice, never runtime/API/auth/data.
+- G9/G10: exact legacy route aliases, query/encoded IDs preserved; keyboard-native
+  file picker and visible focus region, unchanged upload pipeline.
+- G11: explicit preference imports per group only to absent destinations;
+  originals kept, validated mapping, no records/run/brand/offset/credentials.
+- G12: current owner instruction explicitly authorizes isolated DEMO presentation
+  as an exception to ADR-030; fixed synthetic 90 days, Line/Bar, visible
+  DEMO_FIXTURE/NOT VERIFIED, no current-record/price inputs or calculation use.
+
+All twelve have code and local unit evidence; none is declared externally
+closed on this diff. UI/PWA readiness and owner acceptance remain pending.
+No ADR was rewritten; real market sources/Compare remain contract/ADR blocked.
+
+Validation measured in isolated Node 24.19.0, no installs:
+
+| Check | Result |
+|---|---|
+| Full unit suite | **249 PASS, 10 conditional SKIP, 0 FAIL**; 29 files PASS, 2 SKIP; 80.75 s |
+| Final focused review | **51 PASS**, 8 files, 14.25 s |
+| Contract follow-ups | Catalog **22 PASS**; legacy preferences **3 PASS**; Appearance reset **4 PASS** |
+| Typecheck / lint | PASS; 0 lint warnings/errors |
+| Build | PASS, private output `/tmp/juval-parity-rHncKG/dist` |
+| SW/new E2E syntax; manifest/PNG artifacts | PASS |
+| Existing 38 E2E specs | Eleven retained spec files unchanged, verified via Git; **not rerun here** |
+| New external E2E | Four scenarios in `zz-parity-gates.spec.ts`; **pending**, total planned 42 |
+
+Skips: nine require disposable `JUVAL_LIVE_API`, one requires
+`JUVAL_FINANCIAL_JSON`; they are not proof. CSS variable-to-RGB review in jsdom
+is inconclusive (returns `var(--text)`); browser contrast/responsive remains
+external, not certified from jsdom. No sandbox/AppArmor diagnostics repeated.
+
+Claude Code must run retained 38, new four, then all 42, with isolated env/logs
+from the E2E README. Separately verify production-build PWA install/update/offline
+and cache boundaries, preference import in a synthetic profile, and native
+keyboard picker. Preserve evidence outside APP. The known residuals are external
+QA, owner sign-off, same-origin preference scope/storage concurrency and any
+legacy worker lifecycle at eventual cutover. No production activation authorized.
+
+Self-review: frontend-only, stored business data/provenance and API untouched,
+no dependencies, original frontend/demo preserved, bounded requests and no
+record caching. Manual simplicity review; Ponytail unavailable. Commit units
+and exact files are recorded in the recovery matrix; .git left untouched.
+
+---
+
 ## 2026-11-03 (responsive close) — Visual spec 8/8, full E2E 38/38
 
 **Responsive validation: IMPLEMENTED. Owner acceptance: PENDING. Parity

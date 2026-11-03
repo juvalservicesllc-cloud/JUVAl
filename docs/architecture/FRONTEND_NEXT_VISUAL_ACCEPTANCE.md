@@ -1,5 +1,12 @@
 # frontend-next — recorrido del propietario y gates de cutover
 
+**Recuperación G1–G12 (2026-11-03):** el baseline responsive está verificado;
+la nueva implementación y la evidencia por gate se registran en
+[FRONTEND_NEXT_PARITY_RECOVERY](FRONTEND_NEXT_PARITY_RECOVERY.md).
+Las diferencias de abajo describen el baseline y no deben usarse para declarar
+ausente una capacidad recién recuperada ni para certificar su validación externa.
+La aceptación del propietario y el cutover continúan pendientes.
+
 Fecha: 2026-11-03. Baseline inspeccionado: `165b37e`, C1 `198aa70`.
 Preparación del recorrido: **IMPLEMENTED**. Aceptación del propietario y
 validación externa de este diff: **PENDING**. Cutover: **NO AUTORIZADO / NO

@@ -10,6 +10,24 @@ JUVAl backend. See `docs/adr/ADR-030-golden-first-frontend-productionization.md`
   CSV/XLSX processing, no client-side decision policy, no generated ASIN.
   A screen either speaks to the real API or says it is not connected yet.
 
+G12 exception explicitly authorized by the owner (2026-11-03): Product Detail
+includes an isolated 90-day **DEMO_FIXTURE / NOT VERIFIED** presentation chart.
+It takes no record or price as input and never feeds calculations or exports.
+See [G1–G12 recovery](../docs/architecture/FRONTEND_NEXT_PARITY_RECOVERY.md).
+
+PWA production builds register `/sw.js`. Only the public `/offline.html` notice
+is cached, fetched without credentials. No offline runs, API responses, auth,
+HTML app pages, uploads or exports are cached. No forced reload/skipWaiting;
+updates take effect after existing sessions close. Prior workers on a shared
+origin require the separate cutover review; no existing unrelated cache is deleted.
+Manifest icons are reproducible with `python3 tools/generate-pwa-icons.py`.
+
+Legacy browser preferences can be previewed and imported explicitly in
+Appearance, per group, only when the destination is absent. Originals stay
+intact; other origins, run data and accounts are never imported. Import before
+opening Catalog if its default preferences have not yet been stored. No
+automatic migration occurs on startup.
+
 Run: `npm run dev -- --port 5183` with `VITE_API_BASE_URL` pointing at the API.
 
 ## Authentication (ADR-034 BFF)
