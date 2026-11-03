@@ -51,6 +51,26 @@ describe("Dashboard on GET /analytics", () => {
     expect(screen.getByLabelText("Run")).toHaveValue("run-1")
   })
 
+  it("switches Donut/Bars without another request and keeps exact counts and recent links", async () => {
+    const mock = stub()
+    render(<DashboardPage go={vi.fn()} />)
+    await screen.findByLabelText("Key figures")
+    const requests = mock.mock.calls.length
+    const user = userEvent.setup()
+    await user.click(screen.getByRole("button", { name: "Donut" }))
+    const chart = screen.getByLabelText("Decision distribution")
+    expect(chart).toHaveTextContent("BUY: 0")
+    expect(chart).toHaveTextContent("REVIEW: 3")
+    expect(chart).toHaveTextContent("PASS: 1")
+    expect(screen.getByRole("button", { name: "Donut" })).toHaveAttribute("aria-pressed", "true")
+    await user.click(screen.getByRole("button", { name: "Bars" }))
+    expect(screen.getByLabelText("Decision distribution").tagName).toBe("UL")
+    expect(mock).toHaveBeenCalledTimes(requests)
+    const link = within(screen.getByRole("region", { name: "Recent runs" })).getByRole("link", { name: "first.csv" })
+    expect(link).toHaveAttribute("href", "/runs/run-1")
+    expect(link).not.toHaveAttribute("target")
+  })
+
   it("shows a decision that never occurred as a real zero, since the run has records", async () => {
     stub()
     render(<DashboardPage go={vi.fn()} />)
@@ -106,6 +126,9 @@ describe("Dashboard on GET /analytics", () => {
     render(<DashboardPage go={vi.fn()} />)
     expect(await screen.findByLabelText("HazMat severity")).toHaveTextContent("HIGH1")
     expect(screen.getByRole("table", { name: "Issue types" })).toHaveTextContent("INVALID_ASIN_FORMAT1")
+    expect(screen.getByLabelText("Issue type distribution")).toHaveTextContent("INVALID_ASIN_FORMAT1")
+    expect(screen.getByLabelText("Price spread distribution")).toHaveTextContent("$14.99")
+    expect(screen.getByLabelText("ASIN verification distribution")).toHaveTextContent("VERIFIED2")
     expect(screen.getByLabelText("Brand distribution")).toHaveTextContent("Acme4")
     expect(screen.getByRole("link", { name: "Widget Alpha" })).toHaveAttribute("href", "/run/run-1/product/row_2%3ASUP-001")
   })

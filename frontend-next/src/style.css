@@ -62,3 +62,13 @@ th button[aria-pressed="true"] { background:var(--accent); color:#fff; }
 
 /* D2: wrap only the displayed hash; its text stays intact for copying. */
 .run-input-hash { overflow-wrap: anywhere; }
+
+.chart-controls { display: flex; flex-wrap: wrap; gap: 8px; }
+.chart-controls button[aria-pressed="false"] { background: var(--surface); color: var(--text); border-color: var(--border); }
+.donut-chart { display: flex; flex-wrap: wrap; gap: 20px; align-items: center; margin: 16px 0; }
+.donut-chart svg { width: 180px; max-width: 100%; }
+
+.spread-bars { list-style: none; padding: 0; display: grid; gap: 8px; }
+.spread-bars li { display: grid; grid-template-columns: minmax(0, 1fr) max-content minmax(0, 1fr); align-items: center; gap: 10px; }
+.bars li { grid-template-columns: minmax(0, 1fr) max-content minmax(0, 1fr); }
+.bars li > span:first-child, .spread-bars li > span:first-child { overflow-wrap: anywhere; }

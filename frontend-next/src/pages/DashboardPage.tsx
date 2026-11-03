@@ -39,6 +39,34 @@ function Bars({ label, counts, order }: { label: string; counts: Record<string, 
   </ul>
 }
 
+function DecisionChart({ counts }: { counts: Record<string, number> }) {
+  const [type, setType] = useState("bars")
+  const keys = ["BUY", "REVIEW", "PASS", ...Object.keys(counts).filter((key) => !["BUY", "REVIEW", "PASS"].includes(key))]
+  const total = Object.values(counts).reduce((sum, value) => sum + value, 0)
+  let offset = 0
+  return <>
+    <div className="chart-controls" role="group" aria-label="Decision chart type">
+      <button aria-pressed={type === "donut"} onClick={() => setType("donut")}>Donut</button>
+      <button aria-pressed={type === "bars"} onClick={() => setType("bars")}>Bars</button>
+    </div>
+    {type === "bars" ? <Bars label="Decision distribution" counts={counts} order={["BUY", "REVIEW", "PASS"]} /> :
+      <figure className="donut-chart" aria-label="Decision distribution">
+        <svg viewBox="0 0 120 120" aria-hidden="true">
+          <circle cx="60" cy="60" r="44" fill="none" stroke="var(--surface-2)" strokeWidth="18" />
+          {keys.map((key) => {
+            const fraction = total ? (counts[key] ?? 0) / total * 100 : 0
+            const start = offset
+            offset += fraction
+            return <circle key={key} cx="60" cy="60" r="44" fill="none" pathLength="100" strokeWidth="18"
+              stroke={`var(--${key === "BUY" ? "success" : key === "REVIEW" ? "warning" : key === "PASS" ? "danger" : "muted"})`}
+              strokeDasharray={`${fraction} ${100 - fraction}`} strokeDashoffset={-start} transform="rotate(-90 60 60)" />
+          })}
+        </svg>
+        <figcaption>{total === 0 && <p>No decisions recorded.</p>}<ul>{keys.map((key) => <li key={key}>{key}: {count(counts[key] ?? 0)}</li>)}</ul></figcaption>
+      </figure>}
+  </>
+}
+
 export function DashboardPage({ initialRunId = "", go }: { initialRunId?: string; go: (path: string) => void }) {
   const [runs, setRuns] = useState<RunsState>({ kind: "loading" })
   const [runId, setRunId] = useState(initialRunId)
@@ -95,6 +123,14 @@ export function DashboardPage({ initialRunId = "", go }: { initialRunId?: string
     {data.kind === "loading" && <section className="panel"><p aria-live="polite">Loading analytics…</p></section>}
     {data.kind === "error" && <section className="panel"><p role="alert" className="notice">{data.message}</p><button onClick={() => setReload((n) => n + 1)}>Retry</button></section>}
     {data.kind === "ready" && <Analytics {...data} go={go} runId={runId} />}
+    <section className="panel" aria-label="Recent runs">
+      <h2>Recent runs</h2>
+      <p>The six most recent runs in the loaded history (up to 100).</p>
+      <ul>{runs.runs.slice(0, 6).map((recent) => <li key={recent.execution_id}>
+        <a href={`/runs/${encodeURIComponent(recent.execution_id)}`}>{recent.input_filename}</a>{" "}
+        <Badge>{recent.status}</Badge> · {new Date(recent.started_at).toLocaleString()}
+      </li>)}</ul>
+    </section>
   </>
 }
 
@@ -135,7 +171,7 @@ function Analytics({ analytics: a, batch, batchUnavailable, go, runId }: { analy
 
     <section className="panel">
       <h2>Decisions</h2>
-      <Bars label="Decision distribution" counts={a.decisions} order={["BUY", "REVIEW", "PASS"]} />
+      <DecisionChart counts={a.decisions} />
     </section>
 
     <section className="panel">
@@ -163,6 +199,7 @@ function Analytics({ analytics: a, batch, batchUnavailable, go, runId }: { analy
 
     <section className="panel">
       <h2>Provenance</h2>
+      <div className="grid">{Object.entries(a.provenance).map(([field, counts]) => <article key={field}><h3>{FIELD_LABELS[field] ?? field}</h3><Bars label={`${FIELD_LABELS[field] ?? field} verification distribution`} counts={counts} /></article>)}</div>
       <div className="table"><table aria-label="Provenance by field">
         <thead><tr><th>Field</th>{STATUSES.map((s) => <th key={s}><ProvenanceBadge status={s} /> {s.replace("_", " ")}</th>)}<th>Not recorded</th></tr></thead>
         <tbody>{Object.entries(a.provenance).map(([field, counts]) => <tr key={field}>
@@ -173,6 +210,7 @@ function Analytics({ analytics: a, batch, batchUnavailable, go, runId }: { analy
 
     <section className="panel">
       <h2>Data quality by issue type</h2>
+      {a.issue_types.length > 0 && <Bars label="Issue type distribution" counts={Object.fromEntries(a.issue_types.map((issue) => [issue.code, issue.count]))} />}
       {a.issue_types.length === 0 ? <p>No issue types recorded for this run.</p> : <div className="table"><table aria-label="Issue types">
         <thead><tr><th>Code</th><th>Count</th></tr></thead>
         <tbody>{a.issue_types.map((t) => <tr key={t.code}><td className="mono">{t.code}</td><td>{count(t.count)}</td></tr>)}</tbody>
@@ -187,11 +225,15 @@ function Analytics({ analytics: a, batch, batchUnavailable, go, runId }: { analy
 
     <section className="panel">
       <h2>Price spread</h2>
-      <p>Selling price minus COG, over the {count(a.price_spread.count)} records with both a VERIFIED selling price and a recorded COG. It is a spread, not a profit and not a ranking.</p>
+      <p>Selling price minus COG, over the {count(a.price_spread.count)} records with both a VERIFIED selling price and a recorded COG. It is a spread, not a profit and not a ranking. Bar length shows magnitude; signed amounts are shown beside each bar.</p>
       <div className="kpis">
         <article><small>Average spread</small><strong>{fieldMoney(a.price_spread.average_amount)}</strong></article>
         <article><small>At or below COG</small><strong>{count(a.price_spread.at_or_below_cog)}</strong></article>
       </div>
+      {a.price_spread.largest.length > 0 && <ul className="spread-bars" aria-label="Price spread distribution">{a.price_spread.largest.map((entry) => {
+        const max = Math.max(...a.price_spread.largest.map((item) => Math.abs(Number(item.amount))))
+        return <li key={entry.record_ref}><span>{entry.title || entry.record_ref}</span><strong>{fieldMoney(entry.amount)}</strong><span className="bar" aria-hidden="true"><span style={{ width: max > 0 ? `${Math.abs(Number(entry.amount)) / max * 100}%` : 0 }} /></span></li>
+      })}</ul>}
       {a.price_spread.largest.length > 0 && <div className="table"><table aria-label="Largest price spreads">
         <thead><tr><th>Record</th><th>Spread</th><th>% of price</th></tr></thead>
         <tbody>{a.price_spread.largest.map((e) => <tr key={e.record_ref}>
