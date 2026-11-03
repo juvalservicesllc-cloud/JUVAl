@@ -1,5 +1,51 @@
 # Juval — Project Status
 
+## 2026-11-03 (close) — C1 Appearance: E2E passes, visual defect blocks acceptance
+
+**C1: PARTIALLY IMPLEMENTED, not committed.** Codex fixed the C1 spec
+selector (`getByRole("combobox", { name: "Theme" })`, unique) and the matching
+unit test; no product code changed. Run by Claude Code outside the Codex
+sandbox, disposable local API/SQLite, headless snap Chromium, short private
+`TMPDIR`:
+
+| Run | Result |
+|---|---|
+| `npm run e2e -- e2e/recovery-c1.spec.ts` | 1 passed (5.9 s) |
+| Full suite with `JUVAL_E2E_SERVER_LOG` + `DEBUG=pw:webserver` | **30 passed / 0 failed / 0 skipped** (1.6 min); no `LocalProtocolError` in the captured log |
+
+The spec checks the contrast warning, SVG rejection, PNG logo/background
+persistence across reload, the Theme select switching light/dark, reset of
+the logo preview, and that no non-GET request is sent.
+
+**Visual review (screenshots of that run).** C2 and C3, light and dark: no
+observable defect. C1 `appearance-dark.png` shows a defect:
+the user background image is applied to the whole shell (`.app`,
+`background-size: cover`, `src/pages/appearance.css:4` and `App.tsx`), and
+text not inside a panel sits directly on it. With a light image in dark mode,
+the page title "Appearance & branding" and the LIVE badge are unreadable. The
+contrast check covers only the accent, never the background. This is an
+accessibility/readability defect of the feature, not of the test.
+The rest of the screenshots reflect the spec's deliberately extreme accent
+`#ffffff`: accent buttons, the active nav item and the Reset button show
+white text on white. The page warns (button text 1.00:1) and lets the user
+keep the accent, as specified; recorded as a usability risk, not a defect.
+The screenshots therefore never show C1 in a normal state.
+
+Because of the readability defect, C1 is not accepted and was not committed.
+All C1 files stay in the working tree unchanged (backup in Claude's
+session scratchpad). B1-B4, C2, C3 remain accepted (commits `64fba3e` to
+`3330eca`).
+
+**Next step (Codex, frontend only).** Keep text readable over a user
+background in both themes (for example, render the background behind a
+theme-colored surface/scrim under the page header and title, or limit it to
+an area without text), and extend `recovery-c1` with a screenshot under a
+normal accent plus a background image in light and dark. Then rerun the
+full E2E outside the Codex sandbox and commit C1 if it passes and the
+screenshots are readable.
+
+---
+
 ## 2026-11-03 (later) — B/C recovery: browser E2E run, local commits
 
 **Overall: PARTIALLY IMPLEMENTED.** The two blockers in the entry below were
