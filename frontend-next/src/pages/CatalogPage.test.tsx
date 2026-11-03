@@ -144,15 +144,51 @@ describe("CatalogPage on the real backend", () => {
     await waitFor(() => expect(lastRecordsUrl(mock).searchParams.get("direction")).toBe("desc"))
   })
 
+  it("changes visible order locally, preserves title navigation and leaves query/export identical", async () => {
+    const mock = stubFetch()
+    const open = vi.fn()
+    vi.stubGlobal("open", open)
+    const user = userEvent.setup()
+    const view = render(<CatalogPage />)
+    await screen.findByText("Alpha anchor")
+    await user.type(screen.getByLabelText("Minimum ROI filter"), "30")
+    await waitFor(() => expect(lastRecordsUrl(mock).searchParams.get("min_roi")).toBe("0.3"))
+    const before = lastRecordsUrl(mock).href
+    const calls = mock.mock.calls.length
+    await user.click(screen.getByRole("button", { name: /^Export/ }))
+    const exportBefore = open.mock.calls.at(-1)![0]
+    await user.click(screen.getByText("Catalog columns", { exact: true }))
+    expect(screen.getByLabelText("Show Title column")).toBeDisabled()
+    await user.click(screen.getByLabelText("Show Cost column"))
+    await user.click(screen.getByRole("button", { name: "Move ROI up" }))
+    expect(screen.queryByRole("columnheader", { name: /^Cost/ })).not.toBeInTheDocument()
+    const headers = screen.getAllByRole("columnheader").map((e) => e.textContent)
+    expect(headers.findIndex((h) => h?.startsWith("ROI"))).toBeLessThan(headers.findIndex((h) => h?.startsWith("Profit")))
+    expect(screen.getByRole("link", { name: "Alpha anchor" })).toHaveAttribute("href", "/run/run-1/product/row-0")
+    expect(mock.mock.calls.length).toBe(calls)
+    expect(lastRecordsUrl(mock).href).toBe(before)
+    await user.click(screen.getByRole("button", { name: /^Export/ }))
+    expect(open.mock.calls.at(-1)![0]).toBe(exportBefore)
+    view.unmount()
+    render(<CatalogPage />)
+    await screen.findByText("Alpha anchor")
+    expect(lastRecordsUrl(mock).href).toBe(before)
+    expect(screen.queryByRole("columnheader", { name: /^Cost/ })).not.toBeInTheDocument()
+    await user.click(screen.getByText("Catalog columns", { exact: true }))
+    await user.click(screen.getByRole("button", { name: "Reset columns" }))
+    expect(screen.getByRole("columnheader", { name: /^Cost/ })).toBeInTheDocument()
+    expect(screen.getByLabelText("Minimum ROI filter")).toHaveValue(30)
+  })
+
   it("paginates server-side using has_more", async () => {
     const mock = stubFetch(120)
     const user = userEvent.setup()
     render(<CatalogPage />)
     await screen.findByText("Alpha anchor")
 
-    expect(screen.getByText(/page 1 of 6/i)).toBeInTheDocument()
+    expect(screen.getByText(/page 1 of 5/i)).toBeInTheDocument()
     await user.click(screen.getByRole("button", { name: "Next" }))
-    await waitFor(() => expect(lastRecordsUrl(mock).searchParams.get("offset")).toBe("20"))
+    await waitFor(() => expect(lastRecordsUrl(mock).searchParams.get("offset")).toBe("25"))
   })
 
   it("names the row count on the export button", async () => {

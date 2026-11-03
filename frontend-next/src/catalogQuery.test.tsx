@@ -122,7 +122,7 @@ describe("Catalog filter persistence (milestone 2B)", () => {
     await screen.findByText("Alpha anchor")
 
     await user.click(screen.getByRole("button", { name: "Next" }))
-    await waitFor(() => expect(lastRecordsUrl(mock).searchParams.get("offset")).toBe("20"))
+    await waitFor(() => expect(lastRecordsUrl(mock).searchParams.get("offset")).toBe("25"))
 
     expect(stored().offset).toBeUndefined()
   })
@@ -185,7 +185,7 @@ describe("Catalog filter persistence (milestone 2B)", () => {
     // An obsolete sort must never reach the API and come back a 422.
     expect(p.get("sort")).toBe("profit")
     expect(p.get("direction")).toBe("desc")
-    expect(p.get("limit")).toBe("20")
+    expect(p.get("limit")).toBe("25")
     expect(p.get("confidence")).toBe("VERIFIED_ONLY")
     expect(p.has("decision")).toBe(false)
     expect(p.has("hazmat")).toBe(false)

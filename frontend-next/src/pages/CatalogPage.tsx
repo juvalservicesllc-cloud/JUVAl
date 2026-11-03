@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { apiErrorMessage } from "../api/client"
 import { filteredExportUrl, getRunBrands, getRunRecords, getRuns } from "../api/catalog"
 import type { BrandDistributionOut, CatalogQuery, FieldValueOut, RecordOut, RecordSort, RunSummaryOut } from "../api/types"
 import { clearCatalogQuery, loadCatalogQuery, saveCatalogQuery } from "../catalogQuery"
+import { CATALOG_COLUMNS, loadColumns, saveColumns, type ColumnId } from "../catalogColumns"
+import { CatalogColumnControls } from "./CatalogColumnControls"
 import { favoriteKey, loadFavorites, saveFavorites, toggleFavorite } from "../favorites"
 import { count, fieldMoney, fieldPercent } from "../format"
 import { DeclaredDemandCell } from "./DeclaredDemand"
@@ -26,27 +28,13 @@ import "./catalog-controls.css"
  */
 
 const DEFAULT_QUERY: CatalogQuery = {
-  limit: 20, offset: 0, search: "", brand: "", decision: "ALL",
+  limit: 25, offset: 0, search: "", brand: "", decision: "ALL",
   // Golden opened on the most profitable rows; the backend sorts NULLs last
   // under DESC, so unknown-profit records sink instead of heading the page.
   sort: "profit", direction: "desc",
   minRoi: "", minProfit: "", minMargin: "", confidence: "VERIFIED_ONLY",
   hazmat: "", bulky: "", provenanceField: "", provenanceStatus: "", pendingDemand: false,
 }
-
-// Golden sorted eleven columns client-side. These are the ones the API can
-// actually sort server-side; Brand has no sort key, so its header stays plain
-// rather than pretending to be interactive.
-const COLUMNS: [label: string, sort: RecordSort | null][] = [
-  ["Brand", null], ["Title", "title"], ["Cost", "cog"],
-  // Evidence only (ADR-053): not sortable -- ordering would mix currencies.
-  ["Suggested (supplier)", null],
-  ["Selling", "price"],
-  ["Profit", "profit"], ["ROI", "roi"], ["Margin", "margin"],
-  ["Hazmat", "hazmat"], ["Bulky", "bulky"], ["Decision", "decision"],
-  // Evidence only (ADR-052): never sortable or filterable, never a decision input.
-  ["Declared demand", null],
-]
 
 type RunsState = { kind: "loading" } | { kind: "error"; message: string } | { kind: "empty" } | { kind: "ready"; runs: RunSummaryOut[] }
 type BrandsState = { kind: "loading" } | { kind: "error" } | { kind: "ready"; brands: BrandDistributionOut }
@@ -77,6 +65,9 @@ export function CatalogPage({ initialRunId = "", initialPendingDemand = false }:
   })
   const [favorites, setFavorites] = useState<string[]>(loadFavorites)
   const [reload, setReload] = useState(0)
+  const [columns, setColumns] = useState(loadColumns)
+  useEffect(() => { saveColumns(columns) }, [columns])
+  const visibleColumns = columns.filter((c) => c.visible).map((c) => CATALOG_COLUMNS.find((spec) => spec.id === c.id)!)
 
   const patch = (next: Partial<CatalogQuery>) => setQuery((current) => ({ ...current, ...next, offset: 0 }))
 
@@ -210,6 +201,8 @@ export function CatalogPage({ initialRunId = "", initialPendingDemand = false }:
         {brands.kind === "ready" && brands.brands.not_recorded > 0 && <p className="local-note">{count(brands.brands.not_recorded)} record{brands.brands.not_recorded === 1 ? " has" : "s have"} no brand recorded and appear only under All Brand.</p>}
       </section>
 
+      <CatalogColumnControls columns={columns} onChange={setColumns} />
+
       {/* Golden edited the decision bands here and rewrote stored decisions.
           Production must not: ExecutionRun does not record the thresholds a run
           used, so the bands cannot be shown without inventing them, and a
@@ -226,39 +219,38 @@ export function CatalogPage({ initialRunId = "", initialPendingDemand = false }:
         <p className="result-count">{count(total)} result{total === 1 ? "" : "s"}</p>
         <div className="table"><table>
           <thead><tr>
-            <th>Image</th><th>Source</th>
-            {COLUMNS.map(([label, field]) => {
-              if (!field) return <th key={label}>{label}</th>
+            {visibleColumns.map(({ id, label, sort: field }) => {
+              if (!field) return <th key={id}>{label}</th>
               const active = query.sort === field
-              return <th key={label} aria-sort={active ? (query.direction === "asc" ? "ascending" : "descending") : "none"}>
+              return <th key={id} aria-sort={active ? (query.direction === "asc" ? "ascending" : "descending") : "none"}>
                 <button onClick={() => sortBy(field)} aria-pressed={active}>{label} {active ? (query.direction === "asc" ? "↑" : "↓") : "↕"}</button>
               </th>
             })}
-            <th>Favorite</th>
           </tr></thead>
           <tbody>
             {records.records.map((record) => {
               const key = favoriteKey(runId, record.record_ref)
               const starred = favorites.includes(key)
+              const cells: Record<ColumnId, ReactNode> = {
+                // Preserve the honest unavailable-image slot; no URL is invented.
+                image: <ProductThumbnail src="" alt={text(record.title) || record.record_ref} />,
+                source: <small title={activeRun?.input_filename}>{activeRun?.input_filename ?? "—"}</small>,
+                brand: text(record.brand) || "—",
+                title: <a href={`/run/${encodeURIComponent(runId)}/product/${encodeURIComponent(record.record_ref)}`}>{text(record.title) || record.record_ref}</a>,
+                cog: fieldMoney(record.cog),
+                suggested: <SuggestedPriceCell record={record} />,
+                selling: <Cell value={record.selling_price} format={fieldMoney} />,
+                profit: <Cell value={record.profit} format={fieldMoney} />,
+                roi: <Cell value={record.roi} format={fieldPercent} />,
+                margin: <Cell value={record.margin} format={fieldPercent} />,
+                hazmat: <>{record.hazmat_status ?? "UNKNOWN"} <SeverityProvenance compact risk="HazMat" status={record.hazmat_severity_status} sourceType={record.hazmat_severity_source_type} /></>,
+                bulky: <>{record.bulky_status ?? "UNKNOWN"} <SeverityProvenance compact risk="Bulky" status={record.bulky_severity_status} sourceType={record.bulky_severity_source_type} /></>,
+                decision: <>{record.decision ? <Badge>{record.decision}</Badge> : "—"}{record.review_classification === "PENDING_DEMAND_VERIFICATION" && <> <PendingDemandTag /></>}</>,
+                demand: <DeclaredDemandCell record={record} />,
+                favorite: <button className="favorite-button" aria-label={`${starred ? "Remove" : "Add"} ${text(record.title) || record.record_ref} ${starred ? "from" : "to"} favorites`} aria-pressed={starred} title={starred ? "Starred in this browser" : "Star in this browser"} onClick={() => star(record.record_ref)}>{starred ? "★" : "☆"}</button>,
+              }
               return <tr key={record.record_ref}>
-                {/* No canonical product image exists in RecordOut yet, so the
-                    slot renders Golden's own "No image" state. No URL is
-                    invented, borrowed or scraped. */}
-                <td><ProductThumbnail src="" alt={text(record.title) || record.record_ref} /></td>
-                <td><small title={activeRun?.input_filename}>{activeRun?.input_filename ?? "—"}</small></td>
-                <td>{text(record.brand) || "—"}</td>
-                <td><a href={`/run/${encodeURIComponent(runId)}/product/${encodeURIComponent(record.record_ref)}`}>{text(record.title) || record.record_ref}</a></td>
-                <td>{fieldMoney(record.cog)}</td>
-                <td><SuggestedPriceCell record={record} /></td>
-                <td><Cell value={record.selling_price} format={fieldMoney} /></td>
-                <td><Cell value={record.profit} format={fieldMoney} /></td>
-                <td><Cell value={record.roi} format={fieldPercent} /></td>
-                <td><Cell value={record.margin} format={fieldPercent} /></td>
-                <td>{record.hazmat_status ?? "UNKNOWN"} <SeverityProvenance compact risk="HazMat" status={record.hazmat_severity_status} sourceType={record.hazmat_severity_source_type} /></td>
-                <td>{record.bulky_status ?? "UNKNOWN"} <SeverityProvenance compact risk="Bulky" status={record.bulky_severity_status} sourceType={record.bulky_severity_source_type} /></td>
-                <td>{record.decision ? <Badge>{record.decision}</Badge> : "—"}{record.review_classification === "PENDING_DEMAND_VERIFICATION" && <> <PendingDemandTag /></>}</td>
-                <td><DeclaredDemandCell record={record} /></td>
-                <td><button className="favorite-button" aria-label={`${starred ? "Remove" : "Add"} ${text(record.title) || record.record_ref} ${starred ? "from" : "to"} favorites`} aria-pressed={starred} title={starred ? "Starred in this browser" : "Star in this browser"} onClick={() => star(record.record_ref)}>{starred ? "★" : "☆"}</button></td>
+                {visibleColumns.map(({ id }) => <td key={id}>{cells[id]}</td>)}
               </tr>
             })}
           </tbody>

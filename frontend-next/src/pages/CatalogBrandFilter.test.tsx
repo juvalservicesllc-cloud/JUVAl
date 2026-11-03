@@ -62,7 +62,7 @@ describe("Catalog brand filter (exact, from the run's own analytics)", () => {
     render(<CatalogPage />)
     await screen.findByRole("option", { name: "Acme (1)" })
     await user.click(await screen.findByRole("button", { name: "Next" }))
-    await waitFor(() => expect(lastRecordsUrl(mock).searchParams.get("offset")).toBe("20"))
+    await waitFor(() => expect(lastRecordsUrl(mock).searchParams.get("offset")).toBe("25"))
 
     await user.selectOptions(screen.getByLabelText("Brand"), "acme")
     await waitFor(() => expect(lastRecordsUrl(mock).searchParams.get("brand")).toBe("acme"))

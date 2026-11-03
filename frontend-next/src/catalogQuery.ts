@@ -35,7 +35,7 @@ const CONFIDENCES = ["VERIFIED_ONLY", "INCLUDE_INFERRED"]
 const RISK = ["", "PRESENT", "ABSENT", "UNKNOWN"]
 const PROVENANCE_FIELDS = ["", "asin", "selling_price", "profit", "roi", "margin"]
 const PROVENANCE_STATUSES = ["", "VERIFIED", "INFERRED", "NOT_FOUND", "INVALID"]
-const LIMITS = [20, 25, 50, 100]
+const LIMITS = [25, 50, 100]
 
 // v1 is the first remembered shape in frontend-next. Bump on any change that
 // would make an older stored value mean something different.
