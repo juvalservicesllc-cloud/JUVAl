@@ -161,7 +161,12 @@ G4/G5, `b2140e1` G6/G11, `4dc9c59` G7/G9/G10, `364ef07` G8, `56db50a` G12,
 `fe33140` E2E, `bf10d43` documentación. La sección «Unidades propuestas» de
 abajo queda como histórico.
 
-Pendiente: estabilizar `CatalogBrandFilter`, firma del propietario, instalación PWA real, plan de workers previos
+Actualización posterior: `CatalogBrandFilter` estabilizado sin cambios de
+producción; cinco focalizadas 8/8 y tres suites completas 260 PASS / 0 FAIL /
+10 SKIP, con concurrencia predeterminada. Reproducción, sincronización observable,
+límite local de 3 s y duraciones en [PROJECT_STATUS](../PROJECT_STATUS.md).
+
+Pendiente: firma del propietario, instalación PWA real, plan de workers previos
 y cutover (no autorizado).
 
 ## Unidades propuestas para commits locales

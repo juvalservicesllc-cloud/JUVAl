@@ -1,5 +1,66 @@
 # Juval — Project Status
 
+## 2026-11-03 — CatalogBrandFilter stability verified locally
+
+**IMPLEMENTED.** APPROVED scope: stabilize the unit test only, per the owner's
+explicit instruction. Baseline `38f88ac`, clean master, 135 commits ahead of the
+local `origin/master` reference. No production code, E2E, global test settings,
+dependencies, ADR-030 or commercial/provenance data changed.
+
+Reproduced before editing: default parallel `npm test` returned **259 PASS /
+1 FAIL / 10 SKIP** in **42.58 s**. The first CatalogBrandFilter case failed in
+1.243 s looking for `Acme (1)` with Testing Library's default 1 s async budget.
+Runs must load before run-scoped analytics can populate Brand; no unnecessary
+brand-fetch effect or render loop was demonstrated. The old option lookup
+searched the entire Catalog DOM during that asynchronous render chain.
+
+`CatalogBrandFilter.test.tsx` now waits for the Brand combobox to be enabled
+and contain the exact requested option, querying options only within that
+control. The explicit **3,000 ms** readiness budget is local to these queries,
+not a global timeout or fixed delay. It accommodates the measured cold parallel
+case (1.213/1.344/1.236 s after the adjustment), returns immediately when ready,
+and still fails if the control stays disabled or the exact option is absent.
+All original assertions remain. The first test additionally holds the mocked
+analytics response with an explicitly resolved Promise, checks that only the
+empty option exists while disabled, then releases the response and checks the
+exact original `['', 'Acme', 'acme']` values. No sleeps, retries or production
+performance changes.
+
+Measured on Node 24.19.0 with isolated HOME/PATH/LANG, no dependency installs.
+Each invocation is a fresh Vitest process. Full runs use default concurrency,
+without worker limits, and run consecutively:
+
+| Execution | PASS / FAIL / SKIP | Duration | Log |
+|---|---|---|---|
+| Baseline full, before edit | 259 / 1 / 10 | 42.58 s | baseline-full.log |
+| Focused 1 | 8 / 0 / 0 | 5.05 s | focused-1.log |
+| Focused 2 | 8 / 0 / 0 | 4.74 s | focused-2.log |
+| Focused 3 | 8 / 0 / 0 | 4.79 s | focused-3.log |
+| Focused 4 | 8 / 0 / 0 | 4.82 s | focused-4.log |
+| Focused 5 | 8 / 0 / 0 | 4.80 s | focused-5.log |
+| Full 1 | 260 / 0 / 10 | 42.17 s | full-1.log |
+| Full 2 | 260 / 0 / 10 | 42.53 s | full-2.log |
+| Full 3 | 260 / 0 / 10 | 42.67 s | full-3.log |
+
+Focused command: `npm test -- src/pages/CatalogBrandFilter.test.tsx`.
+Full command: `npm test`. Each full run: 30 files PASS, two conditional files
+SKIP. Nine tests require a disposable `JUVAL_LIVE_API`; one requires
+`JUVAL_FINANCIAL_JSON`. Skips are not evidence of verified contracts.
+Typecheck **PASS (7.73 s)**, lint **PASS (0 warnings/errors, 0.30 s)**,
+build **PASS (8.38 s)**, `git diff --check` **PASS**. Test durations are Vitest's
+reported totals; check/build durations are `/usr/bin/time -p` wall times.
+Logs and build: private `/tmp/juval-brand-mzSv49/`, outside the repository.
+
+Self-review: observable synchronization, exact/case-sensitive options, pagination,
+export, run changes, no brand persistence, errors and empty/loading states all
+retained. No business, accessibility, responsive or provenance implementation
+changed. Existing E2E files remain identical to HEAD; no new browser execution
+is claimed. Ponytail unavailable in tools/skills; manual simplicity review
+performed. Extreme runner contention can still exceed the bounded 3 s wait;
+that remains a failure, not a skip or retry. No further fix is pending for this
+unit-test scope. Owner acceptance/PWA/cutover gates remain separate and unchanged.
+No stage, commits, push, deploy or cutover.
+
 ## 2026-11-03 (parity validation) — G1–G12 verified in Chromium; owner sign-off pending
 
 **IMPLEMENTED technically; owner acceptance and cutover PENDING.** External

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react"
+import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { CatalogPage } from "./CatalogPage"
@@ -21,14 +21,15 @@ const BRANDS: Record<string, unknown> = {
   "run-2": { items: [{ label: "Zeta", count: 2 }], distinct: 1, not_recorded: 0 },
 }
 
-function stub({ analyticsFails = false, brands = BRANDS }: { analyticsFails?: boolean; brands?: Record<string, unknown> } = {}) {
+function stub({ analyticsFails = false, brands = BRANDS, analyticsReady }: { analyticsFails?: boolean; brands?: Record<string, unknown>; analyticsReady?: Promise<void> } = {}) {
   const mock = vi.fn((url: string) => {
     const u = new URL(String(url))
     const runId = decodeURIComponent(u.pathname.split("/")[4] ?? "")
     const ok = (body: unknown) => Promise.resolve({ ok: true, status: 200, json: async () => body })
     if (u.pathname.endsWith("/analytics")) {
-      return analyticsFails ? Promise.resolve({ ok: false, status: 500, json: async () => ({ detail: "internal server error" }) })
+      const response = analyticsFails ? Promise.resolve({ ok: false, status: 500, json: async () => ({ detail: "internal server error" }) })
         : ok({ brands: brands[runId] })
+      return analyticsReady ? analyticsReady.then(() => response) : response
     }
     if (u.pathname.endsWith("/records")) {
       const limit = Number(u.searchParams.get("limit")); const offset = Number(u.searchParams.get("offset"))
@@ -45,13 +46,29 @@ const lastRecordsUrl = (mock: ReturnType<typeof vi.fn>) => {
   return new URL(String(calls[calls.length - 1][0]))
 }
 
+// Cold Catalog renders exceeded RTL's 1 s default under parallel suite load.
+// Bound only brand readiness to 3 s; stop as soon as the real option is usable.
+const BRAND_READY_TIMEOUT = 3000
+const findBrandOption = (name: string) => waitFor(() => {
+  const filter = screen.getByRole("combobox", { name: "Brand" })
+  expect(filter).toBeEnabled()
+  return within(filter).getByRole("option", { name })
+}, { timeout: BRAND_READY_TIMEOUT })
+
 describe("Catalog brand filter (exact, from the run's own analytics)", () => {
   afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); sessionStorage.clear(); localStorage.clear() })
 
   it("offers only the brand labels the run stored, case preserved", async () => {
-    stub()
+    let releaseAnalytics!: () => void
+    const analyticsReady = new Promise<void>((resolve) => { releaseAnalytics = resolve })
+    stub({ analyticsReady })
     render(<CatalogPage />)
-    await screen.findByRole("option", { name: "Acme (1)" })
+    const filter = await screen.findByRole("combobox", { name: "Brand" }, { timeout: BRAND_READY_TIMEOUT })
+    expect(filter).toBeDisabled()
+    expect(within(filter).getAllByRole("option").map((option) => (option as HTMLOptionElement).value)).toEqual([""])
+
+    releaseAnalytics()
+    await findBrandOption("Acme (1)")
     const options = Array.from((screen.getByLabelText("Brand") as HTMLSelectElement).options).map((o) => o.value)
     expect(options).toEqual(["", "Acme", "acme"])   // two different brands, never merged
   })
@@ -60,7 +77,7 @@ describe("Catalog brand filter (exact, from the run's own analytics)", () => {
     const mock = stub()
     const user = userEvent.setup()
     render(<CatalogPage />)
-    await screen.findByRole("option", { name: "Acme (1)" })
+    await findBrandOption("Acme (1)")
     await user.click(await screen.findByRole("button", { name: "Next" }))
     await waitFor(() => expect(lastRecordsUrl(mock).searchParams.get("offset")).toBe("25"))
 
@@ -74,7 +91,7 @@ describe("Catalog brand filter (exact, from the run's own analytics)", () => {
     const open = vi.spyOn(window, "open").mockImplementation(() => null)
     const user = userEvent.setup()
     render(<CatalogPage />)
-    await screen.findByRole("option", { name: "Acme (1)" })
+    await findBrandOption("Acme (1)")
     await user.selectOptions(screen.getByLabelText("Brand"), "Acme")
     await user.click(await screen.findByRole("button", { name: /^Export/ }))
 
@@ -87,12 +104,12 @@ describe("Catalog brand filter (exact, from the run's own analytics)", () => {
     const mock = stub()
     const user = userEvent.setup()
     render(<CatalogPage />)
-    await screen.findByRole("option", { name: "Acme (1)" })
+    await findBrandOption("Acme (1)")
     await user.selectOptions(screen.getByLabelText("Brand"), "Acme")
     await waitFor(() => expect(lastRecordsUrl(mock).searchParams.get("brand")).toBe("Acme"))
 
     await user.selectOptions(screen.getByLabelText("Run"), "run-2")
-    await screen.findByRole("option", { name: "Zeta (2)" })
+    await findBrandOption("Zeta (2)")
     expect(lastRecordsUrl(mock).pathname).toContain("run-2")
     expect(lastRecordsUrl(mock).searchParams.has("brand")).toBe(false)
     expect((screen.getByLabelText("Brand") as HTMLSelectElement).value).toBe("")
@@ -102,7 +119,7 @@ describe("Catalog brand filter (exact, from the run's own analytics)", () => {
     stub()
     const user = userEvent.setup()
     render(<CatalogPage />)
-    await screen.findByRole("option", { name: "Acme (1)" })
+    await findBrandOption("Acme (1)")
     await user.selectOptions(screen.getByLabelText("Brand"), "Acme")
     await waitFor(() => expect(sessionStorage.getItem("juval.next.catalog.query.v1")).not.toBeNull())
     expect(JSON.parse(sessionStorage.getItem("juval.next.catalog.query.v1")!)).not.toHaveProperty("brand")
