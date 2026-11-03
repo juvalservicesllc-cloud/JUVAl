@@ -146,6 +146,18 @@ describe("BatchPage", () => {
 describe("RunDetailPage", () => {
   afterEach(() => vi.unstubAllGlobals())
 
+  it("offers the canonical complete-run XLSX download without catalog filters", async () => {
+    const fetch = okJson(run)
+    vi.stubGlobal("fetch", fetch)
+    render(<RunDetailPage executionId="run-1" go={vi.fn()} />)
+    const link = await screen.findByRole("link", { name: "Download complete run (.xlsx)" })
+    const url = new URL(link.getAttribute("href")!)
+    expect(url.pathname).toBe("/api/v1/runs/run-1/download")
+    expect(url.search).toBe("")
+    expect(link).toHaveAttribute("download")
+    expect(fetch).toHaveBeenCalledTimes(1) // no download until the operator asks
+  })
+
   it("shows the run's own persisted fields", async () => {
     vi.stubGlobal("fetch", okJson(run))
     render(<RunDetailPage executionId="run-1" go={vi.fn()} />)

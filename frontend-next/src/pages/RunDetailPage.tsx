@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { apiErrorMessage, ApiError } from "../api/client"
+import { apiErrorMessage, apiUrl, ApiError } from "../api/client"
 import { getRun } from "../api/runs"
 import type { RunSummaryOut } from "../api/types"
 import { count } from "../format"
@@ -66,6 +66,7 @@ export function RunDetailPage({ executionId, go }: { executionId: string; go: (p
     <section className="panel">
       <h2>Review the records</h2>
       <p>Catalog opens scoped to this run: its records only, queried on the server.</p>
+      <p><a href={apiUrl(`api/v1/runs/${encodeURIComponent(executionId)}/download`)} download>Download complete run (.xlsx)</a> — all records, without Catalog filters.</p>
       <button onClick={() => go(`/catalog?run=${encodeURIComponent(run.execution_id)}`)}>Open in Catalog</button>
       <button onClick={() => go("/runs")}>All runs</button>
     </section>
