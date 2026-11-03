@@ -1,5 +1,33 @@
 # Juval — Project Status
 
+## 2026-11-03 (cutover preparation) — acceptance and cutover plan; nothing executed
+
+**PENDING DECISION.** Documentation and local lab only; no push, deploy,
+hosting change or cutover. New documents:
+
+- [ADR-054](adr/ADR-054-demo-presentation-charts-adr-030-amendment.md) —
+  **Propuesta**: DEMO-only presentation charts as a bounded amendment to
+  ADR-030 (G12); DEMO values barred from ROI/profit/decisions/provenance.
+  Not approved.
+- [FRONTEND_NEXT_OWNER_ACCEPTANCE](architecture/FRONTEND_NEXT_OWNER_ACCEPTANCE.md) —
+  owner checklist (P1–P10, cross-cutting, PWA) with verified local launch
+  commands; no box ticked, no signature.
+- [FRONTEND_NEXT_CUTOVER_RUNBOOK](architecture/FRONTEND_NEXT_CUTOVER_RUNBOOK.md) —
+  preconditions, PWA design and lab evidence, cutover, health checks, rollback,
+  abort criteria, authorizations and risk matrix.
+
+PWA lab (production builds of `frontend/` and `frontend-next/` on one loopback
+origin, Chromium 156): after the switch users keep the legacy app until all tabs
+close, then frontend-next takes over; offline notice works; rollback is
+immediate (legacy `skipWaiting`); a failed update keeps the previous worker; a
+self-unregistering worker removes the worker and its caches; exact Workbox
+precache cleanup verified as an option; real install/launch/uninstall via CDP
+under Xvfb succeeded. No `/api/` response cached in any scenario.
+
+Blockers: owner sign-off, ADR-054 decision, production origin/TLS, real-auth
+browser test with frontend-next, hosting config for `frontend-next/` (missing
+`vercel.json`), push and cutover authorization.
+
 ## 2026-11-03 — CatalogBrandFilter stability verified locally
 
 **IMPLEMENTED.** APPROVED scope: stabilize the unit test only, per the owner's
