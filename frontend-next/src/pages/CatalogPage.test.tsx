@@ -126,6 +126,7 @@ describe("CatalogPage on the real backend", () => {
 
     await user.type(screen.getByLabelText("Minimum ROI filter"), "30")
     await waitFor(() => expect(lastRecordsUrl(mock).searchParams.get("min_roi")).toBe("0.3"))
+    expect(screen.getByRole("status")).toHaveTextContent("Minimum ROI: 30%")
   })
 
   it("sorts server-side and toggles direction on the same column", async () => {

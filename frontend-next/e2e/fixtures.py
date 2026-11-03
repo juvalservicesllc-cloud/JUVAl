@@ -90,7 +90,8 @@ def seed_history(db: Path) -> None:
 
 
 def dump(path: Path) -> None:
-    sheet = load_workbook(path, read_only=True).worksheets[0]
+    book = load_workbook(path, read_only=True)
+    sheet = book[sys.argv[3]] if len(sys.argv) > 3 else book.worksheets[0]
     rows = [[c.isoformat() if isinstance(c, datetime) else c for c in row] for row in sheet.iter_rows(values_only=True)]
     print(json.dumps(rows))
 

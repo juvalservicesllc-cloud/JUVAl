@@ -199,6 +199,7 @@ export function CatalogPage({ initialRunId = "", initialPendingDemand = false }:
           <button onClick={() => { clearCatalogQuery(); setQuery(DEFAULT_QUERY) }}>Reset filters</button>
           <button onClick={() => window.open(filteredExportUrl(runId, query), "_blank", "noopener,noreferrer")} disabled={!runId}>Export {count(total)} results</button>
         </div>
+        {query.minRoi.trim() !== "" && Number.isFinite(Number(query.minRoi)) && <p className="local-note" role="status">Minimum ROI: {query.minRoi}%</p>}
         {query.pendingDemand && <p className="local-note pending-demand-note" role="status">
           Showing REVIEW records whose only recorded blocker is unknown demand: economics and risk passed every rule, but no demand evidence exists, so the decision stays REVIEW. This is not a BUY recommendation. Records processed before reason codes were stored cannot be classified and are not listed.
         </p>}
