@@ -92,6 +92,78 @@ No se ofrece migración entre orígenes. Un worker legacy en un origen compartid
 requiere plan de cutover independiente; el worker nuevo no borra sus caches.
 No se autoriza ni ejecuta ese cutover.
 
+## Validación externa Chromium — 2026-11-03 (Claude Code)
+
+Ejecutada fuera del sandbox de Codex con el lab del README (API/SQLite
+desechables, loopback, Chromium snap, TMPDIR corto, salida y log de servidor
+separados por invocación). Tree validado: `bf10d43` (código idéntico al de
+`56db50a`).
+
+**Primera pasada (tree anterior a las correcciones): no aceptada.** 38 retenidos
+29/2 fail/7 sin ejecutar; 4 nuevos 0/4; 42 completos 29/6/7. Causas: G2
+desplazaba columnas históricas (g17, severity-provenance), localizadores
+`getByLabel` exactos en el spec nuevo, y `.dark` sobrescribía colores
+personalizados (G6). Codex corrigió las tres; no se debilitó ningún spec retenido.
+
+**Pasada definitiva:**
+
+| Ejecución | Resultado |
+|---|---|
+| 38 retenidos (`--grep-invert 'parity gates:'`) | **38 PASS**, 0 skip, 2.6 min |
+| 4 nuevos (`zz-parity-gates.spec.ts`) | **4 PASS** (360/1440 × claro/oscuro) |
+| Suite completa | **42 PASS**, 0 skip, 0 flaky, 2.9 min; 109 capturas |
+
+`LocalProtocolError`: 0 en los tres logs reales de servidor. Los specs fallan
+ante cualquier error de consola o HTTP ≥ 400 no declarado.
+
+**Comprobaciones dirigidas (spec de diagnóstico fuera del repo, 4 PASS):**
+
+- G2: 15 columnas históricas en sus posiciones y SKU, ASIN/UPC, Record, Issues
+  al final; un orden/visibilidad guardado prevalece tras recargar.
+- G4: con dos runs (3 y 1 registros) `records_total` ordena asc/desc
+  correctamente; los dos combobox tienen nombre y orden de tabulación.
+- G6: texto `#eeeeee` aplicado al h1 en oscuro y claro (`getComputedStyle`),
+  tinta protectora negra sobre superficie blanca, persistencia tras recarga y
+  reset a los valores por defecto (sin `has-custom-colors`). C1: con imagen de
+  fondo, `main` conserva fondo opaco.
+
+**PWA (build de producción con `vite preview`, API desechable):** manifest sin
+errores de instalabilidad de Chromium; iconos 192/512/SVG 200; SW con scope `/`
+controla tras recargar; CacheStorage solo `juval-next-offline-v1` →
+`/offline.html` tras 8 GET de API (200); offline, rutas frontend muestran el
+aviso y la API da error de red; una versión nueva queda en espera con la pestaña
+abierta (sin `skipWaiting`). **Límites no aprobados:** instalación real
+(headless) y convivencia con workers del frontend anterior en un origen
+compartido (pertenece al plan de cutover).
+
+**Migración G11 (perfil sintético, primera pasada):** 14 claves importadas,
+originales intactos, columnas actuales no sobrescritas, filtros sin
+offset/run/brand, segundo intento bloqueado, segunda pestaña ve los valores al
+recargar. No probados en navegador: almacenamiento bloqueado/corrupto ni
+concurrencia real entre pestañas (no transaccional, documentado).
+
+**G12:** etiqueta DEMO_FIXTURE · NOT VERIFIED y 90 barras en navegador;
+`MarketDemo` no recibe props. Las comparaciones export/descarga/API de los specs
+retenidos pasan. La excepción a ADR-030 consta en esta documentación por
+instrucción del propietario; el ADR no se modificó y su formalización queda
+PENDING del propietario.
+
+**Pruebas unitarias:** 259 PASS / 1 FAIL / 10 SKIP en tres ejecuciones
+completas. El fallo es `CatalogBrandFilter.test.tsx` («offers only the brand
+labels…»): `findByRole` espera 1 s y el render del Catalog tarda ~1,2 s con la
+suite en paralelo. Aislado pasa (8/8). Ya fallaba en el baseline `9eb461a`
+(1 de 2 ejecuciones, 220/1/10), así que es inestabilidad previa, no una
+regresión; la nueva carga del Catalog la hace más frecuente. Typecheck y lint
+PASS en cada commit intermedio.
+
+**Commits locales (sin push):** `e84028c` G2/G3, `083ff54` G1, `c3966b9`
+G4/G5, `b2140e1` G6/G11, `4dc9c59` G7/G9/G10, `364ef07` G8, `56db50a` G12,
+`fe33140` E2E, `bf10d43` documentación. La sección «Unidades propuestas» de
+abajo queda como histórico.
+
+Pendiente: estabilizar `CatalogBrandFilter`, firma del propietario, instalación PWA real, plan de workers previos
+y cutover (no autorizado).
+
 ## Unidades propuestas para commits locales
 
 Sin stage/commit desde el sandbox protegido. Tras validación externa, el operador

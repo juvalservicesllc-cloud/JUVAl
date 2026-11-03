@@ -1,5 +1,21 @@
 # Juval — Project Status
 
+## 2026-11-03 (parity validation) — G1–G12 verified in Chromium; owner sign-off pending
+
+**IMPLEMENTED technically; owner acceptance and cutover PENDING.** External
+Chromium run on the committed tree: retained **38/38**, new parity gates
+**4/4**, full suite **42/42** (0 skips, 0 `LocalProtocolError`). A first pass
+found three defects (G2 column shift, exact `getByLabel` locators, `.dark`
+overriding custom colours); Codex fixed them without weakening retained specs.
+Targeted checks confirmed G2 positions/preferences, real G4 ordering, G6 dark
+custom text, persistence/reset and the C1 opaque surface. PWA lab: no
+installability errors, only `/offline.html` cached, no API caching, no forced
+update; real installation and coexistence with older workers stay unverified.
+Unit suite 259/1/10: `CatalogBrandFilter` times out under load (also flaky on
+the `9eb461a` baseline). Commits `e84028c`..`bf10d43`; details in
+[FRONTEND_NEXT_PARITY_RECOVERY](architecture/FRONTEND_NEXT_PARITY_RECOVERY.md).
+No push, deploy or cutover.
+
 ## 2026-11-03 — G1–G12 recovery implemented locally; external acceptance pending
 
 **PARTIALLY IMPLEMENTED overall.** Baseline `9eb461a`; no new commit, push,
