@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process"
 import { writeFileSync } from "node:fs"
 import { join, resolve } from "node:path"
-import { test as base, expect, type Page } from "@playwright/test"
+import { test as base, expect, type APIResponse, type Page } from "@playwright/test"
 
 /** Helpers shared by the E2E specs. They run against one disposable API and
  *  database (playwright.config.ts); see README.md. */
@@ -77,6 +77,11 @@ export const downloadedRows = (page: Page, run: string) => workbookRows(page, `$
 
 export async function workbookRows(page: Page, url: string, name: string): Promise<Record<string, unknown>[]> {
   const response = await page.request.get(url)
+  return workbookResponseRows(response, name)
+}
+
+/** Parse the response actually received, including concurrent exports. */
+export async function workbookResponseRows(response: APIResponse, name: string): Promise<Record<string, unknown>[]> {
   expect(response.status()).toBe(200)
   writeFileSync(join(DIR, name), await response.body())
   const [headers, ...rows] = JSON.parse(fixtures("dump", join(DIR, name))) as unknown[][]
