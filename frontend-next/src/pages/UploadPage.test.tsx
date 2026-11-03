@@ -56,12 +56,15 @@ describe("UploadPage on the real pipeline", () => {
   })
 
   it("enforces the ten-file cap and names what was not queued", () => {
+    const fetch = vi.fn()
+    vi.stubGlobal("fetch", fetch)
     render(<UploadPage go={vi.fn()} />)
     fireEvent.drop(dropZone(), { dataTransfer: { files: Array.from({ length: 12 }, (_, i) => file(`f${i}.csv`)) } })
 
     expect(screen.getByText("10 / 10 files")).toBeInTheDocument()
     expect(screen.getByRole("alert")).toHaveTextContent(/f10\.csv/)
     expect(screen.getByRole("alert")).toHaveTextContent(/f11\.csv/)
+    expect(fetch).not.toHaveBeenCalled()
   })
 
   it("removes a single queued file", async () => {

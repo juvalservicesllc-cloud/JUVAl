@@ -26,6 +26,8 @@ CONTEXT = {
 }
 
 FILES = {
+    **{f"batch-{i:02}.xlsx": [{"asin": f"B0E2EB{i:04}", "title": f"E2E batch {i:02} (synthetic)", "selling_price": 30}]
+       for i in range(1, 12)},
     # target_profit 5 in the specs: 30 -> only DEMAND_UNKNOWN; 6 -> also PROFIT_BELOW_TARGET; 2 -> negative profit, PASS.
     "no-demand.xlsx": [
         {"asin": "B0E2E00001", "title": "E2E pending widget", "selling_price": 30},

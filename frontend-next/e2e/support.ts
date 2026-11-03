@@ -33,13 +33,7 @@ export const runs: Record<string, string> = {}
 export async function upload(page: Page, file: string): Promise<string> {
   await page.goto("/import")
   await page.getByLabel("Supplier files").setInputFiles(join(DIR, "files", file))
-  await page.getByLabel("Target profit").fill("5")
-  await page.getByLabel("Target ROI").fill("0")
-  await page.getByLabel("Minimum estimated monthly sales").fill("0")
-  await page.getByLabel("Maximum accepted risk severity").selectOption("CRITICAL")
-  await page.getByLabel("Referral fee", { exact: true }).fill("1")
-  await page.getByLabel("Referral fee rate").fill("0.15")
-  await page.getByLabel("Allow unknown risk").check()
+  await configureUpload(page)
   await page.getByRole("button", { name: "Process catalog" }).click()
   await expect(page.getByRole("heading", { name: /Batch result/ })).toBeVisible()
   await page.getByRole("button", { name: "Open batch" }).click()
@@ -47,6 +41,16 @@ export async function upload(page: Page, file: string): Promise<string> {
   const id = decodeURIComponent((await open.getAttribute("href"))!.replace("/runs/", ""))
   runs[file] = id
   return id
+}
+
+export async function configureUpload(page: Page) {
+  await page.getByLabel("Target profit").fill("5")
+  await page.getByLabel("Target ROI").fill("0")
+  await page.getByLabel("Minimum estimated monthly sales").fill("0")
+  await page.getByLabel("Maximum accepted risk severity").selectOption("CRITICAL")
+  await page.getByLabel("Referral fee", { exact: true }).fill("1")
+  await page.getByLabel("Referral fee rate").fill("0.15")
+  await page.getByLabel("Allow unknown risk").check()
 }
 
 export const markTab = (page: Page) => page.evaluate(() => { (window as unknown as { e2eTab: number }).e2eTab = 1 })
