@@ -214,11 +214,18 @@ por defecto de `body` (8 px, sin `margin:0`), `aside` en y=8 al inicio;
 preexistente y visible como marco claro en todas las capturas. D3 sigue
 abierto. Faltan las 4 `navigation-scrolled-*`.
 
+**Reejecución tras D5 (2026-11-03):** `z-visual-acceptance` **6/8**; retenida
+30/30, 0 `LocalProtocolError`. **D5 corregido**: `aside` móvil en y=0 al inicio
+y tras scroll; sin marco de 8 px. 64 capturas de pantalla y las 4
+`navigation-scrolled-*` generadas y revisadas. Fallo restante solo a 360 px:
+aserción exacta `box.x >= 0` frente a `-0.203125` (redondeo subpíxel de la
+barra con scroll horizontal; texto visible). Corrección pendiente en la spec.
+
 ### Matriz de paridad con evidencia
 
 | Área | Estado | Criticidad para cutover | Evidencia |
 |---|---|---|---|
-| Dashboard | **PARCIAL** | Alta | D1 corregido; D5 en móvil; G1 (Donut/Bars, Recent Runs) ausente |
+| Dashboard | **PARCIAL** | Alta | D1 y D5 corregidos; G1 (Donut/Bars, Recent Runs) ausente |
 | Catalog | **PARCIAL** | Alta | D1 corregido; G2/G3 (identity/issues, provenance general). B2/C2 verificados |
 | Runs | **PARCIAL** | Media | Sin overflow; G4 (ordenación) ausente |
 | Run Detail | **PARCIAL** | Media | D2 corregido; D3 abierto; descarga completa verificada; G5 (batch/preview) ausente |
@@ -229,7 +236,8 @@ abierto. Faltan las 4 `navigation-scrolled-*`.
 ## Gates de aprobación y eventual cutover
 
 - [x] D1 y D2 corregidos (verificado 2026-11-03).
-- [ ] D5 corregido; `z-visual-acceptance` 8/8 y suite completa 38/38
+- [x] D5 corregido (verificado 2026-11-03).
+- [ ] Tolerancia subpíxel en la spec; `z-visual-acceptance` 8/8 y suite completa 38/38
   fuera del sandbox; capturas 360/390 y `navigation-scrolled-*` revisadas.
 - [ ] Propietario firma V1–V8 y móvil, con commit/tree y referencias de evidencia.
 - [ ] Resolver brechas de capacidades protegidas G1–G8 y G10; si se propone

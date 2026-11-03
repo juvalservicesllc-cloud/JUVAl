@@ -1,5 +1,42 @@
 # Juval — Project Status
 
+## 2026-11-03 (D5 run) — D5 fixed; visual spec 6/8 on a sub-pixel assertion
+
+**D5: IMPLEMENTED. Visual acceptance: PARTIALLY IMPLEMENTED. Cutover: NOT
+AUTHORIZED / NOT EXECUTED.** Codex added `body { margin: 0 }`. Run by Claude
+Code outside the Codex sandbox (same lab as before):
+
+| Run | Result |
+|---|---|
+| `z-visual-acceptance` (8) | **6 passed / 2 failed** (50.9 s). 390, 768, 1440 pass in both themes; 360 light/dark fail at spec line 109 |
+| Full 38 | Not run as acceptance (the eight do not all pass) |
+| Retained 30 with server log | **30 passed**, 0 `LocalProtocolError` (0 in the visual run too) |
+| Unit / typecheck / lint / build | 221 passed, 10 conditional skips; exit 0 |
+
+D5 verified: at 360 and 390 the mobile `aside` is at y = 0 at scroll top and
+stays sticky at y = 0 after scrolling (spec lines 98–102 pass in all four
+mobile runs); the 8 px frame is gone at every width. D1/D2: no regression
+(every 360/390/768 overflow check passes). All 64 screen captures and the 4
+`navigation-scrolled-*` viewport captures were generated and the mobile ones
+reviewed: the bar is opaque, one row, readable and pinned after scroll.
+
+**Remaining failure (spec precision, not a product defect):** at 360 px,
+after `scrollIntoViewIfNeeded()`, one navigation button reports
+`box.x = -0.203125` and the spec requires `>= 0` exactly. It is the
+horizontally scrolled bar's sub-pixel position; the button's text is fully
+visible in the failure capture (its box includes side padding).
+
+Commit: D5 only. The visual spec and its README note stay uncommitted.
+G1–G12 stay open; D3 (Run Detail buttons touching) remains.
+
+**Next step (Codex, spec only):** in `e2e/z-visual-acceptance.spec.ts` lines
+109–110, allow sub-pixel rounding, e.g. `expect(box.x).toBeGreaterThanOrEqual(-1)`
+and `expect(box.x + box.width).toBeLessThanOrEqual(width + 1)`, keeping the
+intent (each destination reachable inside the viewport). No product change.
+Claude Code then reruns the eight and the 38.
+
+---
+
 ## 2026-11-03 (D1/D2 run) — D1/D2 fixed; mobile sticky check blocked by body margin
 
 **D1/D2: IMPLEMENTED. Visual acceptance: PARTIALLY IMPLEMENTED. Cutover: NOT
