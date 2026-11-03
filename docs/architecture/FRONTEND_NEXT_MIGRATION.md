@@ -11,6 +11,18 @@ from the product — only from the production candidate's runtime.
 
 ## Status
 
+**2026-11-03 — Owner acceptance / cutover preparation:** walkthrough and
+[acceptance checklist](FRONTEND_NEXT_VISUAL_ACCEPTANCE.md) prepared. Source
+comparison against `frontend/` found protected capability gaps (Dashboard
+controls, Catalog identity/issues/provenance controls, Runs sorting, Run Detail
+batch/preview, legacy customization, PWA and compatibility). **Full parity is
+not certified and cutover remains unapproved.** The complete-run download was
+restored; named navigation and native color-scheme added with unit coverage.
+Eight new visual/responsive scenarios ran externally: 2 passed / 6 failed on
+mobile/768 overflow (D1 Run select, D2 Run Detail hash); retained suite 30/30.
+Current unit result: 218 passed / 10 conditional skips; see PROJECT_STATUS for
+current checks versus the historical B/C browser evidence below.
+
 **2026-11-03 — B/C recovery (frontend-only, no push/deploy).** Overall
 **PARTIAL**. Browser E2E, run outside the Codex sandbox (whose Node
 `spawnSync` returns EPERM) against disposable local services only:

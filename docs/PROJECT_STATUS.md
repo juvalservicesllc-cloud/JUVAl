@@ -1,5 +1,143 @@
 # Juval — Project Status
 
+## 2026-11-03 (visual acceptance run) — 2/8 new scenarios; mobile overflow defects
+
+**PARTIALLY IMPLEMENTED. Cutover: NOT AUTHORIZED / NOT EXECUTED.** Claude Code
+ran the new `z-visual-acceptance` scenarios outside the Codex sandbox
+(disposable API/SQLite, headless Chromium, short private `TMPDIR`):
+**2 passed / 6 failed**. 1440 light/dark pass; 360, 390 and 768 fail on
+horizontal page overflow. Overflow measured for every screen:
+
+- **D1** Run `<select>` sized to its longest option: Dashboard and Catalog,
+  +65 px at 360, +35 px at 390.
+- **D2** Run Detail `Input hash` (64-char SHA-256, no wrapping): +216 px at
+  360, +186 at 390, +68 at 768.
+
+Both exist at `165b37e`; this phase did not introduce them. Retained suite
+(30) with the server log: **30 passed, 0 `LocalProtocolError`**. The 38-case
+suite was not run as acceptance because the new eight do not pass. 30 of the
+64 + 4 planned screenshots exist; the mobile sticky viewport check did not
+run. Details, minor preexisting issues (D3/D4) and the evidence-based parity
+matrix are in [FRONTEND_NEXT_VISUAL_ACCEPTANCE](architecture/FRONTEND_NEXT_VISUAL_ACCEPTANCE.md).
+
+Committed locally (validated by the 1440 scenarios, the retained 30/30 and
+unit tests): the `Main navigation` landmark plus native `color-scheme`, and
+the Run Detail complete-run download. **Not committed:**
+`e2e/z-visual-acceptance.spec.ts` and its README note, pending D1/D2.
+
+**Next step (Codex, frontend only):** make the Run select shrink to its
+container (`max-width: 100%` / `min-width: 0` on the select and its label),
+let the Run Detail hash wrap (`overflow-wrap: anywhere`), optionally space
+the Run Detail actions (D3); then Claude Code reruns the eight, the full 38,
+and reviews the 360/390 and `navigation-scrolled-*` captures.
+
+---
+
+## 2026-11-03 (acceptance preparation) — Owner walkthrough and cutover gates
+
+**Preparation: IMPLEMENTED. Human acceptance/new external E2E: PENDING.
+Full parity: PARTIAL. Cutover: NOT AUTHORIZED / NOT EXECUTED.** Started on
+clean master `165b37e` (C1 `198aa70`). The prior 30/30 browser result and 12
+reviewed C1 screenshots remain historical evidence for that baseline, not a
+browser pass for this diff. No claim of readiness for production.
+
+[Owner acceptance checklist](architecture/FRONTEND_NEXT_VISUAL_ACCEPTANCE.md)
+contains the Dashboard, Upload/Import, Catalog, Runs/Run Detail, Product Detail,
+Appearance and Methodology walkthrough; Batch/Favorites/Compare boundaries;
+light/dark at 360/390/768/1440; live-viewport sticky/focus checks; evidence and
+sign-off fields; and a separate eventual-cutover gate. Nothing is pre-approved
+for the owner. No copying/renaming frontend trees or deployment action.
+
+**Source-based parity findings G1–G12:** legacy Donut/Bars and Recent Runs,
+Catalog identity/issues/general provenance controls, Runs sorting, Run Detail
+batch/record preview, richer Appearance controls, shell IA/collapse, PWA
+manifest/SW, old deep links and local preference schemas are not fully preserved
+in the candidate. Product Detail's old illustrative market chart remains a
+previously documented pending decision, not an authorized provider integration.
+Evidence is linked to both implementations in the checklist. These findings
+block a full-parity/cutover declaration; no protected capability was silently
+reclassified, no accepted ADR changed. The checklist distinguishes source
+presence from browser observations and conditional/live tests from proof.
+
+**Small corrections:**
+- named semantic `Main navigation` landmark, with inherited flex-direction/gap
+  retaining the existing desktop/mobile sidebar design;
+- native `color-scheme` derived from the active theme, retained across reload;
+- restored the complete-run XLSX link in Run Detail through the existing GET
+  `/runs/{id}/download`, with no Catalog filters or new contract. No request
+  starts before the operator activates the link.
+
+The landmark/theme omissions and absent download link were reproduced by tests
+before fixing them. A provisional jsdom file-picker keyboard check did not
+provide reliable real-CSS/browser evidence; it was not kept or claimed as a
+fix. The existing `display:none` picker styling is recorded for explicit
+external keyboard verification (G10), not silently certified accessible.
+No speculative sticky CSS correction: full-page capture placement alone is
+insufficient evidence of an actual viewport defect.
+
+**New E2E source:** `frontend-next/e2e/z-visual-acceptance.spec.ts`, eight
+viewport/theme scenarios. One existing synthetic upload over the disposable API
+feeds the walkthrough. Checks cover same document/tab, unique headings,
+named buttons, native theme, body overflow, nav layout, visible/unobscured
+keyboard focus, real full-run download and mobile sticky/horizontal access.
+Plans 64 screen captures + 4 scrolled-viewport captures, XLSX downloads and
+measurement JSON with executionId. File name keeps D7's empty-store scenario
+first. The 30 retained scenarios are unchanged. New E2E and visual acceptance
+must be run externally by Claude Code/operator; **38 is planned, not measured**.
+
+**Current validation:** private `/tmp/juval-visual-acceptance-zU3o8Z/` (0700),
+Node 24.19.0 with isolated env, build/logs outside APP, no installs. Relative
+log names below. No backend tests or comprehensive audit run in this frontend
+preparation phase.
+
+| Command from frontend-next | Exit | Result | Elapsed | Log |
+|---|---:|---|---|---|
+| npm test -- src/app/App.test.tsx src/pages/UploadPage.test.tsx src/appearance.test.ts src/pages/AppearancePage.test.tsx | 0 | 35 passed / 0 failed / 0 skipped | 5.915 s (Vitest 5.24 s) | focused.log |
+| npm test -- --maxWorkers=1 | 0 | 218 passed / 0 failed / 10 skipped | 57.638 s (Vitest 56.95 s) | frontend-unit-final.log |
+| npm run typecheck | 0 | no type errors | 7.760 s | typecheck-final.log |
+| npm run lint | 0 | no warnings/errors | 0.266 s | lint-final.log |
+| npm run build -- --outDir /tmp/juval-visual-acceptance-zU3o8Z/dist --emptyOutDir | 0 | build passed | 7.946 s | build.log |
+| TypeScript transpileModule of new E2E file | 0 | 0 syntax errors; not semantic/browser verification | 0.682 s (tool wall time) | e2e-syntax.log |
+| git diff --check | 0 | whitespace clean | not timed | tool output |
+
+Skips: nine need `JUVAL_LIVE_API`, one needs `JUVAL_FINANCIAL_JSON`; neither
+provided. No skip counts as verification. Initial expected failing repros are
+in `before-fixes.log` / `before-download.log`. `frontend-unit.log` records an
+initial 216-pass/1-failure/10-skip run (38.37 s): brand-loading timed out under
+two workers while other checks ran; that file was unchanged. The complete
+single-worker rerun passed, without changing assertions, waits or thresholds.
+
+The browser connector returned “requires approval, but approval policy is
+never” on listing tabs; no browser interaction occurred. The established
+Playwright spawnSync EPERM was not re-diagnosed or worked around. No current
+screenshots/viewport observations are claimed. Use the checklist/README's
+isolated external procedure, review artifacts and then collect owner sign-off.
+
+**Changed files:** `src/app/App.tsx`, `App.test.tsx`, `src/style.css`,
+`src/pages/RunDetailPage.tsx`, `RunsFlow.test.tsx`, the new E2E spec and
+`e2e/README.md`; new acceptance checklist, migration Status link and this entry.
+All runtime edits are frontend only. `frontend/`, `demo/`, backend, API contracts,
+infra/AppArmor, package.json and package-lock.json are untouched. Hashes remain
+`9465f86c3d9b2b49860f2034ec1684c08c089904e25069a43e55a2c0904f1424` and
+`412abefc85f5fee521e55d8b184650c0c82df0f7426b77137c6a2724129a792f`.
+
+**Self-review:** calculations/decisions/provenance and synthetic evidence remain
+unchanged; download is run-scoped and URI-encoded, without query or secrets.
+Theme/storage/image security logic is retained. Navigation controls, current
+routes, personalization and filtered export remain; external responsive and
+native-widget review is still required for the wrapper/theme correction.
+Ponytail is not exposed; manual simplicity/diff review only. No new dependency,
+auth/deployment decision, Git write, push, deploy, cutover or real-DB operation.
+
+**Decisions:** APPROVED — these bounded UI/accessibility fixes and existing
+complete-download contract under the owner's instruction. PENDING — owner visual
+acceptance, protected capability restoration, PWA, route/preference/SW compatibility
+plan and separate cutover approval per ADR-014/030 plus security/operations gates.
+Next: external new + retained E2E, live-viewport mobile review and owner checklist;
+resolve parity gaps in explicit work before considering cutover.
+
+---
+
 ## 2026-11-03 (final) — C1 accepted; B1–B4 and C1–C3 all accepted
 
 **IMPLEMENTED (local only, no push or deploy).** Codex's C1 readability
