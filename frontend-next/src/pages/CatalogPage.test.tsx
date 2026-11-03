@@ -23,7 +23,7 @@ function recordFor(i: number, status: string) {
 }
 const records = [recordFor(0, "VERIFIED"), recordFor(1, "INFERRED")]
 
-function stubFetch(total = records.length) {
+function stubFetch(total = records.length, runs = [run]) {
   const mock = vi.fn((url: string) => {
     if (String(url).includes("/records")) {
       const params = new URL(String(url)).searchParams
@@ -31,7 +31,7 @@ function stubFetch(total = records.length) {
       const offset = Number(params.get("offset") ?? 0)
       return Promise.resolve({ ok: true, status: 200, json: async () => ({ execution_id: "run-1", records, pagination: { limit, offset, total, has_more: offset + records.length < total } }) })
     }
-    return Promise.resolve({ ok: true, status: 200, json: async () => ({ items: [run] }) })
+    return Promise.resolve({ ok: true, status: 200, json: async () => ({ items: runs }) })
   })
   vi.stubGlobal("fetch", mock)
   return mock
@@ -54,6 +54,19 @@ describe("CatalogPage on the real backend", () => {
     // Golden's own demo copy must not survive into a production candidate.
     expect(screen.queryByText(/demo mode/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/simulated enrichment/i)).not.toBeInTheDocument()
+  })
+
+  it("keeps long run options intact and queries the selected run", async () => {
+    const filename = "Supplier inventory with a long descriptive filename for visual review.xlsx"
+    const mock = stubFetch(records.length, [run, { ...run, execution_id: "run-2", input_filename: filename }])
+    render(<CatalogPage />)
+    await screen.findByText("Alpha anchor")
+    const selector = screen.getByRole("combobox", { name: "Run" })
+    const option = within(selector).getByRole("option", { name: `${filename} — ${new Date(run.started_at).toLocaleString()}` })
+    expect(option).toHaveValue("run-2")
+    await userEvent.setup().selectOptions(selector, option)
+    expect(selector).toHaveValue("run-2")
+    await waitFor(() => expect(lastRecordsUrl(mock).pathname).toBe("/api/v1/runs/run-2/records"))
   })
 
   it("shows every economic value with its verification status attached", async () => {

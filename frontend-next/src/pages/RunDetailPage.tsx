@@ -61,7 +61,7 @@ export function RunDetailPage({ executionId, go }: { executionId: string; go: (p
       </div>
       <h2>Decisions</h2>
       <p><DecisionCounts decisions={run.decisions} /></p>
-      <p><small>Input hash <span className="mono">{run.input_hash}</span></small></p>
+      <p><small>Input hash <span className="mono run-input-hash">{run.input_hash}</span></small></p>
     </section>
     <section className="panel">
       <h2>Review the records</h2>

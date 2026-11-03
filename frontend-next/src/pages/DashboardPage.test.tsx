@@ -118,6 +118,22 @@ describe("Dashboard on GET /analytics", () => {
     await waitFor(() => expect(mock.mock.calls.some((c) => String(c[0]).includes("/runs/run-2/analytics"))).toBe(true))
   })
 
+  it("keeps a long run option intact and selects it by its execution id", async () => {
+    const filename = "Supplier inventory with a long descriptive filename for visual review.xlsx"
+    const mock = stub({ runs: [run("run-1", "first.csv"), run("run-2", filename)] })
+    const go = vi.fn()
+    render(<DashboardPage go={go} />)
+    await screen.findByLabelText("Key figures")
+    const selector = screen.getByRole("combobox", { name: "Run" })
+    const option = within(selector).getByRole("option", { name: `${filename} — ${new Date("2026-10-26T10:00:00Z").toLocaleString()}` })
+    expect(option).toHaveValue("run-2")
+    await userEvent.setup().selectOptions(selector, option)
+    expect(selector).toHaveValue("run-2")
+    await waitFor(() => expect(mock.mock.calls.some((c) => String(c[0]).includes("/runs/run-2/analytics"))).toBe(true))
+    await userEvent.setup().click(screen.getByRole("button", { name: "Run detail" }))
+    expect(go).toHaveBeenCalledWith("/runs/run-2")
+  })
+
   it("honours a run passed in the address", async () => {
     const mock = stub()
     render(<DashboardPage initialRunId="run-2" go={vi.fn()} />)

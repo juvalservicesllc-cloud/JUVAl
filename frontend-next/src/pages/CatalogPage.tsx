@@ -147,7 +147,7 @@ export function CatalogPage({ initialRunId = "", initialPendingDemand = false }:
         <p>Filters change which records are visible and exported; they never recalculate decisions. Every change queries the selected run on the server.</p>
         <div className="filters">
           <input aria-label="Search catalog" placeholder="Search products" value={query.search} onChange={(e) => patch({ search: e.target.value })} />
-          <label>Run<select aria-label="Run" value={runId} onChange={(e) => { setRunId(e.target.value); setQuery((c) => ({ ...c, brand: "", offset: 0 })) }}>
+          <label className="run-selector">Run<select aria-label="Run" value={runId} onChange={(e) => { setRunId(e.target.value); setQuery((c) => ({ ...c, brand: "", offset: 0 })) }}>
             {runs.runs.map((run) => <option key={run.execution_id} value={run.execution_id}>{run.input_filename} — {new Date(run.started_at).toLocaleString()}</option>)}
           </select></label>
           {/* Exact brand values the run stored (analytics `brands`), never free

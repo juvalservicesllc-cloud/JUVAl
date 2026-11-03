@@ -167,6 +167,16 @@ describe("RunDetailPage", () => {
     expect(screen.getByText("PARTIAL_SUCCESS")).toBeInTheDocument()
   })
 
+  it("keeps every character of a 64-character input hash in one text node", async () => {
+    const hash = "0123456789abcdef".repeat(4)
+    vi.stubGlobal("fetch", okJson({ ...run, input_hash: hash }))
+    render(<RunDetailPage executionId="run-1" go={vi.fn()} />)
+    const value = await screen.findByText(hash, { exact: true })
+    expect(value.textContent).toBe(hash)
+    expect(value.childNodes).toHaveLength(1)
+    expect(value.firstChild?.nodeType).toBe(Node.TEXT_NODE)
+  })
+
   it("treats an unknown execution id as not found, not as a transport error", async () => {
     vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: false, status: 404, json: async () => ({ detail: "unknown execution_id" }) })))
     render(<RunDetailPage executionId="nope" go={vi.fn()} />)

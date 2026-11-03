@@ -51,3 +51,11 @@ th button[aria-pressed="true"] { background:var(--accent); color:#fff; }
 
 /* Name the navigation landmark while keeping the sidebar's row/column layout. */
 .app aside > nav { display: flex; flex-direction: inherit; gap: inherit; }
+
+/* D1: let the native Run select shrink inside both the Dashboard panel and
+   Catalog's wrapping filter row, regardless of the longest option. */
+.run-selector { display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; vertical-align: middle; }
+.run-selector select { box-sizing: border-box; flex: 1 1 auto; min-width: 0; width: 100%; max-width: 100%; }
+
+/* D2: wrap only the displayed hash; its text stays intact for copying. */
+.run-input-hash { overflow-wrap: anywhere; }

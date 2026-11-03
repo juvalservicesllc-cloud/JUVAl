@@ -84,7 +84,7 @@ export function DashboardPage({ initialRunId = "", go }: { initialRunId?: string
   return <>
     <h1>Dashboard</h1>
     <section className="panel">
-      <label>Run <select aria-label="Run" value={runId} onChange={(e) => setRunId(e.target.value)}>
+      <label className="run-selector">Run <select aria-label="Run" value={runId} onChange={(e) => setRunId(e.target.value)}>
         {runs.runs.map((r) => <option key={r.execution_id} value={r.execution_id}>{r.input_filename} — {new Date(r.started_at).toLocaleString()}</option>)}
       </select></label>{" "}
       <button onClick={() => go(`/catalog?run=${encodeURIComponent(runId)}`)}>Open in Catalog</button>{" "}
