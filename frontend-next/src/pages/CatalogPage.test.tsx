@@ -23,13 +23,13 @@ function recordFor(i: number, status: string) {
 }
 const records = [recordFor(0, "VERIFIED"), recordFor(1, "INFERRED")]
 
-function stubFetch(total = records.length, runs = [run]) {
+function stubFetch(total = records.length, runs = [run], rows: unknown[] = records) {
   const mock = vi.fn((url: string) => {
     if (String(url).includes("/records")) {
       const params = new URL(String(url)).searchParams
       const limit = Number(params.get("limit") ?? 20)
       const offset = Number(params.get("offset") ?? 0)
-      return Promise.resolve({ ok: true, status: 200, json: async () => ({ execution_id: "run-1", records, pagination: { limit, offset, total, has_more: offset + records.length < total } }) })
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({ execution_id: "run-1", records: rows, pagination: { limit, offset, total, has_more: offset + rows.length < total } }) })
     }
     return Promise.resolve({ ok: true, status: 200, json: async () => ({ items: runs }) })
   })
@@ -129,6 +129,49 @@ describe("CatalogPage on the real backend", () => {
 
     await user.selectOptions(screen.getByLabelText("Hazmat"), "PRESENT")
     await waitFor(() => expect(lastRecordsUrl(mock).searchParams.get("hazmat")).toBe("PRESENT"))
+  })
+
+  it("recovers identity and issue inspection with server-side SKU/ASIN/record ordering", async () => {
+    const mock = stubFetch(2, [run], [{ ...recordFor(0, "INFERRED"), issue_count: 1, issues: ["Supplier identifier requires review"] }])
+    render(<CatalogPage />)
+    const row = (await screen.findByText("Alpha anchor")).closest("tr")!
+    expect(within(row).getByText("SKU-0")).toBeInTheDocument()
+    expect(within(row).getByText("row-0")).toBeInTheDocument()
+    expect(row).toHaveTextContent("ASIN: ASIN-0 INF")
+    expect(row).toHaveTextContent("UPC: —")
+    await userEvent.setup().click(within(row).getByText("1 issue(s)"))
+    expect(within(row).getByText("Supplier identifier requires review")).toBeVisible()
+    for (const [label, sort] of [["SKU", "sku"], ["ASIN / UPC", "asin"], ["Record", "record_ref"]]) {
+      await userEvent.setup().click(screen.getByRole("button", { name: new RegExp(`^${label}`) }))
+      await waitFor(() => expect(lastRecordsUrl(mock).searchParams.get("sort")).toBe(sort))
+      expect(lastRecordsUrl(mock).searchParams.get("direction")).toBe("asc")
+    }
+  })
+
+  it.each(["asin", "selling_price", "profit", "roi", "margin"])("filters and exports %s provenance, keeping the same canonical query", async (field) => {
+    const mock = stubFetch(120)
+    const open = vi.fn()
+    vi.stubGlobal("open", open)
+    render(<CatalogPage />)
+    await screen.findByText("Alpha anchor")
+    const user = userEvent.setup()
+    await user.click(screen.getByRole("button", { name: "Next" }))
+    await waitFor(() => expect(lastRecordsUrl(mock).searchParams.get("offset")).toBe("25"))
+    await user.selectOptions(screen.getByRole("combobox", { name: "Provenance field" }), field)
+    expect(screen.getByText(/Provenance filter is incomplete/)).toBeInTheDocument()
+    await user.selectOptions(screen.getByRole("combobox", { name: "Provenance status" }), "INFERRED")
+    expect(screen.queryByText(/Provenance filter is incomplete/)).not.toBeInTheDocument()
+    await waitFor(() => expect(lastRecordsUrl(mock).searchParams.get("provenance_status")).toBe("INFERRED"))
+    const query = lastRecordsUrl(mock).searchParams
+    expect(query.get("provenance_field")).toBe(field)
+    expect(query.get("offset")).toBe("0")
+    await user.click(screen.getByRole("button", { name: /^Export/ }))
+    const exported = new URL(String(open.mock.calls.at(-1)![0])).searchParams
+    query.delete("limit"); query.delete("offset")
+    expect([...exported]).toEqual([...query])
+    await user.click(screen.getByRole("button", { name: "Reset filters" }))
+    expect(screen.getByRole("combobox", { name: "Provenance field" })).toHaveValue("")
+    expect(screen.getByRole("combobox", { name: "Provenance status" })).toHaveValue("")
   })
 
   it("converts the ROI percentage filter into a canonical ratio", async () => {

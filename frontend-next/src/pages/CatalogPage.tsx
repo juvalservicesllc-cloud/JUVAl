@@ -165,10 +165,11 @@ export function CatalogPage({ initialRunId = "", initialPendingDemand = false }:
           <label>Review status<select aria-label="Review status" value={query.pendingDemand ? "pending" : ""} onChange={(e) => patch({ pendingDemand: e.target.value === "pending" })}>
             <option value="">All records</option><option value="pending">Pending demand verification</option>
           </select></label>
-          {/* Golden's "Amazon" filter selected a fixture match state. The real
-              equivalent is the ASIN field's verification status. */}
-          <label>Amazon<select aria-label="Amazon" value={query.provenanceStatus} onChange={(e) => patch({ provenanceField: e.target.value ? "asin" : "", provenanceStatus: e.target.value })}>
-            <option value="">All Amazon</option><option>VERIFIED</option><option>INFERRED</option><option>NOT_FOUND</option><option>INVALID</option>
+          <label>Provenance field<select aria-label="Provenance field" value={query.provenanceField} onChange={(e) => patch({ provenanceField: e.target.value })}>
+            <option value="">Any field</option><option value="asin">ASIN</option><option value="selling_price">Price</option><option value="profit">Profit</option><option value="roi">ROI</option><option value="margin">Margin</option>
+          </select></label>
+          <label>Provenance status<select aria-label="Provenance status" value={query.provenanceStatus} onChange={(e) => patch({ provenanceStatus: e.target.value })}>
+            <option value="">Any status</option><option>VERIFIED</option><option>INFERRED</option><option>NOT_FOUND</option><option>INVALID</option>
           </select></label>
           <label>Hazmat<select aria-label="Hazmat" value={query.hazmat} onChange={(e) => patch({ hazmat: e.target.value })}>
             <option value="">All Hazmat</option><option>PRESENT</option><option>ABSENT</option><option>UNKNOWN</option>
@@ -191,6 +192,7 @@ export function CatalogPage({ initialRunId = "", initialPendingDemand = false }:
           <button onClick={() => window.open(filteredExportUrl(runId, query), "_blank", "noopener,noreferrer")} disabled={!runId}>Export {count(total)} results</button>
         </div>
         {query.minRoi.trim() !== "" && Number.isFinite(Number(query.minRoi)) && <p className="local-note" role="status">Minimum ROI: {query.minRoi}%</p>}
+        {Boolean(query.provenanceField) !== Boolean(query.provenanceStatus) && <p className="local-note" role="status">Provenance filter is incomplete: choose both a field and a status to apply it. The current results are not narrowed by this filter yet.</p>}
         {query.pendingDemand && <p className="local-note pending-demand-note" role="status">
           Showing REVIEW records whose only recorded blocker is unknown demand: economics and risk passed every rule, but no demand evidence exists, so the decision stays REVIEW. This is not a BUY recommendation. Records processed before reason codes were stored cannot be classified and are not listed.
         </p>}
@@ -237,6 +239,10 @@ export function CatalogPage({ initialRunId = "", initialPendingDemand = false }:
                 source: <small title={activeRun?.input_filename}>{activeRun?.input_filename ?? "—"}</small>,
                 brand: text(record.brand) || "—",
                 title: <a href={`/run/${encodeURIComponent(runId)}/product/${encodeURIComponent(record.record_ref)}`}>{text(record.title) || record.record_ref}</a>,
+                sku: record.supplier_sku ?? "—",
+                identity: <><span>ASIN: <Cell value={record.asin} format={(value) => value === null ? "—" : String(value)} /></span><br /><span>UPC: <Cell value={record.upc} format={(value) => value === null ? "—" : String(value)} /></span></>,
+                record_ref: record.record_ref,
+                issues: record.issue_count > 0 ? <details><summary>{count(record.issue_count)} issue(s)</summary><ul>{record.issues.map((issue, index) => <li key={index}>{issue}</li>)}</ul></details> : count(record.issue_count),
                 cog: fieldMoney(record.cog),
                 suggested: <SuggestedPriceCell record={record} />,
                 selling: <Cell value={record.selling_price} format={fieldMoney} />,

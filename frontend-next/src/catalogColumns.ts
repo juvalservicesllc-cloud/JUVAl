@@ -19,6 +19,12 @@ export const CATALOG_COLUMNS = [
   // Declared demand is evidence only, never a sortable decision input.
   { id: "demand", label: "Declared demand", sort: null },
   { id: "favorite", label: "Favorite", sort: null },
+  // Extend the historical layout without shifting its existing columns.
+  // Saved preferences still take precedence over this default order.
+  { id: "sku", label: "SKU", sort: "sku" },
+  { id: "identity", label: "ASIN / UPC", sort: "asin" },
+  { id: "record_ref", label: "Record", sort: "record_ref" },
+  { id: "issues", label: "Issues", sort: null },
 ] as const satisfies readonly { id: string; label: string; sort: RecordSort | null }[]
 
 export type ColumnId = typeof CATALOG_COLUMNS[number]["id"]
