@@ -1,5 +1,32 @@
 # Juval — Project Status
 
+## 2026-11-03 (responsive close) — Visual spec 8/8, full E2E 38/38
+
+**Responsive validation: IMPLEMENTED. Owner acceptance: PENDING. Parity
+G1–G12: OPEN. Cutover: NOT AUTHORIZED / NOT EXECUTED.** Codex changed only
+`e2e/z-visual-acceptance.spec.ts` lines 109–110 (navigation button box within
+the viewport with at most 1 CSS px of fractional scroll rounding; previous
+observation −0.203125 px). Run by Claude Code outside the Codex sandbox
+(disposable API/SQLite, headless snap Chromium, short private `TMPDIR`):
+
+| Run | Result |
+|---|---|
+| `z-visual-acceptance` (8) | **8 passed** (43.4 s) |
+| Full suite `npm run e2e` with `JUVAL_E2E_SERVER_LOG` + `DEBUG=pw:webserver` | **38 passed / 0 failed / 0 skipped** (2.3 min); 0 `LocalProtocolError` |
+| Unit / typecheck / lint / build | 221 passed, 10 conditional skips; exit 0 |
+
+Per-scenario measurements (attachments): page overflow 0 on every screen at
+360/390/768/1440 in both themes; Theme keyboard focus visible and unobscured;
+mobile `aside` at y = 0 at scroll top and after scrolling 500 px. 68 captures
+(64 screens + 4 `navigation-scrolled-*`) and 8 complete-run XLSX downloads
+generated; mobile ones reviewed: sticky bar opaque, one row, pinned; Run
+select fits (D1); hash wraps with all 64 characters (D2); no 8 px frame (D5).
+
+D1, D2, D5: closed, no regression. D3 (Run Detail actions touching): open,
+low. G1–G12 and owner sign-off: open (see the acceptance checklist).
+
+---
+
 ## 2026-11-03 (D5 run) — D5 fixed; visual spec 6/8 on a sub-pixel assertion
 
 **D5: IMPLEMENTED. Visual acceptance: PARTIALLY IMPLEMENTED. Cutover: NOT

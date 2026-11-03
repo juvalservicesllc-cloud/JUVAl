@@ -221,6 +221,12 @@ y tras scroll; sin marco de 8 px. 64 capturas de pantalla y las 4
 aserción exacta `box.x >= 0` frente a `-0.203125` (redondeo subpíxel de la
 barra con scroll horizontal; texto visible). Corrección pendiente en la spec.
 
+**Cierre responsive (2026-11-03):** con tolerancia de 1 px en la spec,
+`z-visual-acceptance` **8/8** y suite completa **38/38**, 0 `LocalProtocolError`.
+Overflow 0 en todas las pantallas y anchos; foco Theme visible y no tapado;
+`aside` móvil en y=0 al inicio y tras 500 px de scroll. 68 capturas revisadas
+(muestras móviles); D1, D2 y D5 cerrados. D3 abierto (baja).
+
 ### Matriz de paridad con evidencia
 
 | Área | Estado | Criticidad para cutover | Evidencia |
@@ -237,8 +243,8 @@ barra con scroll horizontal; texto visible). Corrección pendiente en la spec.
 
 - [x] D1 y D2 corregidos (verificado 2026-11-03).
 - [x] D5 corregido (verificado 2026-11-03).
-- [ ] Tolerancia subpíxel en la spec; `z-visual-acceptance` 8/8 y suite completa 38/38
-  fuera del sandbox; capturas 360/390 y `navigation-scrolled-*` revisadas.
+- [x] Tolerancia subpíxel en la spec; `z-visual-acceptance` 8/8 y suite completa 38/38
+  fuera del sandbox; capturas 360/390 y `navigation-scrolled-*` revisadas (2026-11-03).
 - [ ] Propietario firma V1–V8 y móvil, con commit/tree y referencias de evidencia.
 - [ ] Resolver brechas de capacidades protegidas G1–G8 y G10; si se propone
   cambiar el alcance, presentar propuesta explícita. Una casilla marcada no
