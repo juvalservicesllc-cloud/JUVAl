@@ -1,5 +1,40 @@
 # Juval — Project Status
 
+## 2026-11-03 (D1/D2 run) — D1/D2 fixed; mobile sticky check blocked by body margin
+
+**D1/D2: IMPLEMENTED. Visual acceptance: PARTIALLY IMPLEMENTED. Cutover: NOT
+AUTHORIZED / NOT EXECUTED.** Codex's `run-external-e2e.sh` was inspected (local
+API, disposable SQLite, private short temp dirs, nothing deleted or remote)
+and run by Claude Code with the snap Chromium:
+
+| Run | Result |
+|---|---|
+| `z-visual-acceptance` (8) | **4 passed / 4 failed** (1.2 min). 768 and 1440, light/dark, pass. 360/390 fail at spec line 98 only |
+| Full 38 | Not run as acceptance (the script stops when the eight fail) |
+| Retained 30 (`--grep-invert "owner walkthrough"`) with server log | **30 passed**, 0 `LocalProtocolError` (also 0 in the visual run) |
+| Unit / typecheck / lint / build / diff check | 221 passed, 10 conditional skips; all exit 0 |
+
+All **64 screen captures** were generated (8 screens × 4 widths × 2 themes),
+plus 4 failure captures; no page overflow at 360/390/768. Reviewed: D1 Run
+select fits its panel (Catalog 390 shows the selected text truncated, native
+select behavior); D2 hash wraps and keeps all 64 characters. The four
+`navigation-scrolled-*` captures were not reached.
+
+**New finding D5 (preexisting, not a regression):** the app sets no
+`body { margin: 0 }`, so Chromium's default 8 px margin applies. At scroll
+top the mobile `aside` is at y = 8, while the spec expects 0. The same margin
+is the light 8 px frame around the app in every screenshot, visible in dark
+mode. D3 (Run Detail buttons touching) also remains.
+
+Commit: D1/D2 only. `e2e/z-visual-acceptance.spec.ts` and its README note stay
+uncommitted until the eight pass. G1–G12 stay open.
+
+**Next step (Codex, frontend only):** set `body { margin: 0 }` (D5) without
+changing the spec; optionally add spacing to the Run Detail actions (D3).
+Claude Code then reruns the eight, the 38, and reviews the sticky captures.
+
+---
+
 ## 2026-11-03 (visual acceptance run) — 2/8 new scenarios; mobile overflow defects
 
 **PARTIALLY IMPLEMENTED. Cutover: NOT AUTHORIZED / NOT EXECUTED.** Claude Code

@@ -206,21 +206,30 @@ las 8 pantallas legibles, landmark y `color-scheme` correctos, provenance
 coherente ("3 of 3 records, verified only"), enlace de descarga completa
 visible y funcional. D1/D2 no los introduce esta fase (existen en `165b37e`).
 
+**Reejecución tras D1/D2 (2026-11-03):** `z-visual-acceptance` **4/8**
+(768 y 1440 pasan); retenida 30/30, 0 `LocalProtocolError`; 64 capturas de
+pantalla generadas y revisadas. D1 y D2 **corregidos** (hash íntegro de 64
+caracteres). 360/390 fallan solo en la comprobación sticky: **D5**, margen
+por defecto de `body` (8 px, sin `margin:0`), `aside` en y=8 al inicio;
+preexistente y visible como marco claro en todas las capturas. D3 sigue
+abierto. Faltan las 4 `navigation-scrolled-*`.
+
 ### Matriz de paridad con evidencia
 
 | Área | Estado | Criticidad para cutover | Evidencia |
 |---|---|---|---|
-| Dashboard | **PARCIAL** | Alta | D1 en móvil; G1 (Donut/Bars, Recent Runs) ausente. 1440 correcto |
-| Catalog | **PARCIAL** | Alta | D1 en móvil; G2/G3 (identity/issues, provenance general). B2/C2 verificados |
+| Dashboard | **PARCIAL** | Alta | D1 corregido; D5 en móvil; G1 (Donut/Bars, Recent Runs) ausente |
+| Catalog | **PARCIAL** | Alta | D1 corregido; G2/G3 (identity/issues, provenance general). B2/C2 verificados |
 | Runs | **PARCIAL** | Media | Sin overflow; G4 (ordenación) ausente |
-| Run Detail | **PARCIAL** | Alta | D2 a 768 y móvil; descarga completa restaurada y verificada; G5 (batch/preview) ausente |
+| Run Detail | **PARCIAL** | Media | D2 corregido; D3 abierto; descarga completa verificada; G5 (batch/preview) ausente |
 | Appearance | **PARCIAL** | Media | C1 verificado (12 capturas previas, contraste); G6 controles legacy ausentes |
 | PWA | **AUSENTE** | Alta | G8: sin manifest ni service worker en `frontend-next/` |
 | Compatibilidad | **NO CERTIFICADA** | Alta | G9 rutas sin alias; G11 claves de preferencias distintas; G10 teclado del file picker sin reproducir |
 
 ## Gates de aprobación y eventual cutover
 
-- [ ] D1 y D2 corregidos; `z-visual-acceptance` 8/8 y suite completa 38/38
+- [x] D1 y D2 corregidos (verificado 2026-11-03).
+- [ ] D5 corregido; `z-visual-acceptance` 8/8 y suite completa 38/38
   fuera del sandbox; capturas 360/390 y `navigation-scrolled-*` revisadas.
 - [ ] Propietario firma V1–V8 y móvil, con commit/tree y referencias de evidencia.
 - [ ] Resolver brechas de capacidades protegidas G1–G8 y G10; si se propone
