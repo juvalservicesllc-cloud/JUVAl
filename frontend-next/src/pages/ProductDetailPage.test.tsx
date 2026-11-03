@@ -60,6 +60,15 @@ describe("Product Detail (one record within one run)", () => {
     expect(within(screen.getByLabelText("Risks")).getByText("HIGH")).toBeInTheDocument()
   })
 
+  it("renders BUY with empty reasons without inventing an explanation", async () => {
+    stub({ body: { ...record, decision: "BUY", decision_reasons: [], decision_reason_codes: [] } })
+    page()
+    const decision = await screen.findByLabelText("Decision")
+    expect(within(decision).getByText("● BUY")).toHaveClass("BUY")
+    expect(decision).toHaveTextContent("No disqualifying or review reasons recorded.")
+    expect(within(decision).queryByRole("listitem")).not.toBeInTheDocument()
+  })
+
   it("says where each risk severity comes from, as the backend stored it (ADR-020)", async () => {
     stub({ body: { ...record, hazmat_severity_status: "INFERRED", hazmat_severity_source_type: "CALCULATED",
       bulky_severity_status: "VERIFIED", bulky_severity_source_type: "SUPPLIER_FILE" } })

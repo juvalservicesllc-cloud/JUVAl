@@ -3,6 +3,7 @@
     build <dir>          write the XLSX supplier files the specs upload
     seed-history <db>    store one run whose snapshot predates reason codes and
                          declared demand (D7-D NOT_CLASSIFIABLE, D7-B NOT_CAPTURED)
+    seed-buy <db>        store a synthetic BUY snapshot for rendering only
     dump <xlsx>          print a workbook's first sheet as JSON rows
 
 Every value here is synthetic. Demand says so in its method and population: it is
@@ -96,6 +97,48 @@ def dump(path: Path) -> None:
     print(json.dumps(rows))
 
 
+def seed_buy(db: Path) -> None:
+    """Rendering fixture, not a pipeline outcome (ADR-052 forbids uploaded BUY).
+
+    Fixed synthetic economics: 30 - 3 fees - (10 COG + 2 shipping) = 15 profit;
+    ROI = 15/12 = 1.25, margin = 15/30 = .5. Fees are fixed in this example,
+    so break-even = 15. No external source or demand verification is claimed.
+    """
+    from juval.domain.execution_run import ExecutionRun, ExecutionStatus
+    from juval.infrastructure.logging.sqlite_execution_run_store import SqliteExecutionRunStore
+
+    at = datetime(2026, 10, 28, 12, tzinfo=timezone.utc)
+
+    def inferred(value: str, method: str, source_type: str = "CALCULATED") -> dict:
+        return {"value": value, "status": "INFERRED", "provenance": {
+            "source": "E2E synthetic BUY fixture (not market evidence)", "source_type": source_type,
+            "verification_status": "INFERRED", "retrieved_at": at.isoformat(), "method": method,
+            "evidence": "Synthetic rendering test only; not an Amazon or Keepa verification",
+        }}
+
+    none = {"value": None, "status": None}
+    snapshot = {
+        "record_ref": "row_2", "marketplace": "US", "supplier_sku": "E2E-SYNTHETIC-BUY",
+        "title": inferred("E2E seeded BUY (synthetic)", "synthetic fixture label", "USER_INPUT"),
+        "asin": none, "upc": none, "brand": none, "weight": none,
+        "selling_price": inferred("30", "synthetic fixture input", "USER_INPUT"),
+        "cog": "10", "shipping_per_unit": "2", "total_fees": "3", "seller_proceeds": "27", "total_cost": "12",
+        "profit": inferred("15", "synthetic example: 30 - 3 - (10 + 2)"),
+        "roi": inferred("1.25", "synthetic example: 15 / 12"),
+        "margin": inferred("0.5", "synthetic example: 15 / 30"),
+        "break_even_price": inferred("15", "synthetic example: fixed fees 3 + landed cost 12"),
+        "max_cog_target_profit": none, "max_cog_target_roi": none,
+        "hazmat_status": "ABSENT", "hazmat_severity": "NONE", "hazmat_severity_status": "INFERRED",
+        "hazmat_severity_source_type": "USER_INPUT",
+        "bulky_status": "ABSENT", "bulky_severity": "NONE", "bulky_severity_status": "INFERRED",
+        "bulky_severity_source_type": "USER_INPUT",
+        "decision": "BUY", "decision_reasons": [], "decision_reason_codes": [],
+        "issue_count": 0, "issues": [], "issue_codes": [],
+    }
+    run = ExecutionRun("e2e-seeded-buy", at, at, ExecutionStatus.SUCCESS, "E2E synthetic BUY snapshot", "e2e-synthetic-hash", "e2e-render-only", 1, 1, 1, 0, 0)
+    SqliteExecutionRunStore(db).save_execution_run(run, [snapshot])
+
+
 if __name__ == "__main__":
     command, target = sys.argv[1], Path(sys.argv[2])
-    {"build": build, "seed-history": seed_history, "dump": dump}[command](target)
+    {"build": build, "seed-history": seed_history, "seed-buy": seed_buy, "dump": dump}[command](target)
