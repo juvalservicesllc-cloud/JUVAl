@@ -9,6 +9,7 @@ import { SuggestedPricePanel } from "./SuggestedPrice"
 import { SeverityProvenance } from "./SeverityProvenance"
 import { FinancialEvidenceView } from "./FinancialEvidence"
 import { Badge, PendingDemandTag, ProvenanceBadge } from "./shared"
+import { MarketDemo } from "./MarketDemo"
 
 /**
  * Product Detail — one record *within one run* (ADR-011/012: there is no
@@ -16,9 +17,9 @@ import { Badge, PendingDemandTag, ProvenanceBadge } from "./shared"
  *
  * Every value comes from `GET .../records/{ref}` with its verification status
  * and stored provenance; ADR-047 evidence from `.../financial`. Nothing is
- * recalculated (ADR-006), no image, URL or market price is shown because no
- * approved source exists, and Golden's simulated price chart is deliberately
- * not carried over: it would be a fabricated market series.
+ * recalculated (ADR-006); no supplier image, URL or real market price is
+ * invented. G12 explicitly authorizes the isolated, labelled presentation
+ * fixture below; MarketDemo accepts no sourcing data or record parameters.
  */
 type State =
   | { kind: "loading" }
@@ -262,6 +263,7 @@ export function ProductDetailPage({ executionId, recordRef, go }: { executionId:
     <DeclaredDemandPanel record={record} />
     <Evidence record={record} />
     <FinancialEvidence state={financial} />
+    <MarketDemo />
     {actions}
   </>
 }

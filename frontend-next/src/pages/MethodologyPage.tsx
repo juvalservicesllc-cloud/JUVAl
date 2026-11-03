@@ -30,6 +30,7 @@ export function MethodologyPage() {
     <section className="panel" aria-label="Current capabilities">
       <h2>Current data sources and limits</h2>
       <p>No external data sources are integrated today. Amazon and Keepa are not connected. Product images, external supplier links and market history require an approved source and contract.</p>
+      <p>Product Detail includes a separately labelled DEMO_FIXTURE chart of 90 synthetic days for presentation. It is not the current product's history, has no real observation dates, and never enters calculations, decisions or exports.</p>
       <p>The AI analyst is not implemented. Its accepted design is downstream, read-only explanation of existing calculations, risks and decisions; it cannot invent missing evidence or replace deterministic calculations.</p>
       <p>Catalog filters change the displayed and exported subset, never the recorded decision. Appearance and column settings are local browser preferences.</p>
     </section>

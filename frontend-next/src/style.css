@@ -83,6 +83,7 @@ th button[aria-pressed="true"] { background:var(--accent); color:#fff; }
 /* Keep the native picker in the keyboard order and show its focused region. */
 .drop-zone input { display: block; box-sizing: border-box; width: 100%; max-width: 100%; }
 .drop-zone:focus-within { outline: 3px solid var(--focus-color, var(--accent-text)); outline-offset: 2px; }
+.market-demo-chart { display: block; width: 100%; max-width: 700px; height: auto; }
 .spread-bars { list-style: none; padding: 0; display: grid; gap: 8px; }
 .spread-bars li { display: grid; grid-template-columns: minmax(0, 1fr) max-content minmax(0, 1fr); align-items: center; gap: 10px; }
 .bars li { grid-template-columns: minmax(0, 1fr) max-content minmax(0, 1fr); }

@@ -152,12 +152,13 @@ describe("Product Detail (one record within one run)", () => {
     expect(screen.getByText("1.498333333333333333333333333")).toBeInTheDocument()       // exact ROI behind the 149.8%
   })
 
-  it("shows no image, link or market series it has no approved source for", async () => {
+  it("keeps supplier media unavailable and explicitly separates the approved G12 DEMO fixture", async () => {
     stub()
     page()
     await screen.findByLabelText("Identity")
     expect(document.querySelector("img")).toBeNull()
-    expect(screen.queryByText(/demo|fixture|price trend|simulated/i)).not.toBeInTheDocument()
+    expect(screen.getByLabelText("Illustrative market chart")).toHaveTextContent("DEMO_FIXTURE · NOT VERIFIED · NOT INFERRED FROM PRODUCTION DATA")
+    expect(screen.getByLabelText("Illustrative market chart")).toHaveTextContent("not this product's history")
     expect(screen.getByText(/no product image or supplier link is shown/i)).toBeInTheDocument()
   })
 
