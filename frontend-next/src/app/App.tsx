@@ -11,6 +11,7 @@ import { MethodologyPage } from "../pages/MethodologyPage"
 import { ProductDetailPage } from "../pages/ProductDetailPage"
 import { RunDetailPage } from "../pages/RunDetailPage"
 import { RunsPage } from "../pages/RunsPage"
+import { canonicalRoute, currentRoute } from "../routes"
 import { UploadPage } from "../pages/UploadPage"
 
 /**
@@ -37,18 +38,19 @@ const NAVIGATION: [path: string, label: string][] = [
 ]
 
 export function App() {
-  const [route, setRoute] = useState(() => location.pathname + location.search)
+  const [route, setRoute] = useState(currentRoute)
   const [appearance, setAppearance] = useState(loadAppearance)
+  const [collapsed, setCollapsed] = useState(() => { try { return localStorage.getItem("juval-sidebar-collapsed") === "1" } catch { return false } })
   const { dark } = appearance
   const changeAppearance = (patch: Partial<Appearance>) => {
     saveAppearance(patch)
     setAppearance((current) => ({ ...current, ...patch }))
   }
 
-  const go = (path: string) => { history.pushState({}, "", path); setRoute(path) }
+  const go = (path: string) => { const canonical = canonicalRoute(path); history.pushState({}, "", canonical); setRoute(canonical) }
 
   useEffect(() => {
-    const onPop = () => setRoute(location.pathname + location.search)
+    const onPop = () => setRoute(currentRoute())
     addEventListener("popstate", onPop)
     return () => removeEventListener("popstate", onPop)
   }, [])
@@ -105,17 +107,20 @@ export function App() {
     ...(appearance.background ? { backgroundImage: `linear-gradient(rgb(0 0 0 / ${appearance.overlayOpacity}), rgb(0 0 0 / ${appearance.overlayOpacity})), url("${appearance.background}")`, backgroundSize: appearance.backgroundFit, backgroundPosition: appearance.backgroundPosition } : {}),
   } as CSSProperties
   const customColors = Object.keys(COLOR_LABELS).some((key) => appearance[key as keyof typeof COLOR_LABELS])
-  return <div className={`app${dark ? " dark" : ""}${appearance.background ? " has-custom-background" : ""}${customColors ? " has-custom-colors" : ""}`} style={appearanceStyle}>
+  const active = (path: string) => path === "/runs" ? pathname === "/runs" || !!runMatch || !!batchMatch : path === "/catalog" ? pathname === "/catalog" || !!productMatch : pathname === path
+  const localPage = pathname === "/appearance" || pathname === "/about" || pathname === "/compare" || pathname === "/favorites"
+  return <div className={`app${dark ? " dark" : ""}${appearance.background ? " has-custom-background" : ""}${customColors ? " has-custom-colors" : ""}${collapsed ? " sidebar-collapsed" : ""}`} style={appearanceStyle}>
     <aside>
       <nav aria-label="Main navigation">
         {appearance.logo && <img className="appearance-logo" src={appearance.logo} alt="Custom JUVAl logo" />}
         <b>JUVAl</b>
-        {NAVIGATION.map(([path, label]) => <button key={path} onClick={() => go(path)} aria-current={pathname === path ? "page" : undefined}>{label}</button>)}
+        {NAVIGATION.map(([path, label]) => <button key={path} aria-label={label} title={label} onClick={() => go(path)} aria-current={active(path) ? "page" : undefined}><span className="nav-label">{label}</span><span className="nav-short" aria-hidden="true">{label.slice(0, 2)}</span></button>)}
       </nav>
+      <button className="sidebar-toggle" aria-expanded={!collapsed} onClick={() => { setCollapsed(!collapsed); try { localStorage.setItem("juval-sidebar-collapsed", collapsed ? "0" : "1") } catch { /* local preference only */ } }}>{collapsed ? "Expand sidebar" : "Collapse sidebar"}</button>
     </aside>
     <main>
       <header>
-        <span>LIVE — real backend, real persisted runs</span>
+        <span>{localPage ? pathname === "/appearance" ? "Settings — browser-local appearance" : pathname === "/about" ? "Methodology" : "Workspace" : "LIVE — real backend, real persisted runs"}</span>
         <button onClick={() => changeAppearance({ dark: !dark })} role="switch" aria-checked={dark}>{dark ? "Light" : "Dark"}</button>
       </header>
       {signInNeeded && <p role="alert" className="notice">

@@ -68,6 +68,21 @@ th button[aria-pressed="true"] { background:var(--accent); color:#fff; }
 .donut-chart { display: flex; flex-wrap: wrap; gap: 20px; align-items: center; margin: 16px 0; }
 .donut-chart svg { width: 180px; max-width: 100%; }
 
+.nav-short { display: none; }
+.sidebar-toggle { margin-top: 16px; }
+@media (min-width: 761px) {
+  .sidebar-collapsed { grid-template-columns: 100px minmax(0, 1fr); }
+  .sidebar-collapsed .nav-label { display: none; }
+  .sidebar-collapsed .nav-short { display: inline; }
+  .sidebar-collapsed .sidebar-toggle { padding: 6px 2px; overflow-wrap: anywhere; }
+  .sidebar-collapsed aside { min-width: 0; padding-inline: 6px; }
+  .sidebar-collapsed .appearance-logo { max-width: 100%; }
+}
+@media (max-width: 760px) { .sidebar-toggle { display: none; } }
+
+/* Keep the native picker in the keyboard order and show its focused region. */
+.drop-zone input { display: block; box-sizing: border-box; width: 100%; max-width: 100%; }
+.drop-zone:focus-within { outline: 3px solid var(--focus-color, var(--accent-text)); outline-offset: 2px; }
 .spread-bars { list-style: none; padding: 0; display: grid; gap: 8px; }
 .spread-bars li { display: grid; grid-template-columns: minmax(0, 1fr) max-content minmax(0, 1fr); align-items: center; gap: 10px; }
 .bars li { grid-template-columns: minmax(0, 1fr) max-content minmax(0, 1fr); }

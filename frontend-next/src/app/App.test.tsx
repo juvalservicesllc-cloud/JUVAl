@@ -36,6 +36,17 @@ describe("Golden-first shell and routing", () => {
     expect(screen.getByRole("button", { name: "Runs" })).toHaveAttribute("aria-current", "page")
   })
 
+  it("restores collapse, keeps named destinations and marks parent navigation on details", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})))
+    localStorage.setItem("juval-sidebar-collapsed", "1")
+    at("/runs/run-1")
+    expect(document.querySelector(".app")).toHaveClass("sidebar-collapsed")
+    expect(screen.getByRole("button", { name: "Runs" })).toHaveAttribute("aria-current", "page")
+    await userEvent.setup().click(screen.getByRole("button", { name: "Expand sidebar" }))
+    expect(localStorage.getItem("juval-sidebar-collapsed")).toBe("0")
+    expect(screen.getByRole("button", { name: "Catalog" })).toBeInTheDocument()
+  })
+
   it("navigates in the same tab without a reload", async () => {
     at("/")
     await userEvent.setup().click(screen.getByRole("button", { name: "Import" }))
