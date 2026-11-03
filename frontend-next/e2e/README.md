@@ -140,3 +140,39 @@ returns EPERM, so the config cannot start the fixture generator. Keep
 `TMPDIR` short: Chromium aborts with "Socket path too long" when its
 singleton socket path does not fit a Unix socket address (108 bytes).
 Results of the 2026-11-03 run are in `docs/PROJECT_STATUS.md`.
+
+## G1–G12 parity recovery (pending external execution)
+
+The existing 38 scenarios, including the eight responsive cases, are unchanged.
+`zz-parity-gates.spec.ts` adds four cases (360/1440, light/dark), after the empty
+store D7 test: real upload and canonical route alias; identity columns; general
+provenance filter and XLSX row count; Donut/Bars and Recent Runs; batch/preview;
+Runs ordering controls; isolated 90-point DEMO chart; desktop collapse; custom
+surface contrast; native picker keyboard focus. No production data or new API.
+
+Outside the Codex sandbox, use the isolated environment above, a short TMPDIR
+and separate private output/server log directories for each invocation:
+
+```bash
+npm run e2e -- --grep-invert 'parity gates:'  # retained 38
+npm run e2e -- e2e/zz-parity-gates.spec.ts   # new 4
+npm run e2e                                # planned 42 together
+```
+
+These are planned counts, not measured passes for the new diff. Review the new
+Appearance/picker captures and the retained responsive/C1 captures. Profile-based
+preference migration (originals/destination/storage failure) also needs the
+owner checklist in `docs/architecture/FRONTEND_NEXT_PARITY_RECOVERY.md`.
+
+The Vite development harness deliberately does not register a service worker.
+For PWA acceptance, Claude Code/operator must additionally serve the built
+frontend on a separate loopback origin (Vite preview, no shared service or DB):
+build with `VITE_API_BASE_URL=http://127.0.0.1:18771` pointing only at the
+disposable lab API, not the default localhost:8000 or a real environment;
+check manifest/icons and installation; reload until the worker controls the
+page; go offline and navigate to a frontend route, expecting the explicit
+offline notice. API/auth/download traffic must not be intercepted/cached;
+CacheStorage must contain only `/offline.html` under `juval-next-offline-v1`.
+Check updates with open tabs: no forced reload/skipWaiting; close existing
+sessions to activate. Inspect any older worker/caches before a future cutover,
+which is not authorized by this work. No browser installation is required here.
