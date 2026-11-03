@@ -48,3 +48,6 @@ th button[aria-pressed="true"] { background:var(--accent); color:#fff; }
 .app .drop-zone.dragging, .app .explain summary, .app .prov-demo-fixture { color: var(--accent-text); }
 .app header > span { background: var(--surface); color: var(--text); }
 .app :is(button, input, select, a, summary):focus-visible { outline-color: var(--accent-text); }
+
+/* Name the navigation landmark while keeping the sidebar's row/column layout. */
+.app aside > nav { display: flex; flex-direction: inherit; gap: inherit; }

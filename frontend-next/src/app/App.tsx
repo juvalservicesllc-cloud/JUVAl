@@ -97,6 +97,7 @@ export function App() {
 
   const colors = accentColors(appearance.accent || (dark ? "#9c92ff" : "#6d5dfc"), dark)
   const appearanceStyle = {
+    colorScheme: dark ? "dark" : "light",
     ...(appearance.accent ? { "--accent": appearance.accent } : {}),
     "--on-accent": colors.onAccent,
     "--accent-text": colors.textAccent,
@@ -104,9 +105,11 @@ export function App() {
   } as CSSProperties
   return <div className={`app${dark ? " dark" : ""}${appearance.background ? " has-custom-background" : ""}`} style={appearanceStyle}>
     <aside>
-      {appearance.logo && <img className="appearance-logo" src={appearance.logo} alt="Custom JUVAl logo" />}
-      <b>JUVAl</b>
-      {NAVIGATION.map(([path, label]) => <button key={path} onClick={() => go(path)} aria-current={pathname === path ? "page" : undefined}>{label}</button>)}
+      <nav aria-label="Main navigation">
+        {appearance.logo && <img className="appearance-logo" src={appearance.logo} alt="Custom JUVAl logo" />}
+        <b>JUVAl</b>
+        {NAVIGATION.map(([path, label]) => <button key={path} onClick={() => go(path)} aria-current={pathname === path ? "page" : undefined}>{label}</button>)}
+      </nav>
     </aside>
     <main>
       <header>

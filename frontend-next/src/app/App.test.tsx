@@ -19,6 +19,7 @@ describe("Golden-first shell and routing", () => {
 
     const sidebar = document.querySelector("aside") as HTMLElement
     expect(sidebar).toBeInTheDocument()
+    expect(screen.getByRole("navigation", { name: "Main navigation" }).parentElement).toBe(sidebar)
     for (const label of ["Dashboard", "Import", "Catalog", "Compare", "Favorites", "Runs", "Appearance", "Methodology"]) {
       expect(screen.getByRole("button", { name: label })).toBeInTheDocument()
     }
@@ -65,10 +66,15 @@ describe("Golden-first shell and routing", () => {
   })
 
   it("persists the appearance choice as a local preference", async () => {
-    at("/")
+    const view = at("/")
+    expect(document.querySelector(".app")).toHaveStyle({ colorScheme: "dark" })
     await userEvent.setup().click(screen.getByRole("switch"))
 
     expect(localStorage.getItem("juval.appearance.dark")).toBe("false")
+    expect(document.querySelector(".app")).toHaveStyle({ colorScheme: "light" })
+    view.unmount()
+    at("/")
+    expect(document.querySelector(".app")).toHaveStyle({ colorScheme: "light" })
   })
 
   it("offers sign-in when the API answers 401, without redirecting by itself", async () => {
