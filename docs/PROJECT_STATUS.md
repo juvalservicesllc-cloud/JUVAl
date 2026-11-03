@@ -1,5 +1,138 @@
 # Juval — Project Status
 
+## 2026-11-03 (final) — C1 accepted; B1–B4 and C1–C3 all accepted
+
+**IMPLEMENTED (local only, no push or deploy).** Codex's C1 readability
+correction (entry below) was validated by Claude Code outside the Codex
+sandbox: disposable local API with SQLite in a fresh private temp dir,
+headless snap Chromium, short private `TMPDIR`. No sandbox, AppArmor,
+backend, dependency or real-database change.
+
+| Run | Result |
+|---|---|
+| `npm run e2e -- e2e/recovery-c1.spec.ts` | 1 passed (9.5 s) |
+| Full suite with `JUVAL_E2E_SERVER_LOG` + `DEBUG=pw:webserver` | **30 passed / 0 failed / 0 skipped** (1.6 min); 0 `LocalProtocolError` in the captured log |
+| `npm test -- --maxWorkers=2` | 217 passed / 0 failed / 10 skipped (9 need `JUVAL_LIVE_API`, 1 `JUVAL_FINANCIAL_JSON`) |
+| `typecheck`, `lint`, `build` (temp outDir), `git diff --check` | exit 0 |
+
+The C1 spec computes WCAG contrast from computed CSS, independently of the
+production helper: page title, LIVE, every navigation item and enabled button
+at ≥ 4.5:1, focus outline ≥ 3:1 and `:focus-visible`, opaque reading surface,
+custom image visible in the frame and preview, selected accent kept as the
+fill, no horizontal overflow. It runs on normal `#6d5dfc`, white and black
+accents, light/dark/checker backgrounds, both themes, desktop and 390 px.
+It also covers SVG rejection, persistence across reload, reset (no
+`juval.appearance.*` key left, theme/accent/background/logo back to default)
+and no non-GET request.
+
+**Visual review.** 12 of 12 expected C1 screenshots were generated and all
+were reviewed: 6 normal-accent × background × theme, 4 white/black accent ×
+theme, 2 mobile. Title, LIVE, navigation, controls, buttons and focus are
+readable in every one; the image stays visible around the content and in the
+preview. Observations, not defects: the synthetic 1×1 white logo is invisible
+on the light sidebar (fixture content); in the mobile full-page captures the
+existing sticky navigation (`aside`, HEAD `style.css` at ≤ 760 px) is drawn at
+the scroll position where the spec focused Reset, over one line of text. That
+is how full-page captures render sticky elements, not a C1 change. Because
+C1's `style.css` changes are global, non-C1 screenshots (Catalog dark,
+Product Detail, C2, C3) were also checked: no regression; dark-mode buttons
+now use dark text on the `#9c92ff` accent, which raises their contrast
+(white on it was about 2.6:1).
+
+| Block | State |
+|---|---|
+| B1, B2, B3, B4, C2, C3 | **IMPLEMENTED**, commits `64fba3e`–`ad47146` |
+| C1 | **IMPLEMENTED**, local C1 commit (see `git log`) |
+
+Residual risks: the user can still keep a low-contrast accent; the page warns
+and the UI adapts button text, focus and accent text instead. Screenshots live
+in private temp dirs outside the repo and are not durable. Human visual
+review of the screens remains advisable before cutover.
+
+---
+
+## 2026-11-03 (readability fix) — C1 protected reading surface and accent contrast
+
+**C1: PARTIALLY IMPLEMENTED — correction implemented, external browser/visual
+acceptance pending; no commit, push or deploy.** The 30/30 external E2E result
+in the entry below predates this correction and is not evidence for this diff.
+
+**Cause and solution (APPROVED by the owner's frontend instruction).** The
+custom image on `.app` showed directly behind unpanelled text; button and
+active-navigation text was fixed white even on white accent fills. C1 now:
+- gives the main content an opaque `--bg` reading surface whenever a custom
+  background is active, in both themes, including page titles and the header;
+- preserves the image in a visible outer frame (16 px desktop, 8 px mobile)
+  and behind the existing opaque preview card; the sidebar remains opaque;
+- preserves the exact selected accent as the fill and stored preference,
+  independently choosing black/white text for at least 4.5:1 on filled actions;
+- uses a readable text/focus token on theme surfaces if the selected accent
+  cannot meet contrast there. LIVE uses normal theme text on an opaque surface;
+- explains the adaptation in Appearance, and reports actual button contrast
+  using its adapted ink. No silently replaced preference or changed storage key.
+
+**Files changed in this correction:**
+`frontend-next/src/app/App.tsx` (actual shell path, not `src/App.tsx`),
+`src/appearance.ts`, `src/appearance.test.ts`,
+`src/pages/AppearancePage.tsx`, `src/pages/AppearancePage.test.tsx`,
+`src/pages/appearance.css`, `src/style.css`,
+`e2e/recovery-c1.spec.ts`, and this status entry. Shared CSS changes are limited
+to accent text, filled-control ink/borders, LIVE and focus contrast. No B1–B4,
+C2 or C3 source/spec change, backend change, new dependency or image asset.
+The existing C1 README, image validation, logo/background handling, preview,
+local persistence, reset and navigation are retained.
+
+**Validation:** private directory `/tmp/juval-c1-readability-Vb4E8J/` (0700;
+build/logs outside APP; temporary evidence, subject to host cleanup). Same
+isolated Node 24.19.0 environment as the handoff; no installs.
+
+| Command (frontend-next cwd) | Exit | Result | Elapsed | Log |
+|---|---:|---|---|---|
+| npm test -- src/appearance.test.ts src/pages/AppearancePage.test.tsx src/app/App.test.tsx | 0 | 24 passed / 0 failed / 0 skipped | 4.365 s (Vitest: 3.66 s) | unit.log |
+| npm run typecheck | 0 | no type errors | 7.767 s | typecheck.log |
+| npm run lint | 0 | no warnings/errors | 0.247 s | lint.log |
+| npm run build -- --outDir /tmp/juval-c1-readability-Vb4E8J/dist --emptyOutDir | 0 | build passed | 8.276 s | build.log |
+| TypeScript transpileModule of e2e/recovery-c1.spec.ts | 0 | 0 syntax errors, not browser or semantic verification | 0.427 s (tool wall time) | e2e-syntax.log |
+| npm run e2e -- e2e/recovery-c1.spec.ts | 1 | no scenario started: spawnSync Python EPERM in config | 1.929 s | e2e.log |
+
+Playwright was attempted once; no repeated diagnostics, sandbox/AppArmor
+changes or workaround. **Claude Code must run it outside the sandbox** and
+review the new screenshots before accepting/committing C1. No Git write was
+attempted under the previously established protection.
+
+**E2E assertions and planned screenshots (not generated in this sandbox).**
+The same C1 scenario preserves SVG rejection, PNG logo/background persistence,
+contrast warning, theme switching, scoped reset and no image network submission.
+It now generates browser-local synthetic light, dark and checker PNGs (appearance
+fixtures only; not product or market evidence). Independent WCAG calculations
+against actual computed CSS check title, LIVE, navigation and enabled actions
+at 4.5:1, with visible keyboard focus at 3:1. It also checks the opaque reading
+surface, retained accent fill, visible image frame/preview and no page overflow.
+
+Twelve screenshots are planned under the external runner's E2E output path:
+- `appearance-normal-{light,dark,checker}-{light,dark}.png`: six desktop
+  combinations, normal #6d5dfc accent and all three backgrounds in both themes;
+- `appearance-{white,black}-accent-{light,dark}.png`: four desktop combinations
+  with extreme accents and the checker background;
+- `appearance-normal-checker-{light,dark}-mobile.png`: two at 390 × 844.
+Desktop viewport stays 1440 × 900. No timeout/assertion was relaxed.
+
+**Self-review / risks.** Header/title content is independent of image pixels;
+opaque surfaces and a bounded frame preserve customization without using a
+picture-specific fix. Shared CSS keeps semantic BUY/REVIEW/PASS/status colors
+and transparent secondary/favorite controls; accent-as-text uses the new token.
+Storage/image security code is unchanged, with its existing failure, size,
+MIME/signature and reset tests passing. No provenance, business data, fixtures
+for sourcing or calculations changed. Responsive/keyboard/computed-CSS checks
+are written, but real-browser execution and visual acceptance of this revision
+remain pending. The helper's least-favorable theme colors correspond to current
+style.css tokens; browser assertions guard against future drift.
+Ponytail is unavailable; manual simplicity and diff review performed. No
+comprehensive audit was run. Next: external C1 and retained-suite Playwright,
+review all normal/extreme/mobile captures, then local C1 commit only if accepted.
+
+---
+
 ## 2026-11-03 (close) — C1 Appearance: E2E passes, visual defect blocks acceptance
 
 **C1: PARTIALLY IMPLEMENTED, not committed.** Codex fixed the C1 spec

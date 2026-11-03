@@ -14,18 +14,18 @@ from the product — only from the production candidate's runtime.
 **2026-11-03 — B/C recovery (frontend-only, no push/deploy).** Overall
 **PARTIAL**. Browser E2E, run outside the Codex sandbox (whose Node
 `spawnSync` returns EPERM) against disposable local services only:
-**29 passed / 1 failed** (21 regression + 8 recovery scenarios passed;
-`recovery-c1` failed on its `getByLabel("Theme", { exact: true })` selector).
+first 29/1 (`recovery-c1` selector), then, after Codex's selector and
+readability fixes, **30 passed / 0 failed** with no `LocalProtocolError`.
 Unit 209 / 0 / 10 skipped; typecheck, lint, build pass. Details, commands and
-the C1 analysis: PROJECT_STATUS's 2026-11-03 entries. B1-B4, C2 and C3 are
-committed locally; C1 stays uncommitted in the working tree.
+the C1 analysis: PROJECT_STATUS's 2026-11-03 entries. B1-B4, C1, C2 and C3 are
+committed locally.
 
 | Block | Current status | Evidence |
 |---|---|---|
 | B2 ROI percentage | **VERIFIED** | E2E: 30% → `min_roi=0.3`, XLSX metadata/rows = API; unit |
 | B3 BUY | **VERIFIED** | E2E on a synthetic seeded snapshot (INFERRED, empty reasons); unit |
 | C2 Catalog columns | **VERIFIED** | E2E both themes, query/export unchanged; unit |
-| C1 Appearance | **IMPLEMENTED** | Unit only; E2E fails on a spec selector; not committed |
+| C1 Appearance | **VERIFIED** | E2E: WCAG contrast from computed CSS (white/black accents, light/dark/checker backgrounds, both themes, 390 px), persistence, reset; 12 screenshots reviewed |
 | C3 Methodology | **VERIFIED** | E2E both themes, same tab; unit |
 | B1 batches | **VERIFIED** | E2E 2 and 10 files, 11-file overflow sends no request; unit |
 | B4 browser exports | **VERIFIED** | E2E consecutive/concurrent = `/records`; captured server log has no `LocalProtocolError` |
@@ -61,7 +61,7 @@ contract or authorized source first.
 | Provenance badges (VERIFIED / INFERRED / NOT_FOUND / INVALID) and severity source | **VERIFIED** | E2E + screenshots; `SeverityProvenance` (9) |
 | BUY rendering | **VERIFIED** | E2E `recovery-b3` on a synthetic seeded snapshot (not a pipeline BUY); unit |
 | Favorites page (browser-local, run-scoped) | **IMPLEMENTED** | `FavoritesPage` (12); no E2E |
-| Appearance page (accent, logo, background) | **IMPLEMENTED** | C1 unit-tested, uncommitted; E2E fails on a spec selector (2026-11-03) |
+| Appearance page (accent, logo, background) | **VERIFIED** | E2E `recovery-c1` (2026-11-03); unit `appearance`, `AppearancePage` |
 | Catalog column visibility and order | **VERIFIED** | E2E `recovery-c2` both themes; unit |
 | Methodology page | **VERIFIED** | E2E `recovery-c3` both themes; unit |
 | Images / thumbnails | **BLOCKED** | Thumbnail slot always shows "No image" (`src=""`): no image contract, rights or provenance |
@@ -265,7 +265,7 @@ State as of 2026-11-03 (see Status above).
 |---|---|---|---|
 | 3 | Product Detail, data quality, field trace, price-history UX with fixture label | 2 | **Done** except price history: blocked by provider; `DEMO_FIXTURE` label is an open decision |
 | 4 | Dashboard analytics | 2 | **Done** |
-| 5 | Appearance (accent, logo, background) | — | **Implemented, uncommitted** — C1 E2E spec selector fails; fix and rerun |
+| 5 | Appearance (accent, logo, background) | — | **Done** — C1 E2E passed 2026-11-03 |
 | 6 | Favorites page | 3 | **Done**, browser-local and run-scoped |
 | 7 | Compare | 3 | Blocked: ADR + batch-scoped cross-run query |
 | 8 | Supplier image / URL contract | — | Blocked: backend contract + rights policy |
