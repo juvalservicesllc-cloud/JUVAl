@@ -1,5 +1,18 @@
 # frontend-next E2E (real browser)
 
+Owner-review preparation is in
+[`FRONTEND_NEXT_VISUAL_ACCEPTANCE.md`](../../docs/architecture/FRONTEND_NEXT_VISUAL_ACCEPTANCE.md).
+`z-visual-acceptance.spec.ts` adds eight independent viewport/theme cases for
+the seven requested screens plus Run Detail, a real full-run XLSX download,
+keyboard Theme focus and live-viewport mobile sticky checks. It reuses the
+disposable API and existing synthetic upload helper; it does not certify
+legacy feature parity or authorize cutover. These cases require external
+execution by Claude Code/operator; no new browser pass is claimed here.
+Run with the isolated environment below and `npm run e2e --
+e2e/z-visual-acceptance.spec.ts`, then run the retained suite together with it.
+See the checklist for artifact names, manual keyboard/file-picker checks,
+remaining capability gaps and human sign-off.
+
 `npm run e2e` starts everything it needs and tears it down:
 
 - a **disposable API**: uvicorn on `127.0.0.1:18771`, `JUVAL_AUTH_MODE=disabled`,
