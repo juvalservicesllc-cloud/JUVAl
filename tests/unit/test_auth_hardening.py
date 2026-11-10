@@ -76,8 +76,8 @@ def test_token_issued_slightly_in_the_future_is_accepted(verifier, key):
 
 def test_jwks_cache_parameters_are_pinned():
     assert auth_module._JWKS_CACHE_LIFESPAN_SECONDS == 300
-    assert auth_module._JWKS_MAX_CACHED_KEYS == 16
     assert auth_module._JWKS_HTTP_TIMEOUT_SECONDS == 10
+    assert auth_module._JWKS_REFRESH_COOLDOWN_SECONDS == 30
 
 
 def test_build_verifier_configures_the_jwks_client_explicitly(monkeypatch):
@@ -101,7 +101,8 @@ def test_build_verifier_configures_the_jwks_client_explicitly(monkeypatch):
     assert captured["uri"] == f"{ISSUER}/.well-known/jwks.json"
     assert captured["cache_jwk_set"] is True
     assert captured["lifespan"] == auth_module._JWKS_CACHE_LIFESPAN_SECONDS
-    assert captured["max_cached_keys"] == auth_module._JWKS_MAX_CACHED_KEYS
+    assert captured["cache_keys"] is False   # no non-expiring per-key LRU (retired keys)
+    assert captured["cooldown_duration"] == auth_module._JWKS_REFRESH_COOLDOWN_SECONDS
     assert captured["timeout"] == auth_module._JWKS_HTTP_TIMEOUT_SECONDS
     auth_module.reset_for_tests()
 

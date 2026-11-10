@@ -18,6 +18,9 @@ Deliberately read-only and secret-free:
 Usage:
     python tools/verify_oidc.py --issuer https://idp.example.com
     python tools/verify_oidc.py --issuer ... --tenant-policy   # needs JUVAL_IDP_API_KEY
+    python tools/verify_oidc.py --issuer ... --audience <client id> --token-env TEST_TOKEN
+        # verifies a test user's token with the API's own verifier and prints
+        # the exact iss/sub for `tenancy_admin.py add-member`
 
 Exit code is non-zero when a checked control fails, so it can gate CI.
 """
@@ -94,8 +97,16 @@ def check_discovery(report: Report, issuer: str) -> Optional[dict]:
     return document
 
 
-def check_jwks(report: Report, issuer: str, document: Optional[dict]) -> None:
-    uri = (document or {}).get("jwks_uri") or f"{issuer.rstrip('/')}/.well-known/jwks.json"
+def check_jwks(report: Report, document: Optional[dict], uri: str) -> None:
+    # The backend never reads discovery: it fetches `JUVAL_OIDC_JWKS_URI` or
+    # the conventional path. If the provider publishes its keys elsewhere,
+    # every token fails at runtime with a bare 401.
+    published = (document or {}).get("jwks_uri")
+    report.record(
+        published == uri if published else None,
+        "backend JWKS URI matches discovery",
+        f"backend={uri!r} discovery={published!r}",
+    )
     try:
         jwks = _get(uri)
     except (urllib.error.URLError, ValueError, TimeoutError) as exc:
@@ -174,15 +185,56 @@ def check_tenant_policy(report: Report, issuer: str) -> None:
         )
 
 
-def main() -> int:
+def check_token(report: Report, issuer: str, audience: str, jwks_uri: str, roles_claim: str, token: str) -> None:
+    """Verify one real token with the API's own verifier (`auth.jwks_verifier`).
+
+    Signature, RS256, issuer, audience, expiry and required claims are checked
+    by the same code that will run in production. The token is never printed;
+    `iss` and `sub` are, because they are what a membership is keyed by.
+    """
+    from fastapi import HTTPException
+
+    from juval.interfaces.api import auth
+
+    try:
+        principal = auth.jwks_verifier(issuer, audience, jwks_uri, roles_claim).verify(token)
+    except HTTPException:
+        report.record(False, "token verifies", "rejected by the API verifier (signature, RS256, iss, aud, exp or claims)")
+        return
+    report.record(True, "token verifies", "signature, RS256, iss, aud, exp and required claims")
+    report.record(
+        bool(principal.permissions),
+        "roles claim maps to JUVAl permissions",
+        f"claim={roles_claim!r} roles={list(principal.roles)} permissions={sorted(principal.permissions)}",
+    )
+    # Not a pass/fail: the line an operator copies into `tenancy_admin.py add-member`.
+    report.record(True, "membership identity", f"--issuer {principal.issuer!r} --subject {principal.subject!r}")
+
+
+def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--issuer", required=True, help="OIDC issuer URL, e.g. https://idp.example.com")
+    parser.add_argument("--jwks-uri", help="the backend's JUVAL_OIDC_JWKS_URI, if set (default: <issuer>/.well-known/jwks.json)")
+    parser.add_argument("--audience", help="the backend's JUVAL_OIDC_AUDIENCE; required with --token-env")
+    parser.add_argument("--roles-claim", default="roles", help="the backend's JUVAL_OIDC_ROLES_CLAIM")
+    parser.add_argument("--token-env", help="NAME of an environment variable holding a test user's token (never the token itself)")
     parser.add_argument("--tenant-policy", action="store_true", help="also read tenant password policy (needs JUVAL_IDP_API_KEY)")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    if args.token_env and not args.audience:
+        parser.error("--token-env requires --audience")
 
+    from juval.interfaces.api.auth import default_jwks_uri
+
+    jwks_uri = args.jwks_uri or default_jwks_uri(args.issuer)
     report = Report()
     document = check_discovery(report, args.issuer)
-    check_jwks(report, args.issuer, document)
+    check_jwks(report, document, jwks_uri)
+    if args.token_env:
+        token = os.environ.get(args.token_env)
+        if token:
+            check_token(report, args.issuer, args.audience, jwks_uri, args.roles_claim, token)
+        else:
+            report.record(False, "token verifies", f"environment variable {args.token_env} is not set")
     if args.tenant_policy:
         check_tenant_policy(report, args.issuer)
 

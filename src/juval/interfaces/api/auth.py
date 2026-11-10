@@ -87,9 +87,17 @@ _CLOCK_SKEW_LEEWAY_SECONDS = 60
 # library default for a security-relevant cache means a dependency bump can
 # change token-verification behaviour with no diff in this repository. Naming
 # them makes that impossible and makes them testable.
+#
+# Only the whole key set is cached, never individual keys: PyJWT's per-key
+# cache (`cache_keys=True`) is an LRU with no expiry, so a key the IdP retired
+# -- e.g. after a compromise -- would keep verifying until a restart (SEC-01E).
+# With the set cache alone, a retired key stops verifying within the lifespan.
 _JWKS_CACHE_LIFESPAN_SECONDS = 300   # re-fetch the key set at least this often
-_JWKS_MAX_CACHED_KEYS = 16           # bounded: a hostile `kid` cannot grow it
 _JWKS_HTTP_TIMEOUT_SECONDS = 10      # never hang a request on a stalled IdP
+# An unknown `kid` forces at most one re-fetch per this many seconds, so a flood
+# of forged kids cannot hammer the IdP; a newly rotated-in key may be refused
+# (401, fail closed) for up to this long after the previous fetch.
+_JWKS_REFRESH_COOLDOWN_SECONDS = 30
 
 
 @dataclass(frozen=True)
@@ -392,16 +400,31 @@ def build_verifier() -> TokenVerifier:
     # fails only at the first real token verification, as a 401, long after
     # startup succeeded. `JUVAL_OIDC_JWKS_URI` remains the explicit override
     # for any provider that deviates from the convention.
-    jwks_uri = os.environ.get("JUVAL_OIDC_JWKS_URI") or f"{issuer.rstrip('/')}/.well-known/jwks.json"
-    roles_claim = os.environ.get("JUVAL_OIDC_ROLES_CLAIM", "roles")
+    return jwks_verifier(
+        issuer,
+        audience,
+        os.environ.get("JUVAL_OIDC_JWKS_URI") or default_jwks_uri(issuer),
+        os.environ.get("JUVAL_OIDC_ROLES_CLAIM", "roles"),
+    )
 
+
+def default_jwks_uri(issuer: str) -> str:
+    return f"{issuer.rstrip('/')}/.well-known/jwks.json"
+
+
+def jwks_verifier(issuer: str, audience: str, jwks_uri: str, roles_claim: str = "roles") -> TokenVerifier:
+    """The production verifier: RS256 keys from `jwks_uri`, pinned cache settings.
+
+    `tools/verify_oidc.py` uses this same function, so pre-activation evidence
+    exercises exactly the code path the API runs.
+    """
     jwk_client = jwt.PyJWKClient(
         jwks_uri,
-        cache_keys=True,
-        max_cached_keys=_JWKS_MAX_CACHED_KEYS,
+        cache_keys=False,
         cache_jwk_set=True,
         lifespan=_JWKS_CACHE_LIFESPAN_SECONDS,
         timeout=_JWKS_HTTP_TIMEOUT_SECONDS,
+        cooldown_duration=_JWKS_REFRESH_COOLDOWN_SECONDS,
     )
 
     def resolve(token: str) -> object:
