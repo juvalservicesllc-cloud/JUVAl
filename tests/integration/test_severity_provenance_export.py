@@ -20,7 +20,7 @@ from fastapi.testclient import TestClient
 from juval.infrastructure.excel.exporter import HEADERS
 from juval.infrastructure.logging.sqlite_execution_run_store import SqliteExecutionRunStore
 from juval.interfaces.api.main import app
-from .api_lab import LOOPBACK
+from .api_lab import LAB_OWNER, LOOPBACK
 from juval.interfaces.cli.main import main as cli_main
 
 NEW = ("hazmat_severity_status", "hazmat_severity_source_type", "bulky_severity_status", "bulky_severity_source_type")
@@ -172,7 +172,7 @@ def test_historical_snapshot_exports_empty_cells_never_verified(client, tmp_path
 
     old = snapshot(0)  # hazmat_status ABSENT, written before the severity provenance existed
     assert not set(NEW) & set(old)
-    SqliteExecutionRunStore(tmp_path / "runs.db").save_execution_run(run(), [old])
+    SqliteExecutionRunStore(tmp_path / "runs.db").save_execution_run(run(), [old], owner=LAB_OWNER)
 
     header, body = _rows(client.get("/api/v1/runs/run-page/records/export").content, "catalog_export")
     assert _cells(header, body) == {old["record_ref"]: (None, None, None, None)}

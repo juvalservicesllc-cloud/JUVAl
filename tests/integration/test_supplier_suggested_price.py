@@ -30,7 +30,7 @@ from juval.infrastructure.excel.exporter import SUGGESTED_PRICE_EXPORT_HEADERS, 
 from juval.infrastructure.excel.importer import SUPPORTED_INPUT_SUFFIXES, import_file
 from juval.infrastructure.logging.sqlite_execution_run_store import SqliteExecutionRunStore
 from juval.interfaces.api.main import app
-from .api_lab import LOOPBACK
+from .api_lab import LAB_OWNER, LOOPBACK
 
 NOW = datetime(2026, 10, 27, 15, tzinfo=timezone.utc)
 THRESHOLDS = Thresholds(target_profit=Decimal("5"), target_roi=Decimal("0"), minimum_estimated_monthly_sales=0,
@@ -362,7 +362,7 @@ def test_api_and_both_exports_agree(client, tmp_path):
 
 def test_historical_snapshots_are_not_captured_everywhere(client, tmp_path):
     from .test_record_snapshot_pagination import run, snapshot
-    SqliteExecutionRunStore(tmp_path / "runs.db").save_execution_run(run(), [snapshot(0)])
+    SqliteExecutionRunStore(tmp_path / "runs.db").save_execution_run(run(), [snapshot(0)], owner=LAB_OWNER)
     record = client.get("/api/v1/runs/run-page/records/row_00").json()
     assert (record["supplier_suggested_price"], record["supplier_suggested_price_state"]) == (None, "NOT_CAPTURED")
     exported = client.get("/api/v1/runs/run-page/records/export")
@@ -376,5 +376,5 @@ def test_the_document_survives_a_sqlite_round_trip(tmp_path):
     from .test_record_snapshot_pagination import run
     store = SqliteExecutionRunStore(tmp_path / "runs.db")
     snapshot = record_to_snapshot(record)
-    store.save_execution_run(run(), [snapshot])
+    store.save_execution_run(run(), [snapshot], owner=LAB_OWNER)
     assert store.load_record("run-page", record.record_ref)["supplier_suggested_price"] == snapshot["supplier_suggested_price"]

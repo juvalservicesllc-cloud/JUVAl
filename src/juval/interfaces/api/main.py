@@ -31,14 +31,14 @@ import os
 import re
 import tempfile
 import zipfile
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Literal, Optional
 from urllib.parse import quote
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from openpyxl.utils.exceptions import InvalidFileException
@@ -54,6 +54,7 @@ from juval.domain.execution_run import ExecutionStatus
 from juval.domain.batch import Batch, BatchFile, BatchFileStatus, aggregate_batch_status
 from juval.domain.execution_run import ExecutionRun, hash_file
 from juval.application.execution_run_store import ExecutionRunStore
+from juval.application.tenancy import LAB_ORGANIZATION_ID, Ownership, TenantScope
 from juval.application.financial_persistence import (
     FinancialRecordIntegrityError,
     FinancialStorageUnavailable,
@@ -78,7 +79,7 @@ from juval.infrastructure.persistence.supabase_execution_run_store import Supaba
 
 from . import bff, service
 from . import auth
-from .auth import RUNS_CREATE, RUNS_EXPORT, RUNS_READ, require, set_session_resolver
+from .auth import RUNS_CREATE, RUNS_EXPORT, RUNS_READ, Principal, current_principal, require, set_session_resolver
 from .models import (
     FeesIn,
     ImportPreviewResponse,
@@ -226,6 +227,98 @@ def _execution_run_store() -> Optional[ExecutionRunStore]:
     raise RuntimeError(f"JUVAL_EXECUTION_STORE has an unrecognized value: {mode!r} (expected 'sqlite' or 'supabase')")
 
 
+def _require_execution_run_store() -> ExecutionRunStore:
+    store = _execution_run_store()
+    if store is None:
+        raise HTTPException(
+            status_code=500,
+            detail="this endpoint requires JUVAL_EXECUTION_STORE/JUVAL_EXECUTION_DB_PATH to be configured",
+        )
+    return store
+
+
+# --- ADR-056: tenant scope and per-resource authorization ---------------------
+#
+# Separate checks, in this order, on every data route:
+#   1. authentication       -- current_principal (ADR-055);
+#   2. RBAC                 -- Depends(require(permission)), declared first;
+#   3. CSRF                 -- state-changing routes, before any data lookup;
+#   4. ownership            -- tenant_access, then run_in_scope.
+# A run or batch outside the caller's organization is looked up *within* the
+# organization and therefore answers exactly like one that does not exist
+# (OD-7). tests/integration/test_resource_isolation.py checks every route.
+
+
+@dataclass(frozen=True)
+class Access:
+    """Who is calling and the one organization they act for."""
+
+    principal: Principal
+    scope: TenantScope
+
+    def ownership(self) -> Ownership:
+        return Ownership(self.scope.organization_id, self.principal.issuer, self.principal.subject)
+
+
+def tenant_access(request: Request, principal: Principal = Depends(current_principal)) -> Access:
+    """The caller's organization, from their single membership (OD-5/OD-6).
+
+    The loopback lab acts for a fixed synthetic organization, so the code
+    path is the same as under OIDC. Under OIDC there is no organization
+    without a membership: zero or several is 403 on every data route (an
+    identity alone grants no data), and no store means no answer at all (503).
+    """
+    if auth.installed_settings(request.app).mode == "disabled":
+        return Access(principal, TenantScope(LAB_ORGANIZATION_ID))
+    store = _execution_run_store()
+    if store is None:
+        logger.error("tenant access unavailable: no execution store configured for memberships")
+        raise HTTPException(status_code=503, detail="organization membership is not available on this deployment")
+    organizations = store.organization_ids_for(principal.issuer, principal.subject)
+    if len(organizations) != 1:
+        logger.warning("tenant access denied: subject=%s memberships=%d", principal.subject, len(organizations))
+        raise HTTPException(status_code=403, detail="no organization access for this identity")
+    return Access(principal, TenantScope(organizations[0]))
+
+
+def _scoped_store(access: Access) -> ExecutionRunStore:
+    return _require_execution_run_store().scoped(access.scope)
+
+
+@dataclass(frozen=True)
+class AuthorizedRun:
+    """A run the caller may see, and the store view limited to its organization."""
+
+    run: ExecutionRun
+    store: ExecutionRunStore
+    access: Access
+
+
+def run_in_scope(not_found: str):
+    """Dependency: the path's run, looked up inside the caller's organization.
+
+    `not_found` keeps each route's existing 404 text, so unknown and foreign
+    ids stay indistinguishable on every route (the record routes share one
+    text for unknown run and unknown record on purpose).
+    """
+
+    def authorized_run(execution_id: str, access: Access = Depends(tenant_access)) -> AuthorizedRun:
+        store = _scoped_store(access)
+        run = store.load_execution_run(execution_id)
+        if run is None:
+            logger.info("run not found in scope: subject=%s organization=%s", access.principal.subject,
+                        access.scope.organization_id)
+            raise HTTPException(status_code=404, detail=not_found)
+        return AuthorizedRun(run, store, access)
+
+    authorized_run.juval_authorizes = "run"
+    return authorized_run
+
+
+_RUN = run_in_scope("unknown execution_id")
+_RUN_RECORD = run_in_scope("unknown record for execution")
+
+
 _UNSAFE_FILENAME_CHARS = re.compile(r"[^A-Za-z0-9 ._-]")
 
 # Every way a submitted file can turn out to be unreadable as the tabular
@@ -298,7 +391,9 @@ async def create_run(
     financial_target_roi: Optional[Decimal] = Form(None),
     _principal=Depends(require(RUNS_CREATE)),
     _csrf: None = Depends(bff.csrf_guard),
+    access: Access = Depends(tenant_access),
 ) -> JSONResponse:
+    organization_id = access.scope.organization_id
     thresholds_in = _parse_json_form(thresholds, ThresholdsIn, "thresholds")
     fees_in = _parse_json_form(fees, FeesIn, "fees")
 
@@ -324,7 +419,7 @@ async def create_run(
         )
 
     execution_id = service.new_execution_id()
-    run_directory = service.run_dir(execution_id)
+    run_directory = service.run_dir(organization_id, execution_id)
     run_directory.mkdir(parents=True, exist_ok=True)
     # The submitted filename (sanitized) is kept so ExecutionRun.input_filename
     # records which supplier file produced the run, not a generic placeholder.
@@ -369,17 +464,19 @@ async def create_run(
                 status_code=500,
                 detail="persist=true was requested but JUVAL_EXECUTION_DB_PATH is not configured",
             )
+        store = store.scoped(access.scope)
         if native_financial_evidence:
             # One transaction for run, snapshots, documents and diagnostics: a
             # failure raises (generic 500) and nothing of this run is persisted.
             financial = _persist_native_financial(
                 store, outcome, record_snapshots, now,
-                financial_target_profit, financial_target_profit_currency, financial_target_roi)
+                financial_target_profit, financial_target_profit_currency, financial_target_roi,
+                access.ownership())
         else:
-            store.save_execution_run(run, record_snapshots)
+            store.save_execution_run(run, record_snapshots, owner=access.ownership())
         persisted = True
 
-    export_excel(records, service.output_path(execution_id))
+    export_excel(records, service.output_path(organization_id, execution_id))
 
     response = RunResponse(
         execution_id=run.execution_id,
@@ -403,6 +500,7 @@ async def preview_run_input(
     file: UploadFile = File(...),
     _principal=Depends(require(RUNS_CREATE)),
     _csrf: None = Depends(bff.csrf_guard),
+    _access: Access = Depends(tenant_access),  # no organization, no data route (ADR-056)
 ) -> JSONResponse:
     """Validate-only: how the importer reads this file, before any run.
 
@@ -459,11 +557,11 @@ def _check_financial_options(persist, native, target_profit, target_profit_curre
 
 
 def _persist_native_financial(store, outcome, snapshots, now, target_profit, target_profit_currency,
-                              target_roi) -> RunFinancialSummaryOut:
+                              target_roi, owner: Ownership) -> RunFinancialSummaryOut:
     """Build the ADR-047 documents and save them atomically with the run."""
     documents, diagnostics, summary = _native_financial_parts(outcome, now, target_profit, target_profit_currency,
                                                               target_roi)
-    save_run_with_financial_records(store, outcome.run, snapshots, documents, diagnostics)
+    save_run_with_financial_records(store, outcome.run, snapshots, documents, diagnostics, owner=owner)
     return summary
 
 
@@ -500,6 +598,7 @@ async def create_batch(
     financial_target_roi: Optional[Decimal] = Form(None),
     _principal=Depends(require(RUNS_CREATE)),
     _csrf: None = Depends(bff.csrf_guard),
+    access: Access = Depends(tenant_access),
 ) -> JSONResponse:
     """Process up to ten independent child runs as one auditable batch.
 
@@ -538,9 +637,12 @@ async def create_batch(
     children: list[BatchChild] = []
     exports: list[tuple[int, str, tuple]] = []      # (index in results, execution_id, records) to export after commit
     max_bytes = service.max_upload_bytes()
+    organization_id = access.scope.organization_id
     store = _execution_run_store() if persist else None
     if persist and store is None:
         raise HTTPException(status_code=500, detail="persist=true was requested but the execution store is not configured")
+    if store is not None:
+        store = store.scoped(access.scope)
 
     # 1. Process every file; nothing is written to the store here (ADR-050 D1).
     for ordinal, upload in enumerate(files):
@@ -562,7 +664,7 @@ async def create_batch(
             continue
 
         execution_id = service.new_execution_id()
-        run_directory = service.run_dir(execution_id)
+        run_directory = service.run_dir(organization_id, execution_id)
         run_directory.mkdir(parents=True, exist_ok=True)
         input_path = run_directory / filename
         input_path.write_bytes(body)
@@ -604,14 +706,14 @@ async def create_batch(
     if persist and store is not None:
         if not hasattr(store, "save_batch_with_runs"):
             raise HTTPException(status_code=500, detail="configured execution store does not support batch persistence")
-        save_batch_with_runs(store, batch, children)
+        save_batch_with_runs(store, batch, children, access.ownership())
 
     # 3. Exports only after the commit (D3). A failed export never undoes what
     #    was stored; it is reported as a warning on that file in this response.
     response_files = list(results)
     for index, execution_id, records in exports:
         try:
-            export_excel(records, service.output_path(execution_id))
+            export_excel(records, service.output_path(organization_id, execution_id))
         except Exception:
             logger.exception("batch %s: XLSX export failed for %s", batch_id, execution_id)
             item = response_files[index]
@@ -645,8 +747,8 @@ def _batch_response(batch: Batch, *, persisted: bool) -> BatchResponse:
     )
 
 
-def _load_batch_or_404(loader: str, key: str, *, not_found: str) -> Batch:
-    store = _require_execution_run_store()
+def _load_batch_or_404(store: ExecutionRunStore, loader: str, key: str, *, not_found: str) -> Batch:
+    """`store` is already scoped, so a foreign batch reads as absent."""
     if not hasattr(store, loader):
         raise HTTPException(status_code=500, detail="configured execution store does not support batches")
     batch = getattr(store, loader)(key)
@@ -656,13 +758,15 @@ def _load_batch_or_404(loader: str, key: str, *, not_found: str) -> Batch:
 
 
 @app.get("/api/v1/batches/{batch_id}", response_model=BatchResponse)
-async def get_batch(batch_id: str, _principal=Depends(require(RUNS_READ))) -> JSONResponse:
-    batch = _load_batch_or_404("load_batch", batch_id, not_found="unknown batch_id")
+async def get_batch(batch_id: str, _principal=Depends(require(RUNS_READ)),
+                    access: Access = Depends(tenant_access)) -> JSONResponse:
+    batch = _load_batch_or_404(_scoped_store(access), "load_batch", batch_id, not_found="unknown batch_id")
     return JSONResponse(status_code=200, content=_batch_response(batch, persisted=True).model_dump(mode="json"))
 
 
 @app.get("/api/v1/runs/{execution_id}/batch", response_model=BatchResponse)
-async def get_run_batch(execution_id: str, _principal=Depends(require(RUNS_READ))) -> JSONResponse:
+async def get_run_batch(execution_id: str, _principal=Depends(require(RUNS_READ)),
+                        authorized: AuthorizedRun = Depends(run_in_scope("this run is not part of a batch"))) -> JSONResponse:
     """The batch this run belongs to, or 404 when it was submitted on its own.
 
     A run is never *inside* a batch: it stays a complete, independent
@@ -670,14 +774,26 @@ async def get_run_batch(execution_id: str, _principal=Depends(require(RUNS_READ)
     what Run Detail needs to show sibling-file context.
     """
 
-    batch = _load_batch_or_404("load_batch_for_run", execution_id, not_found="this run is not part of a batch")
+    batch = _load_batch_or_404(authorized.store, "load_batch_for_run", execution_id, not_found="this run is not part of a batch")
     return JSONResponse(status_code=200, content=_batch_response(batch, persisted=True).model_dump(mode="json"))
 
 
 @app.get("/api/v1/runs/{execution_id}/download")
-async def download_run(execution_id: str, _principal=Depends(require(RUNS_EXPORT))) -> FileResponse:
-    path = service.output_path(execution_id)
-    if not path.is_file():
+async def download_run(execution_id: str, _principal=Depends(require(RUNS_EXPORT)),
+                       access: Access = Depends(tenant_access)) -> FileResponse:
+    """The run's XLSX from the caller's own organization directory (ADR-056).
+
+    Files are partitioned by organization, so this needs no store: another
+    organization's run is not in this directory, whatever its id.
+    """
+    try:
+        path = service.output_path(access.scope.organization_id, execution_id)
+    except ValueError:  # not a single path component: never a run (no detail)
+        raise HTTPException(status_code=404, detail="unknown or expired execution_id") from None
+    # The resolved file must still be inside this organization's directory: a
+    # symlink (in the run directory or as the run directory) never leads out.
+    organization_dir = (service.storage_dir() / access.scope.organization_id).resolve()
+    if not path.is_file() or not path.resolve().is_relative_to(organization_dir):
         raise HTTPException(status_code=404, detail="unknown or expired execution_id")
     return FileResponse(
         path,
@@ -686,22 +802,15 @@ async def download_run(execution_id: str, _principal=Depends(require(RUNS_EXPORT
     )
 
 
-def _require_execution_run_store() -> ExecutionRunStore:
-    store = _execution_run_store()
-    if store is None:
-        raise HTTPException(
-            status_code=500,
-            detail="this endpoint requires JUVAL_EXECUTION_STORE/JUVAL_EXECUTION_DB_PATH to be configured",
-        )
-    return store
 
 
 @app.get("/api/v1/runs", response_model=RunsListResponse)
 async def list_runs(
     limit: int = Query(_RUNS_LIST_DEFAULT_LIMIT, ge=1, le=_RUNS_LIST_MAX_LIMIT),
     _principal=Depends(require(RUNS_READ)),
+    access: Access = Depends(tenant_access),
 ) -> JSONResponse:
-    store = _require_execution_run_store()
+    store = _scoped_store(access)  # only this organization's runs, and counts of only those
     runs = store.list_execution_runs(limit=limit)
     decisions = store.decision_counts([r.execution_id for r in runs])
     response = RunsListResponse(items=[service.run_to_summary(r, decisions.get(r.execution_id)) for r in runs])
@@ -709,11 +818,9 @@ async def list_runs(
 
 
 @app.get("/api/v1/runs/{execution_id}", response_model=RunSummaryOut)
-async def get_run(execution_id: str, _principal=Depends(require(RUNS_READ))) -> JSONResponse:
-    store = _require_execution_run_store()
-    run = store.load_execution_run(execution_id)
-    if run is None:
-        raise HTTPException(status_code=404, detail="unknown execution_id")
+async def get_run(execution_id: str, _principal=Depends(require(RUNS_READ)),
+                  authorized: AuthorizedRun = Depends(_RUN)) -> JSONResponse:
+    store, run = authorized.store, authorized.run
     response = service.run_to_summary(run, store.decision_counts([execution_id]).get(execution_id))
     return JSONResponse(status_code=200, content=response.model_dump(mode="json"))
 
@@ -738,12 +845,9 @@ async def get_run_records(
     provenance_status: Optional[Literal["VERIFIED", "INFERRED", "NOT_FOUND", "INVALID"]] = None,
     review_classification: Optional[Literal["PENDING_DEMAND_VERIFICATION"]] = None,
     _principal=Depends(require(RUNS_READ)),
+    authorized: AuthorizedRun = Depends(_RUN),
 ) -> JSONResponse:
-    store = _require_execution_run_store()
-    run = store.load_execution_run(execution_id)
-    if run is None:
-        raise HTTPException(status_code=404, detail="unknown execution_id")
-
+    store = authorized.store
     page = store.list_records(
         execution_id,
         RecordSnapshotQuery(limit=limit, offset=offset, search=search, brand=brand, decision=decision, sort=sort, direction=direction, min_roi=min_roi, min_profit=min_profit, min_margin=min_margin, confidence=confidence, hazmat=hazmat, bulky=bulky, provenance_field=provenance_field, provenance_status=provenance_status, review_classification=review_classification),
@@ -778,10 +882,9 @@ async def export_filtered_records(
     provenance_status: Optional[Literal["VERIFIED", "INFERRED", "NOT_FOUND", "INVALID"]] = None,
     review_classification: Optional[Literal["PENDING_DEMAND_VERIFICATION"]] = None,
     _principal=Depends(require(RUNS_EXPORT)),
+    authorized: AuthorizedRun = Depends(_RUN),
 ) -> Response:
-    store = _require_execution_run_store()
-    if store.load_execution_run(execution_id) is None:
-        raise HTTPException(status_code=404, detail="unknown execution_id")
+    store = authorized.store
     query = _query_from_params(search=search, brand=brand, decision=decision, sort=sort, direction=direction, min_roi=min_roi, min_profit=min_profit, min_margin=min_margin, confidence=confidence, hazmat=hazmat, bulky=bulky, provenance_field=provenance_field, provenance_status=provenance_status, review_classification=review_classification, limit=_EXPORT_MAX_RECORDS)
     page = store.list_records(execution_id, query)
     workbook = openpyxl.Workbook()
@@ -819,6 +922,7 @@ async def get_run_record(
     execution_id: str,
     record_ref: str,
     _principal=Depends(require(RUNS_READ)),
+    authorized: AuthorizedRun = Depends(_RUN_RECORD),
 ) -> JSONResponse:
     """Return one immutable snapshot by ``(execution_id, record_ref)``.
 
@@ -827,21 +931,16 @@ async def get_run_record(
     of ordinal position and run size. It is declared after the literal export
     route so ``export`` cannot be interpreted as a record reference.
     """
-    store = _require_execution_run_store()
-    if store.load_execution_run(execution_id) is None:
-        raise HTTPException(status_code=404, detail="unknown record for execution")
-    snapshot = store.load_record(execution_id, record_ref)
+    snapshot = authorized.store.load_record(execution_id, record_ref)
     if snapshot is None:
         raise HTTPException(status_code=404, detail="unknown record for execution")
     return JSONResponse(status_code=200, content=service.record_out(snapshot).model_dump(mode="json"))
 
 
 @app.get("/api/v1/runs/{execution_id}/analytics", response_model=RunAnalyticsOut)
-async def get_run_analytics(execution_id: str, _principal=Depends(require(RUNS_READ))) -> JSONResponse:
-    store = _require_execution_run_store()
-    if store.load_execution_run(execution_id) is None:
-        raise HTTPException(status_code=404, detail="unknown execution_id")
-    response = RunAnalyticsOut(execution_id=execution_id, **store.get_run_analytics(execution_id))
+async def get_run_analytics(execution_id: str, _principal=Depends(require(RUNS_READ)),
+                            authorized: AuthorizedRun = Depends(_RUN)) -> JSONResponse:
+    response = RunAnalyticsOut(execution_id=execution_id, **authorized.store.get_run_analytics(execution_id))
     return JSONResponse(status_code=200, content=response.model_dump(mode="json"))
 
 
@@ -875,13 +974,12 @@ async def get_run_financial(
     limit: int = Query(_RECORDS_LIST_DEFAULT_LIMIT, ge=1, le=_RECORDS_LIST_MAX_LIMIT),
     offset: int = Query(0, ge=0),
     _principal=Depends(require(RUNS_READ)),
+    authorized: AuthorizedRun = Depends(_RUN),
 ) -> JSONResponse:
     """Stored ADR-047 financial documents and capture diagnostics of a run's
     records, one entry per record snapshot in `record_ref` order (the Catalog
     default), paginated like `/records`. Read-only: nothing is calculated."""
-    store = _require_execution_run_store()
-    if store.load_execution_run(execution_id) is None:
-        raise HTTPException(status_code=404, detail="unknown execution_id")
+    store = authorized.store
     page = store.list_records(execution_id, RecordSnapshotQuery(limit=limit, offset=offset))
     response = RunFinancialResponse(
         execution_id=execution_id,
@@ -897,12 +995,13 @@ async def get_record_financial(
     execution_id: str,
     record_ref: str,
     _principal=Depends(require(RUNS_READ)),
+    authorized: AuthorizedRun = Depends(_RUN_RECORD),
 ) -> JSONResponse:
     """Stored ADR-047 payloads of one `(execution_id, record_ref)`. Unknown run
     and unknown record share the non-enumerating 404 of the record endpoint;
     a known record with nothing stored is 200 with nulls, not 404."""
-    store = _require_execution_run_store()
-    snapshot = store.load_record(execution_id, record_ref) if store.load_execution_run(execution_id) else None
+    store = authorized.store
+    snapshot = store.load_record(execution_id, record_ref)
     if snapshot is None:
         raise HTTPException(status_code=404, detail="unknown record for execution")
     [record] = _financial_out(store, execution_id, [snapshot])

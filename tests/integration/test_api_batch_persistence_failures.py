@@ -201,13 +201,15 @@ def test_sqlite(scenario, env, sqlite_rows, monkeypatch):
 def test_the_endpoint_persists_through_save_batch_with_runs_only(env, monkeypatch):
     """The real atomic path is used: one save_batch_with_runs call per request,
     and neither a per-child save nor a separate batch save."""
+    from juval.application.tenancy import LAB_ORGANIZATION_ID
     from juval.infrastructure.logging.sqlite_execution_run_store import SqliteExecutionRunStore
     calls = []
     original = SqliteExecutionRunStore.save_batch_with_runs
 
-    def spy(self, batch, runs):
+    def spy(self, batch, runs, owner):
+        assert owner.organization_id == LAB_ORGANIZATION_ID  # ADR-056: one owner for batch and children
         calls.append((batch.batch_id, [item.run.execution_id for item in runs]))
-        return original(self, batch, runs)
+        return original(self, batch, runs, owner)
 
     def forbidden(*args, **kwargs):
         raise AssertionError("the batch endpoint must not save child by child")

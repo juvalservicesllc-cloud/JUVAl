@@ -100,12 +100,30 @@ def storage_dir() -> Path:
     return Path(base) / "juval_runs"
 
 
-def run_dir(execution_id: str) -> Path:
-    return storage_dir() / execution_id
+def _path_component(value: str) -> str:
+    if value in ("", ".", "..") or "/" in value or "\\" in value or "\0" in value:
+        raise ValueError("not a run identifier")
+    return value
 
 
-def output_path(execution_id: str) -> Path:
-    return run_dir(execution_id) / "output.xlsx"
+def run_dir(organization_id: str, execution_id: str) -> Path:
+    """The directory of one run: `<storage>/<organization>/<execution_id>`.
+
+    ADR-056: files are partitioned by organization, so a caller can only ever
+    name a file inside its own organization's directory -- another
+    organization's run is simply not there (404), whatever its id. Files from
+    before the partition stay at `<storage>/<execution_id>` and are therefore
+    unreachable (quarantine, OD-3).
+
+    Both values also arrive from URL paths, where a percent-encoded `..` is
+    decoded before routing: anything that is not a single plain path
+    component is refused.
+    """
+    return storage_dir() / _path_component(organization_id) / _path_component(execution_id)
+
+
+def output_path(organization_id: str, execution_id: str) -> Path:
+    return run_dir(organization_id, execution_id) / "output.xlsx"
 
 
 def new_execution_id() -> str:

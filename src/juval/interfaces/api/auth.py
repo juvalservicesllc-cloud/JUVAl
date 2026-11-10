@@ -94,11 +94,21 @@ _JWKS_HTTP_TIMEOUT_SECONDS = 10      # never hang a request on a stalled IdP
 
 @dataclass(frozen=True)
 class Principal:
-    """An authenticated caller and what it is allowed to do."""
+    """An authenticated caller and what it is allowed to do.
+
+    `(issuer, subject)` is the stable identity (ADR-056): `sub` is unique only
+    within its issuer, and it -- never an email or a name -- is what
+    organization memberships are keyed by.
+    """
 
     subject: str
     roles: tuple[str, ...]
     permissions: FrozenSet[str]
+    issuer: str
+
+    def __post_init__(self) -> None:
+        if not self.subject or not self.issuer:
+            raise ValueError("a principal needs a subject and an issuer")
 
     def has(self, permission: str) -> bool:
         return permission in self.permissions
@@ -107,7 +117,8 @@ class Principal:
 # The only principal that exists without a credential (ADR-055). It is returned
 # solely by the loopback lab mode, and only for a request that passes
 # `lab_request_allowed`; no OIDC code path can produce it.
-_LAB_PRINCIPAL = Principal(subject="local-lab-unauthenticated", roles=(), permissions=ALL_PERMISSIONS)
+_LAB_PRINCIPAL = Principal(subject="local-lab-unauthenticated", roles=(), permissions=ALL_PERMISSIONS,
+                           issuer="urn:juval:local-lab")
 
 
 class KeyResolver(Protocol):
@@ -135,6 +146,11 @@ class TokenVerifier:
         self._audience = audience
         self._key_resolver = key_resolver
         self._roles_claim = roles_claim
+
+    @property
+    def issuer(self) -> str:
+        """The only issuer this verifier accepts; BFF sessions inherit it."""
+        return self._issuer
 
     @property
     def roles_claim(self) -> str:
@@ -168,7 +184,8 @@ class TokenVerifier:
             *(ROLE_PERMISSIONS.get(role, frozenset()) for role in roles)
         ) if roles else frozenset()
 
-        return Principal(subject=str(claims["sub"]), roles=tuple(roles), permissions=permissions)
+        return Principal(subject=str(claims["sub"]), roles=tuple(roles), permissions=permissions,
+                         issuer=str(claims["iss"]))
 
 
 def _invalid_token() -> HTTPException:

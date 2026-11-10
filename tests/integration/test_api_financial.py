@@ -22,9 +22,9 @@ from juval.domain.financial_dependencies import FinancialResult
 from juval.domain.financial_evidence import FinancialTerm as T
 from juval.interfaces.api import main as api
 from juval.interfaces.api.main import app
-from .api_lab import LOOPBACK
+from .api_lab import LOOPBACK, add_member, assign_to_lab
 
-from .test_api_auth import bearer, enable_auth, keypair, make_token  # noqa: F401 (fixtures)
+from .test_api_auth import ISSUER, bearer, enable_auth, keypair, make_token  # noqa: F401 (fixtures)
 from .test_cli_native_financial import FINANCIAL, cli_run, fixed_now, refs, row  # noqa: F401 (fixture)
 from .test_native_financial_capture import BASE, declared
 
@@ -58,6 +58,7 @@ def db(tmp_path, monkeypatch):
     monkeypatch.setenv("JUVAL_RUN_STORAGE_DIR", str(tmp_path))
     monkeypatch.delenv("JUVAL_EXECUTION_STORE", raising=False)
     monkeypatch.setenv("JUVAL_EXECUTION_DB_PATH", str(tmp_path / "runs.db"))
+    assign_to_lab(tmp_path / "runs.db", "run-A", "run-B", "run-L", "run-H", "run-OLD")  # CLI runs are unowned
     return tmp_path / "runs.db", store
 
 
@@ -203,8 +204,14 @@ def test_missing_financial_tables_are_a_503_not_an_empty_answer(db, monkeypatch)
     _, store = db
 
     class Unmigrated:
+        def __init__(self, inner=store):
+            self._inner = inner
+
         def __getattr__(self, name):
-            return getattr(store, name)
+            return getattr(self._inner, name)
+
+        def scoped(self, scope):  # ADR-056: the API reads through a scoped view
+            return Unmigrated(self._inner.scoped(scope))
 
         def load_financial_rows(self, *_):
             raise FinancialStorageUnavailable("financial tables do not exist")
@@ -239,6 +246,7 @@ def test_endpoints_never_write(db):
 
 @pytest.mark.parametrize("path", ["/api/v1/runs/run-A/financial", "/api/v1/runs/run-A/records/x/financial"])
 def test_requires_authentication_and_runs_read(db, enable_auth, keypair, path):
+    add_member(db[0], ISSUER)  # ADR-056: a member of another organization than run-A's
     assert client.get(path).status_code == 401
     assert client.get(path, headers=bearer("not-a-jwt")).status_code == 401
     assert client.get(path, headers=bearer(make_token(keypair, roles=()))).status_code == 403

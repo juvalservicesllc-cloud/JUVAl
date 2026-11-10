@@ -21,7 +21,10 @@ from fastapi.testclient import TestClient
 
 from juval.interfaces.api import main
 from juval.interfaces.api.main import app
-from .api_lab import LOOPBACK
+from juval.application.tenancy import LAB_ORGANIZATION_ID, TenantScope
+from juval.interfaces.api import auth
+
+from .api_lab import LOOPBACK, lab_run_dir
 
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "sample_sourcing_TEST_DATA.xlsx"
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -71,6 +74,9 @@ async def _build(run_id, **query):
     params = dict(search=None, brand=None, decision=None, sort="record_ref", direction="asc", min_roi=None,
                   min_profit=None, min_margin=None, confidence="VERIFIED_ONLY", hazmat=None, bulky=None,
                   provenance_field=None, provenance_status=None, review_classification=None, _principal=None)
+    # ADR-056: resolved by the route's own run-in-scope dependency, as FastAPI would.
+    access = main.Access(auth._LAB_PRINCIPAL, TenantScope(LAB_ORGANIZATION_ID))
+    params["authorized"] = main._RUN(run_id, access=access)
     return await main.export_filtered_records(run_id, **{**params, **query})
 
 
@@ -143,7 +149,7 @@ def test_export_leaves_no_shared_file_in_the_run_directory(client, run_id, tmp_p
     client.get(f"/api/v1/runs/{run_id}/records/export", params={"decision": "REVIEW"})
     client.get(f"/api/v1/runs/{run_id}/records/export", params={"decision": "PASS"})
 
-    run_dir = tmp_path / "juval_runs" / run_id
+    run_dir = lab_run_dir(tmp_path, run_id)
     assert sorted(p.name for p in run_dir.iterdir()) == ["output.xlsx"]
 
 
@@ -165,4 +171,4 @@ def test_run_download_is_unchanged(client, run_id, tmp_path):
     assert response.headers["content-type"] == XLSX
     assert response.headers["content-disposition"] == f'attachment; filename="{run_id}.xlsx"'
     assert response.headers["accept-ranges"] == "bytes"
-    assert response.content == (tmp_path / "juval_runs" / run_id / "output.xlsx").read_bytes()
+    assert response.content == (lab_run_dir(tmp_path, run_id) / "output.xlsx").read_bytes()

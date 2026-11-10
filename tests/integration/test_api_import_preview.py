@@ -14,9 +14,9 @@ from fastapi.testclient import TestClient
 from juval.application.import_preview import PREVIEW_ISSUE_LIMIT, preview_import
 from juval.infrastructure.excel.importer import import_file
 from juval.interfaces.api.main import app
-from .api_lab import LOOPBACK
+from .api_lab import LOOPBACK, add_member
 
-from .test_api_auth import bearer, enable_auth, keypair, make_token  # noqa: F401 (fixtures)
+from .test_api_auth import ISSUER, bearer, enable_auth, keypair, make_token  # noqa: F401 (fixtures)
 
 NOW = datetime(2026, 10, 26, tzinfo=timezone.utc)
 HEADERS = ["SKU", "Marketplace", "ASIN", "Cost", "Brand", "brand", "Mystery Column", "", "fin_currency"]
@@ -151,7 +151,8 @@ def test_uploaded_filename_is_sanitized(client):
     assert body["input_filename"] == "su_p_plier.csv"
 
 
-def test_preview_needs_the_permission_to_create_runs(enable_auth, keypair, client):  # noqa: F811
+def test_preview_needs_the_permission_to_create_runs(enable_auth, keypair, client, tmp_path):  # noqa: F811
+    add_member(tmp_path / "runs.db", ISSUER)  # ADR-056: preview is a data route too
     assert preview(client, csv_bytes()).status_code == 401
     viewer = make_token(keypair, roles=("viewer",))
     assert preview(client, csv_bytes(), headers=bearer(viewer)).status_code == 403

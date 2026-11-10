@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 
 from juval.infrastructure.logging.sqlite_execution_run_store import SqliteExecutionRunStore
 from juval.interfaces.api.main import app
-from .api_lab import LOOPBACK
+from .api_lab import LAB_OWNER, LOOPBACK, lab_run_dir
 
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "sample_sourcing_TEST_DATA.xlsx"
 
@@ -374,7 +374,7 @@ def test_unknown_execution_id_returns_404(client):
 def test_uploaded_input_file_is_deleted_after_processing(client, tmp_path):
     resp = _upload(client)
     execution_id = resp.json()["execution_id"]
-    run_dir = tmp_path / "juval_runs" / execution_id
+    run_dir = lab_run_dir(tmp_path, execution_id)
     assert not (run_dir / "input.xlsx").exists()
     assert (run_dir / "output.xlsx").exists()
 
@@ -500,7 +500,7 @@ def test_old_snapshot_missing_new_fields_still_loads(client, tmp_path):
     }
     store = SqliteExecutionRunStore(tmp_path / "execution_runs.db")
     run = _run_without_records()
-    store.save_execution_run(run, records=[old_shape_snapshot])
+    store.save_execution_run(run, records=[old_shape_snapshot], owner=LAB_OWNER)
 
     resp = client.get(f"/api/v1/runs/{run.execution_id}/records")
 
@@ -519,7 +519,7 @@ def test_old_snapshot_missing_new_fields_still_loads(client, tmp_path):
 
 def test_get_run_records_for_run_with_no_persisted_records_returns_empty_list(client, tmp_path):
     store = SqliteExecutionRunStore(tmp_path / "execution_runs.db")
-    store.save_execution_run(_run_without_records())
+    store.save_execution_run(_run_without_records(), owner=LAB_OWNER)
 
     resp = client.get(f"/api/v1/runs/{_run_without_records().execution_id}/records")
 
@@ -612,7 +612,7 @@ def test_runs_list_and_run_detail_carry_the_stored_decision_counts(client):
 
 def test_run_without_stored_records_has_null_decisions_not_zeros(client, tmp_path):
     store = SqliteExecutionRunStore(tmp_path / "execution_runs.db")
-    store.save_execution_run(_run_without_records())
+    store.save_execution_run(_run_without_records(), owner=LAB_OWNER)
     run_id = _run_without_records().execution_id
 
     listed = {item["execution_id"]: item for item in client.get("/api/v1/runs").json()["items"]}

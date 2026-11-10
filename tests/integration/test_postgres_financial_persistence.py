@@ -42,7 +42,7 @@ from juval.domain.provenance import VerificationStatus  # noqa: E402
 from juval.infrastructure.logging.sqlite_execution_run_store import SqliteExecutionRunStore  # noqa: E402
 from juval.infrastructure.persistence.supabase_execution_run_store import SupabaseExecutionRunStore  # noqa: E402
 
-from .api_lab import LOOPBACK  # noqa: E402
+from .api_lab import LAB_OWNER, LOOPBACK  # noqa: E402
 from .test_cli_native_financial import FINANCIAL, cli_run, fixed_now, refs  # noqa: E402,F401 (fixture)
 from .test_cli_native_financial import row as cli_row  # noqa: E402
 from .test_financial_persistence import build, row  # noqa: E402
@@ -106,6 +106,16 @@ def prior_dsn(cluster):
 def dsn(prior_dsn):
     apply(prior_dsn, NEW)
     return prior_dsn
+
+
+@pytest.fixture
+def ownership(dsn):
+    """ADR-056 ownership columns (20261110000008): the API writes owned runs,
+    which reference a real organization -- here the lab's, disposable only."""
+    apply(dsn, "20261110000008_tenant_ownership")
+    with psycopg.connect(dsn) as conn:
+        conn.execute("INSERT INTO organizations VALUES (%s, 'loopback lab', now(), 'test-fixture')",
+                     ("00000000-0000-4000-8000-000000000001",))
 
 
 @pytest.fixture
@@ -349,12 +359,13 @@ def test_stored_documents_leave_the_commercial_snapshot_untouched(tmp_path, stor
 
 # -- Read-only API over PostgreSQL -------------------------------------------------------
 
+@pytest.mark.usefixtures("ownership")
 def test_financial_api_reads_postgres_and_reports_a_missing_migration(tmp_path, dsn, store, monkeypatch, auth_lab):
     from fastapi.testclient import TestClient
     from juval.interfaces.api.main import app
 
     result, snapshots, [document] = build(tmp_path, [row("A")])
-    save_run_with_financial_records(store, result.run, snapshots, [document])
+    save_run_with_financial_records(store, result.run, snapshots, [document], owner=LAB_OWNER)
     ref = document.evidence.record_reference
     monkeypatch.setenv("JUVAL_RUN_STORAGE_DIR", str(tmp_path))
     monkeypatch.setenv("JUVAL_EXECUTION_STORE", "supabase")
@@ -371,6 +382,7 @@ def test_financial_api_reads_postgres_and_reports_a_missing_migration(tmp_path, 
         assert response.json() == {"detail": "financial persistence is not available on this deployment"}
 
 
+@pytest.mark.usefixtures("ownership")
 def test_api_writes_and_batch_reads_financial_documents_on_postgres(tmp_path, dsn, store, monkeypatch, auth_lab):
     """POST (native flow) -> PostgreSQL -> GET, with a constant connection count
     per page and a failing financial write leaving nothing behind."""
@@ -421,6 +433,7 @@ def test_api_writes_and_batch_reads_financial_documents_on_postgres(tmp_path, ds
     assert store.load_execution_run("pg-api-2") is None and store.load_records("pg-api-2") == []
 
 
+@pytest.mark.usefixtures("ownership")
 def test_batch_children_store_their_own_documents_on_postgres(tmp_path, dsn, store, monkeypatch, auth_lab):
     """POST /api/v1/batches with the ADR-047 opt-in -> PostgreSQL: each child run
     holds only its own documents, the batch groups them, and a failing financial
@@ -505,6 +518,7 @@ def _endpoint_scenarios():
 
 
 @pytest.mark.parametrize("scenario", _endpoint_scenarios(), ids=lambda s: s.__name__)
+@pytest.mark.usefixtures("ownership")
 def test_batch_endpoint_atomicity_on_postgres(scenario, tmp_path, dsn, store, monkeypatch, auth_lab):
     from datetime import datetime, timezone
 

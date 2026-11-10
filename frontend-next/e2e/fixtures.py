@@ -73,6 +73,14 @@ def build(directory: Path) -> None:
         book.save(directory / name)
 
 
+def _lab_owner():
+    """ADR-056: the loopback lab reads only its own synthetic organization; a
+    seeded run without this owner would be quarantined like real history."""
+    from juval.application.tenancy import LAB_ORGANIZATION_ID, Ownership
+
+    return Ownership(LAB_ORGANIZATION_ID, "urn:juval:local-lab", "local-lab-unauthenticated")
+
+
 def seed_history(db: Path) -> None:
     from juval.domain.execution_run import ExecutionRun, ExecutionStatus
     from juval.infrastructure.logging.sqlite_execution_run_store import SqliteExecutionRunStore
@@ -89,7 +97,7 @@ def seed_history(db: Path) -> None:
         "decision_reasons": ["DEMAND_UNKNOWN: Estimated monthly sales could not be determined."], "issue_count": 0, "issues": [],
     }
     run = ExecutionRun("e2e-historical", at, at, ExecutionStatus.SUCCESS, "historical.xlsx", "e2e-hash", "pre-d7", 1, 1, 1, 0, 0)
-    SqliteExecutionRunStore(db).save_execution_run(run, [snapshot])
+    SqliteExecutionRunStore(db).save_execution_run(run, [snapshot], owner=_lab_owner())
 
 
 def dump(path: Path) -> None:
@@ -138,7 +146,7 @@ def seed_buy(db: Path) -> None:
         "issue_count": 0, "issues": [], "issue_codes": [],
     }
     run = ExecutionRun("e2e-seeded-buy", at, at, ExecutionStatus.SUCCESS, "E2E synthetic BUY snapshot", "e2e-synthetic-hash", "e2e-render-only", 1, 1, 1, 0, 0)
-    SqliteExecutionRunStore(db).save_execution_run(run, [snapshot])
+    SqliteExecutionRunStore(db).save_execution_run(run, [snapshot], owner=_lab_owner())
 
 
 if __name__ == "__main__":

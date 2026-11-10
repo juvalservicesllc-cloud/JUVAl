@@ -27,9 +27,9 @@ from juval.infrastructure.logging import sqlite_execution_run_store as sqlite_mo
 from juval.interfaces.api import main as api
 from juval.interfaces.api import service
 from juval.interfaces.api.main import app
-from .api_lab import LOOPBACK
+from .api_lab import LOOPBACK, add_member
 
-from .test_api_auth import bearer, enable_auth, keypair, make_token  # noqa: F401 (fixtures)
+from .test_api_auth import ISSUER, bearer, enable_auth, keypair, make_token  # noqa: F401 (fixtures)
 from .test_cli_native_financial import row
 from .test_native_financial_capture import BASE, declared, xlsx
 
@@ -219,6 +219,7 @@ def test_a_page_costs_the_same_connections_whatever_its_size(env, monkeypatch):
 def test_post_requires_runs_create_and_get_requires_runs_read(env, enable_auth, keypair):
     path = xlsx(env, *ROWS)
     assert post(path, **NATIVE).status_code == 401
+    add_member(env / "api.db", ISSUER)  # ADR-056: one organization for this test identity
     viewer = bearer(make_token(keypair, roles=("viewer",)))
     with open(path, "rb") as handle:
         refused = client.post("/api/v1/runs", headers=viewer, data={"thresholds": THRESHOLDS, "fees": FEES, **NATIVE},

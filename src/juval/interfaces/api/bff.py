@@ -631,10 +631,15 @@ def principal_from_session(request: Request) -> Optional[Principal]:
     session = _session_from_request(request)
     if session is None:
         return None
+    # Sessions are created only from ID tokens this instance's verifier
+    # accepted, and it pins exactly one issuer (ADR-055 §7), so the session's
+    # issuer is that one (ADR-056 stable identity). Changing the issuer
+    # therefore requires revoking every stored session first.
     return Principal(
         subject=session.subject,
         roles=session.roles,
         permissions=_permissions_for(session.roles),
+        issuer=auth_module.installed_settings(request.app).verifier.issuer,
     )
 
 

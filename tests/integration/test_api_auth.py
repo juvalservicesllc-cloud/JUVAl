@@ -212,14 +212,25 @@ def test_viewer_may_read(enable_auth, keypair):
     assert client.get("/api/v1/runs", headers=bearer(token)).status_code not in (401, 403)
 
 
-def test_operator_may_read_and_export(enable_auth, keypair):
+@pytest.fixture
+def member_store(tmp_path, monkeypatch):
+    """ADR-056: under OIDC, data routes need a store holding the caller's membership."""
+    from .api_lab import add_member
+
+    monkeypatch.delenv("JUVAL_EXECUTION_STORE", raising=False)
+    monkeypatch.setenv("JUVAL_EXECUTION_DB_PATH", str(tmp_path / "runs.db"))
+    monkeypatch.setenv("JUVAL_RUN_STORAGE_DIR", str(tmp_path / "storage"))
+    add_member(tmp_path / "runs.db", ISSUER)
+
+
+def test_operator_may_read_and_export(enable_auth, keypair, member_store):
     token = make_token(keypair, roles=("operator",))
     assert client.get("/api/v1/runs", headers=bearer(token)).status_code not in (401, 403)
     # 404 (unknown id) proves authorization passed and the handler ran.
     assert client.get("/api/v1/runs/some-id/download", headers=bearer(token)).status_code == 404
 
 
-def test_admin_has_every_permission(enable_auth, keypair):
+def test_admin_has_every_permission(enable_auth, keypair, member_store):
     token = make_token(keypair, roles=("admin",))
     assert client.get("/api/v1/runs", headers=bearer(token)).status_code not in (401, 403)
     assert client.get("/api/v1/runs/some-id/download", headers=bearer(token)).status_code == 404

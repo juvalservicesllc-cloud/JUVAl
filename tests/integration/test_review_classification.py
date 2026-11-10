@@ -23,7 +23,7 @@ from juval.domain.decision import Thresholds
 from juval.domain.risk import Severity
 from juval.infrastructure.logging.sqlite_execution_run_store import SqliteExecutionRunStore
 from juval.interfaces.api.main import app
-from .api_lab import LOOPBACK
+from .api_lab import LAB_OWNER, LOOPBACK
 
 from .test_record_snapshot_pagination import FIXTURE, FEES, THRESHOLDS, run, snapshot
 
@@ -68,7 +68,7 @@ def refs(store, **query):
 
 def test_sqlite_filter_selects_exactly_what_the_definition_selects(tmp_path):
     store = SqliteExecutionRunStore(tmp_path / "runs.db")
-    store.save_execution_run(run(), classification_records())
+    store.save_execution_run(run(), classification_records(), owner=LAB_OWNER)
     assert refs(store, review_classification=PENDING_DEMAND_VERIFICATION) == EXPECTED_PENDING
     assert EXPECTED_PENDING == [r["record_ref"] for r in classification_records() if review_classification(r) == PENDING_DEMAND_VERIFICATION]
     assert refs(store, review_classification=PENDING_DEMAND_VERIFICATION, search="Widget 6") == ["row_06"]   # combines
@@ -78,7 +78,7 @@ def test_sqlite_filter_selects_exactly_what_the_definition_selects(tmp_path):
 
 def test_sqlite_analytics_counts_pending_and_unclassifiable_reviews(tmp_path):
     store = SqliteExecutionRunStore(tmp_path / "runs.db")
-    store.save_execution_run(run(), classification_records())
+    store.save_execution_run(run(), classification_records(), owner=LAB_OWNER)
     analytics = store.get_run_analytics("run-page")
     assert analytics["review_classification"] == {"pending_demand_verification": 2, "review_not_classifiable": 1}
     assert analytics["decisions"] == {"REVIEW": 5, "PASS": 1, "BUY": 1}   # decisions are only counted, never altered
@@ -165,7 +165,7 @@ def test_unfiltered_export_labels_rows_without_changing_their_decision(client):
 
 def test_historical_snapshots_keep_their_decision_and_are_not_classified(client, tmp_path):
     store = SqliteExecutionRunStore(tmp_path / "runs.db")
-    store.save_execution_run(run(), classification_records())
+    store.save_execution_run(run(), classification_records(), owner=LAB_OWNER)
     record = client.get("/api/v1/runs/run-page/records/row_04").json()
     assert record["decision"] == "REVIEW"
     assert record["decision_reason_codes"] is None
@@ -178,6 +178,6 @@ def test_historical_snapshots_keep_their_decision_and_are_not_classified(client,
 
 @pytest.mark.parametrize("path", ["records", "records/export"])
 def test_only_the_pending_demand_classification_is_accepted(client, tmp_path, path):
-    SqliteExecutionRunStore(tmp_path / "runs.db").save_execution_run(run(), classification_records())
+    SqliteExecutionRunStore(tmp_path / "runs.db").save_execution_run(run(), classification_records(), owner=LAB_OWNER)
     for value in ("NOT_CLASSIFIABLE", "BUY", "pending"):
         assert client.get(f"/api/v1/runs/run-page/{path}", params={"review_classification": value}).status_code == 422
