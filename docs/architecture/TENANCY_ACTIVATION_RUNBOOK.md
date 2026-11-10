@@ -14,41 +14,49 @@ propietario (**OWNER**) sobre infraestructura real, en el orden indicado. Ante
 cualquier comprobación fallida: **parar** y aplicar §9 (recuperación
 fail-closed). Ningún paso usa credenciales en la línea de comandos ni en Git.
 
-## 0. Secuencia de activación (SEC-01E)
+## 0. Plan de producción en orden de dependencias (SEC-01F)
 
-La secuencia propuesta (backup → rol → identidad → sesiones → 08 → 09 →
-aprovisionamiento → RLS → despliegue → aislamiento → GO/NO-GO) se validó contra
-las dependencias reales del código y de ADR-036/048/055/056. Resultado: **tres
-ajustes**.
+Orden propuesto (revisión/backup → rol → TLS → migraciones → FusionAuth →
+dominios/cookies → aprovisionamiento → despliegue → BOLA → operación →
+GO/NO-GO) contrastado con el código y ADR-036/038/048/055/056. Ajustes
+respecto a esa lista:
 
-1. Falta un paso previo al rol: ADR-048 (migración 07) **no consta aplicada** en
-   remoto y la 09 la exige (12 políticas). Su estado y el de 04–06 hay que
-   reconciliarlo (ledger + catálogo) antes de nada.
-2. «Verificar sesiones BFF» no puede completarse antes del despliegue. Se
-   divide en una parte previa (esquema y rol, sin backend) y una funcional
-   (login, logout y revocación reales), que va tras el despliegue.
-3. La validación RLS se divide igual: estructura justo tras la 09 y
-   comportamiento tras el aprovisionamiento.
+1. **Dominios antes que FusionAuth.** El emisor (`https://id.<dominio>`), el
+   `redirect_uri` del callback, el destino post-logout, CORS y el host de las
+   cookies dependen del dominio (ADR-038). Configurar FusionAuth antes
+   obligaría a cambiar el emisor después, y eso exige revocar todas las
+   sesiones y rehacer las membresías (claves `(iss, sub)`).
+2. **Reconciliar el ledger y crear el rol antes que todo cambio de esquema.**
+   La 09 exige la 07 y el rol (ADR-048: el rol se crea fuera de banda antes de
+   las migraciones que lo referencian).
+3. **TLS se valida dos veces:** como conexión (`verify-full` con el CA, paso 4)
+   antes de migrar, y en el arranque del backend (que aborta sin
+   `verify-full`), paso 9.
+4. **Sesiones y RLS se verifican en dos partes:** estructura antes del
+   despliegue, comportamiento después (no hay backend que las ejerza antes).
 
-| Paso | Acción (OWNER) | Depende de | Evidencia que lo cierra |
-|---|---|---|---|
-| 1 | Backup verificado (§1) | — | restauración en base desechable con recuentos |
-| 2a | Reconciliar ledger y catálogo remotos de 00–07 (ADR-048 §Migration Rules) | 1 | lista firmada de migraciones realmente aplicadas |
-| 2b | Rol `juval_backend` (§2) + prueba de conexión por Supavisor (ADR-048) | 2a; 07 aplicada | consultas §2 = `f,f,f,f,f,f,t`, 0 membresías |
-| 3 | Identidad: `verify_oidc.py` con token de prueba (§6) | ninguna (puede ir en paralelo a 1–2) | todo PASS; `iss`/`sub` exactos anotados |
-| 4a | Sesiones, parte previa: 04 aplicada, llavero en el gestor de secretos, `session_migration_preflight.py --check-database` | 2b | PASS sin leer filas |
-| 5 | Migración 08 (§4) | 1, 2a; backend sin conexión | transacción confirmada |
-| 6 | Migración 09 (§4) | 5, 2b | postcondiciones de la propia migración |
-| 8a | RLS, estructura: consultas de verificación §4 | 6 | 0 políticas `true`; `organizations` sin `SELECT` para el runtime |
-| 7 | Aprovisionamiento (§5) con DSN administrativo | 5, 3 (`iss`/`sub`) | líneas de auditoría archivadas |
-| 8b | RLS, comportamiento: como `juval_backend`, sin GUC → 0 filas; con el GUC de la org A sólo filas de A (ninguna de otra org ni histórica NULL). La RLS confía en la org que fija el backend: no protege de un backend comprometido (ADR-056) | 7 | resultado anotado |
-| 9 | Despliegue controlado (§8) | 3, 4a, 6, 7, 8a/8b, secretos (§11) | arranque OK (si falla, aborta: ADR-036/055) |
-| 4b | Sesiones, parte funcional: login, `/session`, logout, cookie revocada → no autenticado, segundo login revoca el primero, reinicio conserva la sesión | 9 | checklist anotada |
-| 10 | Aislamiento (§7) | 9, 7 | checklist §7 |
-| 11 | Decisión GO/NO-GO (abajo) | todo | firma del propietario |
+Cada paso deja el sistema **cerrado** si falla: backend sin conexión, `503`/
+`401`/`403`/`404`, nunca acceso abierto (§9).
 
-Cualquier fallo: §9 (backend sin conexión). Nunca saltarse la división 4a/4b
-ni 8a/8b para «ganar tiempo».
+| # | Paso (OWNER salvo indicación) | Depende de | Evidencia que lo cierra | Si falla |
+|---|---|---|---|---|
+| 0 | Decisiones del propietario §12 (dominio, TTL/refresh FusionAuth, destino de logs y alertas, rol `juval_tenancy_admin`) | — | decisiones escritas | no empezar |
+| 1 | Revisión y publicación de los commits SEC-01C/D/E/F; backup gestionado + `pg_dump` cifrado y restauración de prueba (§1); reconciliación de ledger y catálogo 00–07 | 0 | restauración con recuentos; lista de migraciones aplicadas | no tocar nada |
+| 2 | Dominios: DNS y certificados de `app.`, `api.`, `id.<dominio>` (ADR-038); túnel de identidad (ADR-031) | 0 | HTTPS válido en los tres hosts | sin dominio no hay emisor estable |
+| 3 | Rol `juval_backend` creado fuera de banda; migraciones 04–07 que falten según el ledger; verificación §2 | 1 | §2 = `f,f,f,f,f,f,t`, 0 membresías | la 07/09 abortan por sus precondiciones |
+| 4 | TLS: CA de Supabase, DSN `verify-full` para runtime (por Supavisor) y administrativo (§11.1); conexión de prueba como `juval_backend`; `session_migration_preflight.py --check-database` | 3 | conexión OK; preflight PASS | el arranque abortaría |
+| 5 | Migraciones 08 → 09 como `postgres`, backend sin conexión (§4); verificación estructural §4 | 1, 3, 4 | postcondiciones + 0 políticas `true` | rollback §8 (09 restaura ADR-048) |
+| 6 | FusionAuth: emisor `https://id.<dominio>`, aplicación (client id/secret), `redirect_uri` exacto `https://api.<dominio>/api/v1/auth/callback`, logout a `https://app.<dominio>/`, roles `viewer`/`operator`/`admin`, JWT TTL corto, refresh + `offline_access` (decisión §12); `verify_oidc.py --token-env` con un usuario de prueba (§6) | 2 | todo PASS; `iss`/`sub` exactos | 401 en login; nada abierto |
+| 7 | Aprovisionamiento: organización interna y miembros (§5) con el DSN administrativo; RLS de comportamiento como `juval_backend` | 5, 6 | líneas de auditoría; sin GUC → 0 filas | 403 para quien falte |
+| 8 | Despliegue controlado: backend (Railway, `JUVAL_AUTH_MODE=oidc`, secretos §11, CORS exacto, `JUVAL_BFF_POST_LOGIN/LOGOUT_REDIRECT` absolutos a `app.`) y frontend (Vercel, `VITE_API_BASE_URL=https://api.<dominio>`, Codex) | 4–7 | `/healthz` 200; arranque sin `startup.failed` | el proceso no arranca (fail-closed) |
+| 9 | Cookies y sesiones en navegador real: `Secure`/`HttpOnly`/`Lax`/host-only, login con `return_to`, logout + end-session, inactividad, segundo login revoca el primero | 8 | checklist anotada | backend sin conexión |
+| 10 | Pruebas BOLA y de aislamiento (§7) con identidades de prueba de dos organizaciones y una sin membresía; cambio de rol y `revoke-sessions` | 8, 7 | checklist §7 completa | §9 |
+| 11 | Validación operativa: eventos `juval.security` llegan al destino, reglas §11.2 disparan con un caso sintético, simulacro de `revoke-sessions --all` y de rollback leído | 8 | evidencia por regla | NO-GO |
+| 12 | Decisión GO/NO-GO (abajo) | todo | firma del propietario | — |
+
+El mismo flujo, con identidad, base y backend sintéticos, se ejecuta en local
+con `tools/integration_lab.py --check` (23 comprobaciones; ver
+`LOCAL_INTEGRATION_ENVIRONMENT.md`): es el ensayo de los pasos 7–10.
 
 ### Criterios GO / NO-GO de producción
 
@@ -317,3 +325,43 @@ migración ausente o incompleta en el arranque aparece como `startup.failed`
 `stage=sessions` (comprobación de esquema de ADR-036/048). Destino de logs y
 canal de alertas: PENDING del propietario; no se envía nada a servicios
 externos.
+
+## 12. Matriz de dependencias de activación (SEC-01F)
+
+Clasificación al 2026-11-10: **VERIFIED_LOCAL** = implementado y probado en
+este repositorio (incluido el entorno de integración); **REQUIRES_INFRASTRUCTURE**
+= sólo verificable sobre servicios reales; **REQUIRES_OWNER_DECISION** = falta
+una decisión; **BLOCKED** = depende de otro elemento no resuelto.
+
+| Área | Requisito | Estado | Evidencia / bloqueo |
+|---|---|---|---|
+| FusionAuth | Verificador RS256, `iss`/`aud`/`exp`, JWKS con caché acotada y rotación | VERIFIED_LOCAL | `test_verify_oidc.py`, `integration_lab.py --check` |
+| FusionAuth | Emisor real `https://id.<dominio>` y aplicación configurada | BLOCKED | depende del dominio |
+| FusionAuth | JWT TTL y refresh tokens (`offline_access`) | REQUIRES_OWNER_DECISION | sin refresh, sesión = 1 TTL |
+| FusionAuth | `verify_oidc.py` contra el emisor real con token de prueba | BLOCKED | emisor real |
+| PostgreSQL | Esquema 00–09, RLS por organización, rol runtime sin privilegios | VERIFIED_LOCAL | PG16 desechable; `test_postgres_tenant_isolation.py` |
+| PostgreSQL | Ledger y catálogo de Supabase reconciliados; 04–07 aplicadas | REQUIRES_INFRASTRUCTURE | paso 1/3 |
+| PostgreSQL | `juval_backend` real y conexión por Supavisor | REQUIRES_INFRASTRUCTURE | ADR-048 |
+| PostgreSQL | Versión remota PG17 (`MAINTAIN`) | REQUIRES_INFRASTRUCTURE | sólo PG16 probado |
+| PostgreSQL | Rol administrativo dedicado `juval_tenancy_admin` | REQUIRES_OWNER_DECISION | §3 |
+| TLS | `verify-full` exigido en arranque y herramienta | VERIFIED_LOCAL | `test_postgres_tls.py` |
+| TLS | CA de Supabase instalado y DSN reales | REQUIRES_INFRASTRUCTURE | §11.1 |
+| TLS | Certificados de `app.`/`api.`/`id.` | BLOCKED | dominio |
+| Dominios | Dominio registrable propio (ADR-038) | REQUIRES_OWNER_DECISION | `HUMAN_DOMAIN_SELECTION_PENDING` |
+| Cookies | `Secure`, `HttpOnly`, `Lax`, host-only, revocación en login/logout | VERIFIED_LOCAL | tests BFF; `integration_lab.py` |
+| Cookies | Comportamiento en navegador real con los hosts reales | BLOCKED | dominio |
+| CSRF | Doble envío, precedencia antes de organización | VERIFIED_LOCAL | `test_bff_frontend_contract.py` |
+| Sesiones | Almacén PostgreSQL cifrado, inactividad 30 min, absoluta 8 h, roles frescos | VERIFIED_LOCAL | lab de sesiones; `integration_lab.py` |
+| Sesiones | Llavero `JUVAL_SESSION_ENCRYPTION_KEYS` en el gestor de secretos | REQUIRES_INFRASTRUCTURE | §11 |
+| Membresías | Aislamiento por organización, 403 sin membresía, `remove-member` inmediato | VERIFIED_LOCAL | `test_resource_isolation.py` |
+| Membresías | Organización interna y miembros reales | BLOCKED | `sub` reales tras configurar FusionAuth |
+| Migraciones | 08/09 con pre y postcondiciones, rollback probado | VERIFIED_LOCAL | PG16 desechable |
+| Migraciones | Aplicación en Supabase | REQUIRES_INFRASTRUCTURE | paso 5, tras backup |
+| Backup | Backup gestionado + `pg_dump` cifrado + restauración de prueba | REQUIRES_INFRASTRUCTURE | §1 |
+| Backup | Destino fuera del host | REQUIRES_OWNER_DECISION | `OFF_HOST_DESTINATION` pendiente |
+| Rollback | Procedimiento fail-closed documentado | VERIFIED_LOCAL | §8–§9; down de 08/09 probado |
+| Rollback | Simulacro con el responsable disponible | REQUIRES_INFRASTRUCTURE | paso 11 |
+| Observabilidad | `/healthz`, eventos `juval.security` sin secretos | VERIFIED_LOCAL | `test_healthz.py`, `test_security_events.py` |
+| Observabilidad | Destino de logs y canal de alertas | REQUIRES_OWNER_DECISION | §11.2 |
+| Frontend | Contrato BFF verificado contra el backend | VERIFIED_LOCAL | `test_bff_frontend_contract.py` |
+| Frontend | Login, logout y errores en `frontend-next` | BLOCKED | pendiente de la tarea de Codex (`CODEX_BFF_INTEGRATION_PROMPT.md`); el entorno local ya lo permite |

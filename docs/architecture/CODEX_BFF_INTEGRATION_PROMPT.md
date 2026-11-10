@@ -1,4 +1,4 @@
-# Prompt para Codex CLI — integración de frontend-next con el BFF (SEC-01E)
+# Prompt para Codex CLI — integración de frontend-next con el BFF (SEC-01E/F)
 
 Copiar el bloque siguiente, completo, en Codex CLI desde `/home/juval/JUVAl/APP`.
 
@@ -16,6 +16,22 @@ Lee primero, completos:
 - frontend-next/src/api/client.ts y frontend-next/src/app/App.tsx (estado actual)
 - docs/adr/ADR-038-browser-site-topology-readiness.md (topología same-site)
 Si el contrato y el comportamiento observado del backend difieren, para y repórtalo.
+El contrato está verificado contra el backend por
+tests/integration/test_bff_frontend_contract.py: los textos `detail` son exactos.
+
+## Entorno de integración local (sin credenciales reales)
+Guía completa: docs/architecture/LOCAL_INTEGRATION_ENVIRONMENT.md. Resumen:
+- Terminal 1, raíz del repo (lo arranca el operador o tú; no lo modifiques):
+  JUVAL_POSTGRES_BIN=/usr/lib/postgresql/16/bin .venv/bin/python tools/integration_lab.py
+  Levanta PostgreSQL desechable, un IdP OIDC sintético (http://localhost:18782)
+  y el backend real con sesiones BFF (http://localhost:18781). Ctrl-C borra todo.
+- Terminal 2, frontend-next/:
+  VITE_API_BASE_URL=http://localhost:18781 npm run dev -- --port 5173 --strictPort
+  Abrir http://localhost:5173/ (localhost, no 127.0.0.1).
+- Usuarios sintéticos en la página del IdP: alice (organización A, operator),
+  bob (organización B, operator), carol (sin organización, viewer). Sin contraseña.
+- El access token dura 60 s: cada petición renueva roles en el servidor. Es
+  normal; la app no tiene que hacer nada por ello.
 
 ## Estado actual verificado
 - client.ts ya envía `credentials: "include"`, obtiene el CSRF de
@@ -70,6 +86,10 @@ Si el contrato y el comportamiento observado del backend difieren, para y repór
 - Ejecutar los tests y el typecheck/lint existentes de frontend-next.
 - E2E existentes en modo lab sin regresión; usar
   JUVAL_CHROME_BIN=/snap/chromium/current/usr/lib/chromium-browser/chrome.
+- Validación manual con el entorno local: los 7 pasos de
+  LOCAL_INTEGRATION_ENVIRONMENT.md §Validación (401 sin redirección, login
+  con retorno a la ruta, crear run con CSRF, logout y end-session, bob no ve
+  el run de alice, carol ve «sin organización», backend caído ≠ sesión cerrada).
 - No ocultar fallos con skips ni mocks permisivos.
 
 ## Informe final

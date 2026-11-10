@@ -1,6 +1,6 @@
 # BFF ↔ frontend-next — contrato de autenticación y errores (SEC-01E)
 
-**Estado: contrato del backend implementado localmente (2026-11-10, sin commit).**
+**Estado: contrato del backend implementado y verificado localmente (2026-11-10).** Verificación ejecutable: `tests/integration/test_bff_frontend_contract.py` (todo `detail` que emite el backend figura aquí) y `tools/integration_lab.py --check` (flujo completo).
 Fuente de verdad: `src/juval/interfaces/api/bff.py`, `auth.py`, `main.py` y sus
 tests. Si este documento y el código difieren, gana el código y se corrige
 este documento. Relacionado: ADR-034 (BFF), ADR-036 (sesiones), ADR-038
@@ -51,10 +51,14 @@ ve tal cual; mejora futura PENDING: redirigir a la app con un código):
 `400 invalid authorization response` (state, nonce, transacción caducada o
 repetida), `400 authorization code exchange failed`, `401 invalid or expired
 token` (ID token), `502 identity provider unreachable`, `502 identity provider
-returned no id_token`. La app debe ofrecer «Volver a iniciar sesión».
+returned no id_token`. Si el usuario cancela en el IdP, éste vuelve sin
+`code` y la API responde `400 invalid authorization response`. La app debe
+ofrecer «Volver a iniciar sesión».
 
-**Sesión.** `GET /api/v1/auth/session` (con `credentials: "include"`) siempre
-responde 200 salvo fallo del almacén (503):
+**Sesión.** `GET /api/v1/auth/session` (con `credentials: "include"`) responde
+200, salvo `503 session service unavailable` (almacén caído) y `503 identity
+provider temporarily unavailable` (roles vencidos y el IdP no responde; la
+sesión se conserva). Un 503 no significa sesión cerrada:
 
 ```json
 {"authenticated": false}
@@ -109,7 +113,16 @@ rutas de datos → `401`. No hay renovación silenciosa: volver a iniciar sesió
 | 503 | `organization membership is temporarily unavailable` | base de datos caída | igual |
 | 503 | `identity provider temporarily unavailable` | el IdP no responde al renovar roles | igual |
 | 503 | `authentication is not initialised` | instancia arrancando | igual |
+| 503 | `organization membership is not available on this deployment`, `financial persistence is not available on this deployment` | despliegue mal configurado | igual; es un fallo de operación, no del usuario |
+| 500 | `persist=true was requested but the execution store is not configured`, `persist=true was requested but JUVAL_EXECUTION_DB_PATH is not configured`, `this endpoint requires JUVAL_EXECUTION_STORE/JUVAL_EXECUTION_DB_PATH to be configured`, `configured execution store does not support batches`, `configured execution store does not support batch persistence`, `stored financial data failed validation` | error de configuración o de datos del servidor | mensaje genérico de error; no reintentar en bucle |
 | 422 / 413 | validación / tamaño | — | mensajes existentes |
+
+**Precedencia** (la primera que falla decide la respuesta): sin sesión →
+`401`; rol sin el permiso → `403 insufficient permissions`; mutación sin CSRF
+válido → `403 csrf…`; sin organización → `403 no organization…` (o `503` si
+la membresía no se puede consultar); recurso fuera de la organización →
+`404`. Así, un `viewer` sin organización que intenta crear recibe `403
+insufficient permissions`, no el de organización.
 
 `GET /healthz` es la única ruta pública: liveness, `{"status":"ok"}`. No es
 para la app.
