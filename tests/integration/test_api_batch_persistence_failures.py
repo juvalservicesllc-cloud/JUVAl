@@ -21,13 +21,15 @@ from juval.domain.financial_evidence import FinancialTerm as T
 from juval.infrastructure.logging import sqlite_execution_run_store as sqlite_module
 from juval.interfaces.api import main as api
 from juval.interfaces.api.main import EXPORT_FAILED_WARNING, app
+from .api_lab import LOOPBACK
 
 from .test_api_batch_financial import post_batch, workbook
 from .test_api_financial_flow import NATIVE, ROWS, env  # noqa: F401 (fixture)
 from .test_cli_native_financial import row
 from .test_native_financial_capture import declared
 
-client = TestClient(app, raise_server_exceptions=False)
+client = TestClient(app, raise_server_exceptions=False, **LOOPBACK)
+pytestmark = pytest.mark.usefixtures("auth_lab")  # ADR-055: explicit loopback lab
 DOC, DIAG = "execution_run_financial_records", "execution_run_capture_diagnostics"
 TABLES = ("execution_runs", "execution_run_records", DOC, DIAG, "batches", "batch_files")
 GENERIC_500 = {"detail": "internal server error"}

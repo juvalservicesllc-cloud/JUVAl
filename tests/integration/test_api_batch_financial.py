@@ -27,12 +27,14 @@ from juval.domain.risk import Severity
 from juval.infrastructure.logging import sqlite_execution_run_store as sqlite_module
 from juval.infrastructure.logging.sqlite_execution_run_store import SqliteExecutionRunStore
 from juval.interfaces.api.main import app
+from .api_lab import LOOPBACK
 
 from .test_api_financial_flow import DIAG, DOC, FEES, NATIVE, NOW, ROWS, THRESHOLDS, count, env, financial  # noqa: F401
 from .test_cli_native_financial import row
 from .test_native_financial_capture import declared, xlsx
 
-client = TestClient(app, raise_server_exceptions=False)
+client = TestClient(app, raise_server_exceptions=False, **LOOPBACK)
+pytestmark = pytest.mark.usefixtures("auth_lab")  # ADR-055: explicit loopback lab
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 

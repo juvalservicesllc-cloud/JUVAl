@@ -21,6 +21,7 @@ from fastapi.testclient import TestClient
 
 from juval.interfaces.api import main
 from juval.interfaces.api.main import app
+from .api_lab import LOOPBACK
 
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "sample_sourcing_TEST_DATA.xlsx"
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -29,12 +30,12 @@ _FEES = json.dumps({"referral_fee": "3", "referral_fee_rate": "0.15", "fulfillme
 
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
+def client(tmp_path, monkeypatch, auth_lab):
     monkeypatch.setenv("JUVAL_RUN_STORAGE_DIR", str(tmp_path))
     monkeypatch.setenv("JUVAL_EXECUTION_DB_PATH", str(tmp_path / "execution_runs.db"))
     monkeypatch.delenv("JUVAL_EXECUTION_STORE", raising=False)
     monkeypatch.delenv("JUVAL_MAX_UPLOAD_BYTES", raising=False)
-    return TestClient(app)
+    return TestClient(app, **LOOPBACK)
 
 
 @pytest.fixture

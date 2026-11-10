@@ -27,6 +27,7 @@ from juval.domain.costs import FeeInputs
 from juval.domain.decision import Thresholds
 from juval.domain.risk import Severity
 from juval.interfaces.api.main import app
+from .api_lab import LOOPBACK
 
 NOW = datetime(2026, 10, 28, tzinfo=timezone.utc)
 TARGET_PROFIT, TARGET_ROI = Decimal("3"), Decimal("0.30")
@@ -103,11 +104,11 @@ def test_declared_demand_is_kept_as_evidence_and_changes_nothing(snapshots):
 # -- API: the existing filters compose into "verified-profitable, demand pending" -----------
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
+def client(tmp_path, monkeypatch, auth_lab):
     monkeypatch.setenv("JUVAL_RUN_STORAGE_DIR", str(tmp_path / "runs"))
     monkeypatch.setenv("JUVAL_EXECUTION_DB_PATH", str(tmp_path / "runs.db"))
     monkeypatch.delenv("JUVAL_MAX_UPLOAD_BYTES", raising=False)
-    return TestClient(app)
+    return TestClient(app, **LOOPBACK)
 
 
 def _upload(client, path):

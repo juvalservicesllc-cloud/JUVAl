@@ -42,22 +42,21 @@ def keypair():
 
 @pytest.fixture
 def enable_auth(keypair):
-    """Install a verifier bound to the test key pair, then restore the default."""
+    """Bind the app to OIDC with a verifier for the test key pair.
+
+    It replaces whatever the test module bound before (some modules opt into
+    the loopback lab for their other tests): this test asked for OIDC.
+    """
     _, public_key = keypair
 
     def resolve(token: str):
         return public_key
 
-    auth.set_verifier(
-        auth.TokenVerifier(
-            issuer=ISSUER,
-            audience=AUDIENCE,
-            key_resolver=resolve,
-            roles_claim="roles",
-        )
-    )
+    verifier = auth.TokenVerifier(issuer=ISSUER, audience=AUDIENCE, key_resolver=resolve, roles_claim="roles")
+    auth.uninstall(app)
+    auth.install(app, auth.AuthSettings(mode="oidc", verifier=verifier))
     yield
-    auth.reset_for_tests()
+    auth.uninstall(app)
 
 
 def make_token(
@@ -102,15 +101,19 @@ def bearer(token: str) -> dict:
 client = TestClient(app, raise_server_exceptions=False)
 
 
-# --- auth disabled (default) -----------------------------------------
+# --- no default mode (ADR-055) -----------------------------------------
 
 
-def test_auth_disabled_by_default_allows_unauthenticated_read():
-    """Existing local-development behavior is preserved when auth is off."""
-    auth.reset_for_tests()
+def test_an_instance_that_never_started_grants_nothing():
+    """Without startup there is no mode, and no mode means no access.
+
+    This replaces the former "disabled by default" test: a missing
+    JUVAL_AUTH_MODE used to grant every permission to an anonymous caller.
+    """
+    auth.uninstall(app)
     response = client.get("/api/v1/runs")
-    # 500 = no execution store configured; the point is it is NOT 401/403.
-    assert response.status_code not in (401, 403)
+    assert response.status_code == 503
+    assert response.json() == {"detail": "authentication is not initialised"}
 
 
 # --- authentication (401) --------------------------------------------

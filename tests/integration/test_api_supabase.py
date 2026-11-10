@@ -32,6 +32,7 @@ psycopg = pytest.importorskip("psycopg")
 
 from juval.infrastructure.persistence.supabase_execution_run_store import SupabaseExecutionRunStore
 from juval.interfaces.api.main import _execution_run_store, app
+from .api_lab import LOOPBACK
 
 DB_URL = os.environ.get("JUVAL_RUNTIME_DB_URL")
 
@@ -54,7 +55,7 @@ _FEES = json.dumps({"referral_fee": "3", "referral_fee_rate": "0.15", "fulfillme
 
 
 @pytest.fixture
-def supabase_client(tmp_path, monkeypatch):
+def supabase_client(tmp_path, monkeypatch, auth_lab):
     """A TestClient whose composition root can only resolve to Supabase."""
     monkeypatch.setenv("JUVAL_RUN_STORAGE_DIR", str(tmp_path))
     monkeypatch.setenv("JUVAL_EXECUTION_STORE", "supabase")
@@ -63,7 +64,7 @@ def supabase_client(tmp_path, monkeypatch):
     # the wrong reason.
     monkeypatch.delenv("JUVAL_EXECUTION_DB_PATH", raising=False)
     monkeypatch.delenv("JUVAL_MAX_UPLOAD_BYTES", raising=False)
-    return TestClient(app)
+    return TestClient(app, **LOOPBACK)
 
 
 def _delete_run(execution_id: str) -> None:

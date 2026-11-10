@@ -23,6 +23,7 @@ from juval.domain.decision import Thresholds
 from juval.domain.risk import Severity
 from juval.infrastructure.logging.sqlite_execution_run_store import SqliteExecutionRunStore
 from juval.interfaces.api.main import app
+from .api_lab import LOOPBACK
 
 from .test_record_snapshot_pagination import FIXTURE, FEES, THRESHOLDS, run, snapshot
 
@@ -101,10 +102,10 @@ def test_an_imported_record_with_permissive_thresholds_is_review_and_pending(tmp
 
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
+def client(tmp_path, monkeypatch, auth_lab):
     monkeypatch.setenv("JUVAL_RUN_STORAGE_DIR", str(tmp_path))
     monkeypatch.setenv("JUVAL_EXECUTION_DB_PATH", str(tmp_path / "runs.db"))
-    return TestClient(app)
+    return TestClient(app, **LOOPBACK)
 
 
 def upload(client):

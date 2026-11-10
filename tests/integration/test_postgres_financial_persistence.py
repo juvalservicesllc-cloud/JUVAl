@@ -42,6 +42,7 @@ from juval.domain.provenance import VerificationStatus  # noqa: E402
 from juval.infrastructure.logging.sqlite_execution_run_store import SqliteExecutionRunStore  # noqa: E402
 from juval.infrastructure.persistence.supabase_execution_run_store import SupabaseExecutionRunStore  # noqa: E402
 
+from .api_lab import LOOPBACK  # noqa: E402
 from .test_cli_native_financial import FINANCIAL, cli_run, fixed_now, refs  # noqa: E402,F401 (fixture)
 from .test_cli_native_financial import row as cli_row  # noqa: E402
 from .test_financial_persistence import build, row  # noqa: E402
@@ -348,7 +349,7 @@ def test_stored_documents_leave_the_commercial_snapshot_untouched(tmp_path, stor
 
 # -- Read-only API over PostgreSQL -------------------------------------------------------
 
-def test_financial_api_reads_postgres_and_reports_a_missing_migration(tmp_path, dsn, store, monkeypatch):
+def test_financial_api_reads_postgres_and_reports_a_missing_migration(tmp_path, dsn, store, monkeypatch, auth_lab):
     from fastapi.testclient import TestClient
     from juval.interfaces.api.main import app
 
@@ -358,7 +359,7 @@ def test_financial_api_reads_postgres_and_reports_a_missing_migration(tmp_path, 
     monkeypatch.setenv("JUVAL_RUN_STORAGE_DIR", str(tmp_path))
     monkeypatch.setenv("JUVAL_EXECUTION_STORE", "supabase")
     monkeypatch.setenv("JUVAL_RUNTIME_DB_URL", dsn)                                    # the disposable schema
-    client = TestClient(app, raise_server_exceptions=False)
+    client = TestClient(app, raise_server_exceptions=False, **LOOPBACK)
     body = client.get(f"/api/v1/runs/run-A/records/{ref}/financial").json()
     assert body["financial_document"] == {"format": "juval.adr047.financial-record", "version": 1,
                                           "payload": json.loads(store.load_financial_record("run-A", ref)[2])}
@@ -370,7 +371,7 @@ def test_financial_api_reads_postgres_and_reports_a_missing_migration(tmp_path, 
         assert response.json() == {"detail": "financial persistence is not available on this deployment"}
 
 
-def test_api_writes_and_batch_reads_financial_documents_on_postgres(tmp_path, dsn, store, monkeypatch):
+def test_api_writes_and_batch_reads_financial_documents_on_postgres(tmp_path, dsn, store, monkeypatch, auth_lab):
     """POST (native flow) -> PostgreSQL -> GET, with a constant connection count
     per page and a failing financial write leaving nothing behind."""
     from fastapi.testclient import TestClient
@@ -386,7 +387,7 @@ def test_api_writes_and_batch_reads_financial_documents_on_postgres(tmp_path, ds
     monkeypatch.delenv("JUVAL_MAX_UPLOAD_BYTES", raising=False)
     ids = iter(("pg-api-1", "pg-api-2"))
     monkeypatch.setattr(service, "new_execution_id", lambda: next(ids))
-    client = TestClient(app, raise_server_exceptions=False)
+    client = TestClient(app, raise_server_exceptions=False, **LOOPBACK)
     path = xlsx(tmp_path, *ROWS)
 
     created = post(path, **NATIVE)
@@ -420,7 +421,7 @@ def test_api_writes_and_batch_reads_financial_documents_on_postgres(tmp_path, ds
     assert store.load_execution_run("pg-api-2") is None and store.load_records("pg-api-2") == []
 
 
-def test_batch_children_store_their_own_documents_on_postgres(tmp_path, dsn, store, monkeypatch):
+def test_batch_children_store_their_own_documents_on_postgres(tmp_path, dsn, store, monkeypatch, auth_lab):
     """POST /api/v1/batches with the ADR-047 opt-in -> PostgreSQL: each child run
     holds only its own documents, the batch groups them, and a failing financial
     write of one child leaves nothing of the whole batch (ADR-050 D2)."""
@@ -439,7 +440,7 @@ def test_batch_children_store_their_own_documents_on_postgres(tmp_path, dsn, sto
     monkeypatch.delenv("JUVAL_MAX_UPLOAD_BYTES", raising=False)
     ids = iter(f"pg-batch-{n}" for n in range(10))
     monkeypatch.setattr(service, "new_execution_id", lambda: next(ids))
-    client = TestClient(app, raise_server_exceptions=False)
+    client = TestClient(app, raise_server_exceptions=False, **LOOPBACK)
     files = [("files", ("a.xlsx", xlsx(tmp_path, *ROWS, name="a.xlsx").read_bytes(), XLSX)),
              ("files", ("b.xlsx", xlsx(tmp_path, row("B"), name="b.xlsx").read_bytes(), XLSX))]
     data = {"thresholds": THRESHOLDS, "fees": FEES, **NATIVE}
@@ -504,7 +505,7 @@ def _endpoint_scenarios():
 
 
 @pytest.mark.parametrize("scenario", _endpoint_scenarios(), ids=lambda s: s.__name__)
-def test_batch_endpoint_atomicity_on_postgres(scenario, tmp_path, dsn, store, monkeypatch):
+def test_batch_endpoint_atomicity_on_postgres(scenario, tmp_path, dsn, store, monkeypatch, auth_lab):
     from datetime import datetime, timezone
 
     from juval.infrastructure.persistence import supabase_execution_run_store as pg_module

@@ -20,6 +20,7 @@ from fastapi.testclient import TestClient
 from juval.infrastructure.excel.exporter import HEADERS
 from juval.infrastructure.logging.sqlite_execution_run_store import SqliteExecutionRunStore
 from juval.interfaces.api.main import app
+from .api_lab import LOOPBACK
 from juval.interfaces.cli.main import main as cli_main
 
 NEW = ("hazmat_severity_status", "hazmat_severity_source_type", "bulky_severity_status", "bulky_severity_source_type")
@@ -78,11 +79,11 @@ EXPECTED = [status + ("VERIFIED", "SUPPLIER_FILE") for status in CASES.values()]
 
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
+def client(tmp_path, monkeypatch, auth_lab):
     monkeypatch.setenv("JUVAL_RUN_STORAGE_DIR", str(tmp_path / "runs"))
     monkeypatch.setenv("JUVAL_EXECUTION_DB_PATH", str(tmp_path / "runs.db"))
     monkeypatch.delenv("JUVAL_MAX_UPLOAD_BYTES", raising=False)
-    return TestClient(app)
+    return TestClient(app, **LOOPBACK)
 
 
 def _upload(client, path):

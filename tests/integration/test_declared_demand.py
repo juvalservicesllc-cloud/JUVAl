@@ -25,6 +25,7 @@ from juval.domain.risk import Severity
 from juval.infrastructure.excel.exporter import DEMAND_EXPORT_HEADERS, demand_cells_from_capture
 from juval.infrastructure.logging.sqlite_execution_run_store import SqliteExecutionRunStore
 from juval.interfaces.api.main import app
+from .api_lab import LOOPBACK
 
 NOW = datetime(2026, 10, 26, 15, tzinfo=timezone.utc)
 PERMISSIVE = Thresholds(target_profit=Decimal("0"), target_roi=Decimal("0"), minimum_estimated_monthly_sales=0,
@@ -298,10 +299,10 @@ def test_preview_maps_demand_columns_to_their_own_group(tmp_path):
 
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
+def client(tmp_path, monkeypatch, auth_lab):
     monkeypatch.setenv("JUVAL_RUN_STORAGE_DIR", str(tmp_path))
     monkeypatch.setenv("JUVAL_EXECUTION_DB_PATH", str(tmp_path / "runs.db"))
-    return TestClient(app)
+    return TestClient(app, **LOOPBACK)
 
 
 THRESHOLDS = json.dumps({"target_profit": "0", "target_roi": "0", "minimum_estimated_monthly_sales": 0, "maximum_risk_severity": "CRITICAL",

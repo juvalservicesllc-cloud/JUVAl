@@ -25,6 +25,8 @@ from juval.interfaces.api import auth as auth_module
 from juval.interfaces.api import bff
 from juval.interfaces.api.main import app
 
+from .api_lab import LOOPBACK
+
 
 class RecordingTransactionStore(InMemoryOAuthTransactionStore):
     """Keeps the raw nonce so a test can mint a matching ID token.
@@ -488,16 +490,33 @@ def test_expired_session_is_not_authenticated(configured, rsa_key, monkeypatch):
 # --- disabled mode -----------------------------------------------------
 
 
-def test_bff_routes_report_disabled_when_auth_mode_is_unset(monkeypatch):
-    monkeypatch.delenv("JUVAL_AUTH_MODE", raising=False)
+def test_bff_routes_report_disabled_in_the_loopback_lab(monkeypatch):
+    monkeypatch.setenv("JUVAL_AUTH_MODE", "disabled")
+    monkeypatch.setenv(auth_module.LAB_CONFIRM_ENV, auth_module.LAB_CONFIRM_VALUE)
+    monkeypatch.delenv("JUVAL_CORS_ORIGINS", raising=False)
     auth_module.reset_for_tests()
     auth_module.set_session_resolver(None)
     bff.reset_for_tests()
     try:
-        with TestClient(app) as client:
-            assert client.get("/api/v1/auth/login", follow_redirects=False).status_code == 404
+        with TestClient(app, **LOOPBACK) as client:
+            response = client.get("/api/v1/auth/login", follow_redirects=False)
+            assert response.status_code == 404
+            assert response.json() == {"detail": "authentication is not enabled"}
     finally:
         auth_module.reset_for_tests()
+        bff.reset_for_tests()
+
+
+def test_startup_fails_closed_when_auth_mode_is_unset(monkeypatch):
+    """The BFF no longer has an "unset" shape to report: the process stops."""
+    monkeypatch.delenv("JUVAL_AUTH_MODE", raising=False)
+    auth_module.reset_for_tests()
+    bff.reset_for_tests()
+    try:
+        with pytest.raises(RuntimeError, match="JUVAL_AUTH_MODE must be set"):
+            with TestClient(app):
+                pass  # pragma: no cover - startup must raise before this runs
+    finally:
         bff.reset_for_tests()
 
 
@@ -563,6 +582,9 @@ def test_startup_fails_closed_on_a_half_configured_browser_flow(unconfigured):
     monkeypatch = unconfigured
     monkeypatch.setenv("JUVAL_AUTH_MODE", "oidc")
     monkeypatch.setenv("JUVAL_OIDC_ISSUER", ISSUER)
+    # Complete token validation (ADR-055 checks it first), so the failure under
+    # test is the browser flow's own missing redirect URI.
+    monkeypatch.setenv("JUVAL_OIDC_AUDIENCE", AUDIENCE)
     monkeypatch.setenv("JUVAL_OIDC_CLIENT_ID", AUDIENCE)
     monkeypatch.delenv("JUVAL_BFF_REDIRECT_URI", raising=False)
     monkeypatch.setenv("JUVAL_SESSION_STORE", "memory")

@@ -9,6 +9,8 @@ Synthetic data only. Sessions are covered by test_postgres_runtime_role_security
 """
 from __future__ import annotations
 
+import os
+
 import pytest
 
 psycopg = pytest.importorskip("psycopg")
@@ -19,6 +21,13 @@ from juval.infrastructure.persistence import supabase_execution_run_store as pg_
 from juval.infrastructure.persistence.supabase_execution_run_store import SupabaseExecutionRunStore  # noqa: E402
 
 from .test_postgres_runtime_role_security import cluster, secured_database  # noqa: E402,F401 (fixtures)
+
+# The imported cluster fixture does not carry its module's skip marker, so
+# without this the tests error instead of skipping when no cluster exists.
+pytestmark = [
+    pytest.mark.skipif(not os.environ.get("JUVAL_POSTGRES_BIN"), reason="JUVAL_POSTGRES_BIN required: disposable PostgreSQL only"),
+    pytest.mark.usefixtures("auth_lab"),  # ADR-055: explicit loopback lab
+]
 
 SIX = ("execution_runs", "execution_run_records", "execution_run_financial_records",
        "execution_run_capture_diagnostics", "batches", "batch_files")
@@ -39,7 +48,8 @@ def _client(tmp_path, monkeypatch, dsn):
     monkeypatch.delenv("JUVAL_SUPABASE_DB_URL", raising=False)
     monkeypatch.delenv("JUVAL_MAX_UPLOAD_BYTES", raising=False)
     monkeypatch.setattr(service, "new_execution_id", iter(f"b48-{n}" for n in range(100)).__next__)
-    return TestClient(app, raise_server_exceptions=False)
+    from .api_lab import LOOPBACK
+    return TestClient(app, raise_server_exceptions=False, **LOOPBACK)
 
 
 def _post(client, tmp_path):

@@ -27,6 +27,7 @@ from juval.infrastructure.logging import sqlite_execution_run_store as sqlite_mo
 from juval.interfaces.api import main as api
 from juval.interfaces.api import service
 from juval.interfaces.api.main import app
+from .api_lab import LOOPBACK
 
 from .test_api_auth import bearer, enable_auth, keypair, make_token  # noqa: F401 (fixtures)
 from .test_cli_native_financial import row
@@ -58,7 +59,8 @@ def env(tmp_path, monkeypatch):
     return tmp_path
 
 
-client = TestClient(app, raise_server_exceptions=False)
+client = TestClient(app, raise_server_exceptions=False, **LOOPBACK)
+pytestmark = pytest.mark.usefixtures("auth_lab")  # ADR-055: explicit loopback lab
 
 
 def post(path, **data):

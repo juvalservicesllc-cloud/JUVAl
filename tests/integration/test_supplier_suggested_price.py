@@ -30,6 +30,7 @@ from juval.infrastructure.excel.exporter import SUGGESTED_PRICE_EXPORT_HEADERS, 
 from juval.infrastructure.excel.importer import SUPPORTED_INPUT_SUFFIXES, import_file
 from juval.infrastructure.logging.sqlite_execution_run_store import SqliteExecutionRunStore
 from juval.interfaces.api.main import app
+from .api_lab import LOOPBACK
 
 NOW = datetime(2026, 10, 27, 15, tzinfo=timezone.utc)
 THRESHOLDS = Thresholds(target_profit=Decimal("5"), target_roi=Decimal("0"), minimum_estimated_monthly_sales=0,
@@ -298,10 +299,10 @@ def test_preview_maps_the_columns_to_their_own_group(tmp_path):
 
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
+def client(tmp_path, monkeypatch, auth_lab):
     monkeypatch.setenv("JUVAL_RUN_STORAGE_DIR", str(tmp_path))
     monkeypatch.setenv("JUVAL_EXECUTION_DB_PATH", str(tmp_path / "runs.db"))
-    return TestClient(app)
+    return TestClient(app, **LOOPBACK)
 
 
 API_THRESHOLDS = json.dumps({"target_profit": "5", "target_roi": "0", "minimum_estimated_monthly_sales": 0, "maximum_risk_severity": "CRITICAL",

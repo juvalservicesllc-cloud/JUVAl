@@ -55,6 +55,7 @@ export default defineConfig({
       env: {
         ...inherited as Record<string, string>,
         JUVAL_AUTH_MODE: "disabled",
+        JUVAL_AUTH_DISABLED_CONFIRM: "yes-loopback-lab-only", // ADR-055: loopback lab only
         JUVAL_EXECUTION_STORE: "sqlite",
         JUVAL_EXECUTION_DB_PATH: join(dir, "juval.db"),
         JUVAL_RUN_STORAGE_DIR: join(dir, "runs"),

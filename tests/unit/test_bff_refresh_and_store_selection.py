@@ -186,7 +186,7 @@ def test_concurrent_refresh_loser_reads_the_winners_tokens(wired, monkeypatch):
 
 
 def test_memory_store_is_used_when_auth_is_disabled(monkeypatch):
-    monkeypatch.delenv("JUVAL_AUTH_MODE", raising=False)
+    monkeypatch.setenv("JUVAL_AUTH_MODE", "disabled")
     auth_module.reset_for_tests()
     sessions, transactions = bff.build_stores()
     assert isinstance(sessions, InMemorySessionStore)

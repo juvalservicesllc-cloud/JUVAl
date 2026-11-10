@@ -17,6 +17,7 @@ from fastapi.testclient import TestClient
 
 from juval.infrastructure.logging.sqlite_execution_run_store import SqliteExecutionRunStore
 from juval.interfaces.api.main import app
+from .api_lab import LOOPBACK
 
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "sample_sourcing_TEST_DATA.xlsx"
 
@@ -32,11 +33,11 @@ _FEES = json.dumps({"referral_fee": "3", "referral_fee_rate": "0.15", "fulfillme
 
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
+def client(tmp_path, monkeypatch, auth_lab):
     monkeypatch.setenv("JUVAL_RUN_STORAGE_DIR", str(tmp_path))
     monkeypatch.setenv("JUVAL_EXECUTION_DB_PATH", str(tmp_path / "execution_runs.db"))
     monkeypatch.delenv("JUVAL_MAX_UPLOAD_BYTES", raising=False)
-    return TestClient(app)
+    return TestClient(app, **LOOPBACK)
 
 
 def _upload(client, *, thresholds=_THRESHOLDS, fees=_FEES, persist=None, filename="sample.xlsx", content=None):
@@ -408,11 +409,11 @@ def test_get_run_unknown_execution_id_returns_404(client):
     assert resp.status_code == 404
 
 
-def test_get_run_requires_a_configured_store(monkeypatch, tmp_path):
+def test_get_run_requires_a_configured_store(monkeypatch, tmp_path, auth_lab):
     monkeypatch.setenv("JUVAL_RUN_STORAGE_DIR", str(tmp_path))
     monkeypatch.delenv("JUVAL_EXECUTION_DB_PATH", raising=False)
     monkeypatch.delenv("JUVAL_EXECUTION_STORE", raising=False)
-    unconfigured_client = TestClient(app)
+    unconfigured_client = TestClient(app, **LOOPBACK)
 
     resp = unconfigured_client.get("/api/v1/runs/does-not-matter")
 
@@ -526,11 +527,11 @@ def test_get_run_records_for_run_with_no_persisted_records_returns_empty_list(cl
     assert resp.json()["records"] == []
 
 
-def test_get_run_records_requires_a_configured_store(monkeypatch, tmp_path):
+def test_get_run_records_requires_a_configured_store(monkeypatch, tmp_path, auth_lab):
     monkeypatch.setenv("JUVAL_RUN_STORAGE_DIR", str(tmp_path))
     monkeypatch.delenv("JUVAL_EXECUTION_DB_PATH", raising=False)
     monkeypatch.delenv("JUVAL_EXECUTION_STORE", raising=False)
-    unconfigured_client = TestClient(app)
+    unconfigured_client = TestClient(app, **LOOPBACK)
 
     resp = unconfigured_client.get("/api/v1/runs/does-not-matter/records")
 
@@ -619,11 +620,11 @@ def test_run_without_stored_records_has_null_decisions_not_zeros(client, tmp_pat
     assert client.get(f"/api/v1/runs/{run_id}").json()["decisions"] is None
 
 
-def test_get_runs_list_requires_a_configured_store(monkeypatch, tmp_path):
+def test_get_runs_list_requires_a_configured_store(monkeypatch, tmp_path, auth_lab):
     monkeypatch.setenv("JUVAL_RUN_STORAGE_DIR", str(tmp_path))
     monkeypatch.delenv("JUVAL_EXECUTION_DB_PATH", raising=False)
     monkeypatch.delenv("JUVAL_EXECUTION_STORE", raising=False)
-    unconfigured_client = TestClient(app)
+    unconfigured_client = TestClient(app, **LOOPBACK)
 
     resp = unconfigured_client.get("/api/v1/runs")
 

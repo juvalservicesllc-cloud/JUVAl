@@ -362,16 +362,19 @@ def transaction_store() -> OAuthTransactionStore:
     return _transactions
 
 
-def _require_config() -> BffConfig:
+def _require_config(request: Request) -> BffConfig:
+    # The instance's mode, fixed at startup (ADR-055) -- never re-read from the
+    # environment while serving.
+    settings = auth_module.installed_settings(request.app)
     config = current_config()
-    if config is None:
+    if settings.mode == "disabled" or config is None:
         # Not 500: the deployment is simply not running the browser flow.
         # Saying so plainly beats a stack trace, and it cannot be mistaken for
         # an auth failure. The two reasons are distinguished because they call
         # for different fixes -- turn authentication on, or configure the BFF.
         detail = (
             "authentication is not enabled"
-            if auth_module.auth_mode() == "disabled"
+            if settings.mode == "disabled"
             else "browser authentication is not configured"
         )
         raise HTTPException(status_code=404, detail=detail)
@@ -414,7 +417,7 @@ def _safe_return_to(raw: Optional[str], fallback: str) -> str:
 @router.get("/login")
 def login(request: Request, return_to: Optional[str] = None) -> Response:
     """Begin Authorization Code + PKCE. Redirects the browser to the IdP."""
-    config = _require_config()
+    config = _require_config(request)
     verifier, challenge = _pkce_pair()
     transaction = OAuthTransaction(
         transaction_id=secrets.token_urlsafe(32),
@@ -456,7 +459,8 @@ def login(request: Request, return_to: Optional[str] = None) -> Response:
 @router.get("/callback")
 def callback(request: Request, code: Optional[str] = None, state: Optional[str] = None) -> Response:
     """Finish the exchange, create the session, hand back only a cookie."""
-    config = _require_config()
+    config = _require_config(request)
+    verifier = auth_module.installed_settings(request.app).verifier
 
     transaction_id = request.cookies.get(TRANSACTION_COOKIE)
     if not transaction_id or not code or not state:
@@ -477,9 +481,11 @@ def callback(request: Request, code: Optional[str] = None, state: Optional[str] 
     if not isinstance(id_token, str):
         raise HTTPException(status_code=502, detail="identity provider returned no id_token")
 
-    claims = _verify_id_token(id_token, transaction.nonce_digest)
+    claims = _verify_id_token(id_token, transaction.nonce_digest, verifier)
 
-    roles = auth_module._roles_from_claims(claims, os.environ.get("JUVAL_OIDC_ROLES_CLAIM", "roles"))
+    # The roles claim is the one the verifier was built with at startup, so a
+    # runtime change to the environment cannot change how roles map (ADR-055).
+    roles = auth_module._roles_from_claims(claims, verifier.roles_claim)
     session = Session(
         session_id=secrets.token_urlsafe(32),
         subject=str(claims["sub"]),
@@ -802,7 +808,7 @@ def _exchange_code(config: BffConfig, code: str, transaction: OAuthTransaction) 
         raise HTTPException(status_code=502, detail="identity provider unreachable") from exc
 
 
-def _verify_id_token(id_token: str, expected_nonce_digest: str) -> Mapping[str, Any]:
+def _verify_id_token(id_token: str, expected_nonce_digest: str, verifier: auth_module.TokenVerifier) -> Mapping[str, Any]:
     """Verify the ID token with the same verifier the API uses for bearers.
 
     Reusing `auth.py`'s verifier is the point: issuer, audience, expiry, RS256
@@ -810,10 +816,6 @@ def _verify_id_token(id_token: str, expected_nonce_digest: str) -> Mapping[str, 
     second, subtly different verification path here is exactly the kind of
     duplicate security logic that eventually diverges.
     """
-    verifier = auth_module.current_verifier()
-    if verifier is None:
-        raise HTTPException(status_code=404, detail="authentication is not enabled")
-
     verifier.verify(id_token)  # raises 401 on any failure
 
     claims = jwt.decode(id_token, options={"verify_signature": False})

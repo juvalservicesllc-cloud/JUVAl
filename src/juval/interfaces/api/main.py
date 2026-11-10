@@ -77,7 +77,8 @@ from juval.infrastructure.logging.sqlite_execution_run_store import SqliteExecut
 from juval.infrastructure.persistence.supabase_execution_run_store import SupabaseExecutionRunStore
 
 from . import bff, service
-from .auth import RUNS_CREATE, RUNS_EXPORT, RUNS_READ, auth_mode, require, set_session_resolver
+from . import auth
+from .auth import RUNS_CREATE, RUNS_EXPORT, RUNS_READ, require, set_session_resolver
 from .models import (
     FeesIn,
     ImportPreviewResponse,
@@ -124,9 +125,30 @@ async def _lifespan(_app: FastAPI):
 
     `ensure_configured()` is idempotent, so a test that installed its own
     stores keeps them; this never overwrites an explicit `bff.configure()`.
+
+    Authentication is resolved first and bound to this instance (ADR-055):
+    no mode, an unconfirmed or hosted lab, or incomplete OIDC stops startup,
+    and nothing read from the environment afterwards changes who may do what.
     """
-    bff.ensure_configured()
-    yield
+    # Bound to the instance being started (`_app`), never the module-level
+    # `app`: another FastAPI built on this lifespan must not install onto, or
+    # on shutdown unbind, a different instance.
+    settings = auth.resolve_settings()
+    auth.install(_app, settings)
+    try:
+        bff.ensure_configured()
+        if settings.mode == "disabled":
+            # Loud on purpose: an unauthenticated lab cannot satisfy Amazon
+            # RF-03/RF-04 (docs/compliance/ACCESS_CONTROL.md).
+            logger.warning(
+                "JUVAL_AUTH_MODE=disabled -- loopback lab: endpoints are unauthenticated "
+                "and accept direct loopback requests only (ADR-055). Never a deployment."
+            )
+        else:
+            logger.info("JUVAL_AUTH_MODE=oidc -- every protected endpoint requires a verified identity")
+        yield
+    finally:
+        auth.uninstall(_app)
 
 
 app = FastAPI(title="Juval API", version=juval.__version__, lifespan=_lifespan)
@@ -156,17 +178,18 @@ app.include_router(bff.router)
 # importing the BFF (see auth.py::set_session_resolver).
 set_session_resolver(bff.principal_from_session)
 
-if auth_mode() == "disabled":
-    # Loud on purpose: an unauthenticated deployment cannot satisfy Amazon
-    # RF-03/RF-04. Production must set JUVAL_AUTH_MODE=oidc (ADR-028 provider,
-    # ADR-031 hosting; the ADR-022 citation here was stale -- that ADR is
-    # RECHAZADA). See docs/compliance/ACCESS_CONTROL.md.
-    logger.warning(
-        "JUVAL_AUTH_MODE=disabled -- every endpoint is UNAUTHENTICATED. "
-        "This is acceptable only for local development; production must set "
-        "JUVAL_AUTH_MODE=oidc once the ADR-034 BFF, the public issuer surface "
-        "and a durable session store (ADR-036) are all in place."
-    )
+# FastAPI's generated docs describe every route. ADR-055: they are served only
+# to the loopback lab and answer 404 under OIDC or before startup.
+_API_DOCS_PATHS = frozenset(
+    path for path in (app.docs_url, app.redoc_url, app.openapi_url, app.swagger_ui_oauth2_redirect_url) if path
+)
+
+
+@app.middleware("http")
+async def _api_docs_policy(request, call_next):
+    if request.url.path in _API_DOCS_PATHS and not auth.api_docs_allowed(request):
+        return JSONResponse({"detail": "Not Found"}, status_code=404)
+    return await call_next(request)
 
 
 def _execution_run_store() -> Optional[ExecutionRunStore]:

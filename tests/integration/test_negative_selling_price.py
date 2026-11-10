@@ -151,18 +151,20 @@ def test_hazmat_block_still_applies_when_the_price_is_invalid(tmp_path):
 
 # -- HTTP: upload -> pipeline -> decision -> JSON ---------------------------------
 
-def test_api_upload_reports_the_negative_price_as_review_with_its_issue(tmp_path, monkeypatch):
+def test_api_upload_reports_the_negative_price_as_review_with_its_issue(tmp_path, monkeypatch, auth_lab):
     import json
 
     from fastapi.testclient import TestClient
 
     from juval.interfaces.api.main import app
 
+    from .api_lab import LOOPBACK
+
     monkeypatch.setenv("JUVAL_RUN_STORAGE_DIR", str(tmp_path))
     monkeypatch.setenv("JUVAL_EXECUTION_DB_PATH", str(tmp_path / "execution_runs.db"))
     monkeypatch.delenv("JUVAL_MAX_UPLOAD_BYTES", raising=False)
     content = _csv(tmp_path, _row("-25"), ["US", "B000000002", "S2", "item", "10", "40", "no", "no"]).read_bytes()
-    response = TestClient(app).post(
+    response = TestClient(app, **LOOPBACK).post(
         "/api/v1/runs",
         files={"file": ("supplier.csv", content, "text/csv")},
         data={"thresholds": json.dumps({"target_profit": "3", "target_roi": "0.30",

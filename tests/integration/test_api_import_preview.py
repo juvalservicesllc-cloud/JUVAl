@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 from juval.application.import_preview import PREVIEW_ISSUE_LIMIT, preview_import
 from juval.infrastructure.excel.importer import import_file
 from juval.interfaces.api.main import app
+from .api_lab import LOOPBACK
 
 from .test_api_auth import bearer, enable_auth, keypair, make_token  # noqa: F401 (fixtures)
 
@@ -40,11 +41,11 @@ def xlsx_bytes(headers=HEADERS, rows=ROWS) -> bytes:
 
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
+def client(tmp_path, monkeypatch, auth_lab):
     monkeypatch.setenv("JUVAL_RUN_STORAGE_DIR", str(tmp_path / "storage"))
     monkeypatch.setenv("JUVAL_EXECUTION_DB_PATH", str(tmp_path / "runs.db"))
     monkeypatch.delenv("JUVAL_MAX_UPLOAD_BYTES", raising=False)
-    return TestClient(app)
+    return TestClient(app, **LOOPBACK)
 
 
 def preview(client, content: bytes, name="supplier.csv", content_type="text/csv", **kwargs):

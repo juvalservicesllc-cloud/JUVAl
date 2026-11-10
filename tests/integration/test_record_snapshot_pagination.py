@@ -11,6 +11,7 @@ from juval.application.record_snapshot_store import RecordSnapshotQuery
 from juval.domain.execution_run import ExecutionRun, ExecutionStatus
 from juval.infrastructure.logging.sqlite_execution_run_store import SqliteExecutionRunStore
 from juval.interfaces.api.main import app
+from .api_lab import LOOPBACK
 
 NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "sample_sourcing_TEST_DATA.xlsx"
@@ -109,10 +110,10 @@ def test_sqlite_decision_counts_are_per_run_and_absent_without_snapshots(tmp_pat
 
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
+def client(tmp_path, monkeypatch, auth_lab):
     monkeypatch.setenv("JUVAL_RUN_STORAGE_DIR", str(tmp_path))
     monkeypatch.setenv("JUVAL_EXECUTION_DB_PATH", str(tmp_path / "runs.db"))
-    return TestClient(app)
+    return TestClient(app, **LOOPBACK)
 
 
 def upload(client):

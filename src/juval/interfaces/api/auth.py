@@ -28,10 +28,12 @@ never an authorization control (RF-04); every protected endpoint resolves a
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 import os
 from dataclasses import dataclass
 from typing import Callable, FrozenSet, Optional, Protocol
+from urllib.parse import urlsplit
 
 import jwt
 from fastapi import Depends, HTTPException, Request
@@ -102,9 +104,10 @@ class Principal:
         return permission in self.permissions
 
 
-# The principal used when authentication is disabled (local development and
-# the existing test suite). It is never produced while JUVAL_AUTH_MODE=oidc.
-_ANONYMOUS = Principal(subject="anonymous", roles=(), permissions=ALL_PERMISSIONS)
+# The only principal that exists without a credential (ADR-055). It is returned
+# solely by the loopback lab mode, and only for a request that passes
+# `lab_request_allowed`; no OIDC code path can produce it.
+_LAB_PRINCIPAL = Principal(subject="local-lab-unauthenticated", roles=(), permissions=ALL_PERMISSIONS)
 
 
 class KeyResolver(Protocol):
@@ -132,6 +135,11 @@ class TokenVerifier:
         self._audience = audience
         self._key_resolver = key_resolver
         self._roles_claim = roles_claim
+
+    @property
+    def roles_claim(self) -> str:
+        """The claim read at startup; the BFF maps session roles with it too."""
+        return self._roles_claim
 
     def verify(self, token: str) -> Principal:
         """Return the Principal for `token`, or raise HTTPException(401)."""
@@ -199,14 +207,146 @@ def _roles_from_claims(claims: dict, roles_claim: str) -> list[str]:
 # --- Configuration ----------------------------------------------------
 
 
+AUTH_MODES = ("disabled", "oidc")
+
+#: ADR-055: the loopback lab must be asked for twice -- the mode and this
+#: sentence. It is a sentence, not "true", so it is never set by accident or
+#: copied from another boolean (the same pattern as bff._MEMORY_OPT_IN).
+LAB_CONFIRM_ENV = "JUVAL_AUTH_DISABLED_CONFIRM"
+LAB_CONFIRM_VALUE = "yes-loopback-lab-only"
+
+# Variables a hosting platform injects into every deployment. Their presence
+# means "this is not a workstation", so the lab mode refuses to start. This is
+# one layer, never the only one (ADR-055): a platform not listed here is still
+# stopped by the per-request loopback check.
+_HOSTING_ENV_PREFIXES = ("RAILWAY_", "VERCEL")
+
+# Headers a reverse proxy, tunnel or CDN adds. A lab request carrying any of
+# them arrived through something other than a direct loopback connection.
+_FORWARDING_HEADERS = (
+    "forwarded",
+    "via",
+    "x-forwarded-for",
+    "x-forwarded-host",
+    "x-forwarded-proto",
+    "x-real-ip",
+    "cf-connecting-ip",
+    "cf-ray",
+    "true-client-ip",
+)
+
+
 def auth_mode() -> str:
-    """"disabled" (default) or "oidc". Any other value is a fail-fast error."""
-    mode = os.environ.get("JUVAL_AUTH_MODE", "disabled")
-    if mode not in ("disabled", "oidc"):
+    """"oidc" or "disabled". There is no default (ADR-055).
+
+    A missing, empty or unknown value is a startup error. The value itself is
+    never echoed: an operator who pasted something else into this variable
+    should not see it again in a log.
+    """
+    mode = os.environ.get("JUVAL_AUTH_MODE")
+    if mode is None or not mode.strip():
         raise RuntimeError(
-            f"JUVAL_AUTH_MODE has an unrecognized value: {mode!r} (expected 'disabled' or 'oidc')"
+            "JUVAL_AUTH_MODE must be set: 'oidc' for any deployment, or 'disabled' "
+            f"only for a loopback lab together with {LAB_CONFIRM_ENV} (ADR-055). "
+            "There is no default."
         )
+    if mode not in AUTH_MODES:
+        raise RuntimeError("JUVAL_AUTH_MODE has an unrecognized value (expected 'oidc' or 'disabled')")
     return mode
+
+
+def _loopback_ip(address: object) -> bool:
+    """True only for a literal loopback IP (127.0.0.0/8, ::1, IPv4-mapped)."""
+    if not isinstance(address, str):
+        return False
+    try:
+        ip = ipaddress.ip_address(address.strip("[]"))
+    except ValueError:
+        return False
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+        ip = ip.ipv4_mapped
+    return ip.is_loopback
+
+
+def _loopback_name(hostname: Optional[str]) -> bool:
+    return hostname is not None and (hostname.lower() == "localhost" or _loopback_ip(hostname))
+
+
+def _loopback_origin(origin: str) -> bool:
+    if "@" in origin:  # userinfo would let the parsed hostname hide the real one
+        return False
+    parts = urlsplit(origin)
+    return parts.scheme in ("http", "https") and _loopback_name(parts.hostname)
+
+
+def check_lab_environment() -> None:
+    """Refuse the lab mode anywhere it could be a deployment. Raises on failure."""
+    if os.environ.get(LAB_CONFIRM_ENV) != LAB_CONFIRM_VALUE:
+        raise RuntimeError(
+            f"JUVAL_AUTH_MODE=disabled requires {LAB_CONFIRM_ENV}={LAB_CONFIRM_VALUE}. "
+            "It leaves every endpoint unauthenticated and is for a loopback lab only (ADR-055)."
+        )
+    if any(name.startswith(_HOSTING_ENV_PREFIXES) for name in os.environ):
+        raise RuntimeError(
+            "JUVAL_AUTH_MODE=disabled refused: a hosting platform variable "
+            "(RAILWAY_* or VERCEL*) is present. Deployments must use oidc (ADR-055)."
+        )
+    origins = [o.strip() for o in os.environ.get("JUVAL_CORS_ORIGINS", "").split(",") if o.strip()]
+    if any(not _loopback_origin(origin) for origin in origins):
+        raise RuntimeError(
+            "JUVAL_AUTH_MODE=disabled refused: JUVAL_CORS_ORIGINS lists a non-loopback "
+            "origin. The lab serves loopback origins only (ADR-055)."
+        )
+
+
+def lab_request_allowed(request: Request) -> bool:
+    """Whether a lab-mode request came straight from this machine.
+
+    All of these must hold: the peer and the local socket address are loopback
+    IPs (uvicorn takes both from the socket), no proxy/tunnel header is
+    present, the Host names a loopback address (this also defeats DNS
+    rebinding), and any Origin is a loopback origin (a public web page cannot
+    drive the lab from the operator's browser).
+
+    This is not a proof of privacy: a process on this machine that relays
+    traffic, rewrites Host and strips every forwarding header is
+    indistinguishable from a local client. That case is excluded by policy
+    (ADR-055), not detected.
+    """
+    client = request.scope.get("client")
+    server = request.scope.get("server")
+    if not client or not server or not (_loopback_ip(client[0]) and _loopback_ip(server[0])):
+        return False
+    headers = request.headers
+    if any(name in headers for name in _FORWARDING_HEADERS):
+        return False
+    host = headers.get("host")
+    if host is None or "@" in host or not _loopback_name(urlsplit(f"//{host}").hostname):
+        return False
+    origin = headers.get("origin")
+    return origin is None or _loopback_origin(origin)
+
+
+@dataclass(frozen=True)
+class AuthSettings:
+    """The authentication state of one running application. Immutable.
+
+    Resolved once at startup and installed on `app.state`; nothing reads the
+    environment again to decide who may do what. The constructor enforces the
+    one invariant that matters: OIDC always has a verifier, and the lab never
+    has one, so "no verifier" can never be read as "no authentication".
+    """
+
+    mode: str
+    verifier: Optional["TokenVerifier"] = None
+
+    def __post_init__(self) -> None:
+        if self.mode not in AUTH_MODES:
+            raise ValueError("unknown authentication mode")
+        if self.mode == "oidc" and self.verifier is None:
+            raise ValueError("oidc mode requires a token verifier")
+        if self.mode == "disabled" and self.verifier is not None:
+            raise ValueError("the lab mode must not carry a token verifier")
 
 
 def _required_env(name: str) -> str:
@@ -216,15 +356,13 @@ def _required_env(name: str) -> str:
     return value
 
 
-def build_verifier() -> Optional[TokenVerifier]:
-    """Build the verifier from the environment, or None when auth is disabled.
+def build_verifier() -> TokenVerifier:
+    """Build the OIDC verifier from the environment.
 
-    Missing configuration in oidc mode is a startup error, never a silent
-    downgrade to unauthenticated access.
+    Missing configuration is a startup error, never a silent downgrade to
+    unauthenticated access. Constructing it does not contact the IdP: the JWKS
+    is fetched on the first verification.
     """
-    if auth_mode() == "disabled":
-        return None
-
     issuer = _required_env("JUVAL_OIDC_ISSUER")
     audience = _required_env("JUVAL_OIDC_AUDIENCE")
     # The fallback is the OpenID Provider Metadata convention
@@ -255,32 +393,69 @@ def build_verifier() -> Optional[TokenVerifier]:
     return TokenVerifier(issuer=issuer, audience=audience, key_resolver=resolve, roles_claim=roles_claim)
 
 
-# Resolved once at import. Tests and the composition root may override it via
-# `set_verifier`, which is also what keeps this module free of import-time
-# network access when auth is disabled.
-_verifier: Optional[TokenVerifier] = None
-_configured = False
+# A verifier supplied *before* startup instead of the one built from the
+# environment (tests use a local key pair). It only replaces how the OIDC
+# verifier is built; clearing it with None means "build from the environment",
+# never "no authentication" -- the mode alone decides that.
+_verifier_override: Optional[TokenVerifier] = None
 
 
 def set_verifier(verifier: Optional[TokenVerifier]) -> None:
-    """Install (or clear) the process-wide verifier."""
-    global _verifier, _configured
-    _verifier = verifier
-    _configured = True
-
-
-def current_verifier() -> Optional[TokenVerifier]:
-    global _configured
-    if not _configured:
-        set_verifier(build_verifier())
-    return _verifier
+    """Use `verifier` for OIDC at the next startup (None: build from the environment)."""
+    global _verifier_override
+    _verifier_override = verifier
 
 
 def reset_for_tests() -> None:
-    """Forget the cached verifier so the next call re-reads the environment."""
-    global _verifier, _configured
-    _verifier = None
-    _configured = False
+    """Drop a verifier installed with `set_verifier`."""
+    set_verifier(None)
+
+
+def resolve_settings() -> AuthSettings:
+    """Read and validate the authentication configuration. Called at startup.
+
+    Every failure raises, so a misconfigured process does not start: no mode,
+    an unknown mode, an unconfirmed or hosted lab, or incomplete OIDC.
+    """
+    mode = auth_mode()
+    if mode == "disabled":
+        check_lab_environment()
+        return AuthSettings(mode="disabled")
+    verifier = _verifier_override if _verifier_override is not None else build_verifier()
+    return AuthSettings(mode="oidc", verifier=verifier)
+
+
+_STATE_ATTRIBUTE = "juval_auth"
+
+
+def install(app, settings: AuthSettings) -> None:
+    """Bind `settings` to `app` for the life of this instance. Never replaces."""
+    if not isinstance(settings, AuthSettings):
+        raise TypeError("install() requires AuthSettings")
+    if getattr(app.state, _STATE_ATTRIBUTE, None) is not None:
+        raise RuntimeError("authentication is already installed; a running instance cannot change mode")
+    setattr(app.state, _STATE_ATTRIBUTE, settings)
+
+
+def uninstall(app) -> None:
+    """Remove the binding when the instance shuts down (lifespan) or a test ends."""
+    if getattr(app.state, _STATE_ATTRIBUTE, None) is not None:
+        delattr(app.state, _STATE_ATTRIBUTE)
+
+
+def installed_settings(app) -> AuthSettings:
+    """The settings of a started instance; 503 if it was never started."""
+    settings = getattr(app.state, _STATE_ATTRIBUTE, None)
+    if not isinstance(settings, AuthSettings):
+        logger.error("request reached the API before authentication was initialised")
+        raise HTTPException(status_code=503, detail="authentication is not initialised")
+    return settings
+
+
+def api_docs_allowed(request: Request) -> bool:
+    """/docs, /redoc and /openapi.json: loopback lab only, never under OIDC."""
+    settings = getattr(request.app.state, _STATE_ATTRIBUTE, None)
+    return isinstance(settings, AuthSettings) and settings.mode == "disabled" and lab_request_allowed(request)
 
 
 # --- FastAPI wiring ---------------------------------------------------
@@ -330,16 +505,22 @@ def current_principal(request: Request) -> Principal:
     which is the correct hint for the only kind of client that could supply
     one.
     """
-    verifier = current_verifier()
-    if verifier is None:
-        return _ANONYMOUS
+    settings = installed_settings(request.app)
+    if settings.mode == "disabled":
+        if not lab_request_allowed(request):
+            logger.warning("lab mode refused a request that was not a direct loopback request")
+            raise HTTPException(
+                status_code=403,
+                detail="unauthenticated lab mode accepts direct loopback requests only",
+            )
+        return _LAB_PRINCIPAL
 
     if _session_resolver is not None:
         principal = _session_resolver(request)
         if principal is not None:
             return principal
 
-    return verifier.verify(_bearer_token(request))
+    return settings.verifier.verify(_bearer_token(request))
 
 
 def require(permission: str) -> Callable[[Principal], Principal]:
