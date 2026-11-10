@@ -410,12 +410,15 @@ changes before bumping a minor version.
 PostgreSQL and nginx are distro packages and follow the host's existing patch
 process (H-6, `unattended-upgrades`).
 
-**Rollback.** Reversible, and the backend needs no change: its OIDC boundary is
-provider-agnostic and `JUVAL_AUTH_MODE=disabled` restores the current state.
+**Rollback.** Reversible, and the backend needs no code change: its OIDC
+boundary is provider-agnostic. It is **not** reversible by switching the
+backend to `JUVAL_AUTH_MODE=disabled`: since ADR-055 that mode is a loopback lab
+and refuses to start on a hosting platform. Take the backend offline instead.
 
 ```bash
 # 1. de-activate first, so nothing is validating against a dying issuer
-#    (set JUVAL_AUTH_MODE=disabled on Railway, redeploy)
+#    (take the Railway backend offline -- remove its public domain or stop the
+#    service; JUVAL_AUTH_MODE=disabled is refused on hosting, ADR-055)
 # 2. stop the public surface
 sudo systemctl disable --now <tunnel-service>
 sudo rm -f /etc/nginx/sites-enabled/juval-fusionauth-public && sudo systemctl reload nginx

@@ -1,5 +1,63 @@
 # Juval — Project Status
 
+## 2026-11-04 (SEC-01C) — fail-closed authentication mode (ADR-055); committed locally 2026-11-10, not pushed
+
+**IMPLEMENTED locally; closure review 2026-11-10, local commits, no push.** No push, deploy, Railway
+change or production change. [ADR-055](adr/ADR-055-authentication-mode-fail-closed.md)
+records decisions 1–10 approved by the owner in the SEC-01C instruction.
+
+- Context: SEC-01A found the documented Railway URL answering Railway's
+  "Application not found"; the code granted every permission to an anonymous
+  caller when `JUVAL_AUTH_MODE` was missing, and whenever no verifier existed.
+- `JUVAL_AUTH_MODE` is required (missing/empty/unknown stops startup).
+  `disabled` needs `JUVAL_AUTH_DISABLED_CONFIRM=yes-loopback-lab-only`, refuses
+  `RAILWAY_*`/`VERCEL*` and non-loopback CORS origins, and answers 403 unless the
+  request is a direct loopback request (socket client and server loopback, no
+  proxy/tunnel headers, loopback Host and Origin).
+- `AuthSettings` is resolved in the lifespan, bound to `app.state` and frozen;
+  OIDC is validated at startup; authorization depends on the mode, never on the
+  verifier; an unstarted instance answers 503; `/docs` and `/openapi.json` are
+  lab-only; the BFF maps roles with the claim fixed at startup.
+- Known limit, excluded by policy (ADR-055): a same-host relay that rewrites
+  Host to loopback and strips every forwarding header cannot be detected.
+- Tests use the lab only when they ask for it (`auth_lab`); E2E lab config adds
+  the confirmation. `test_postgres_adr050_under_adr048.py` now skips without a
+  cluster instead of erroring.
+- `deploy/fusionauth/*` no longer suggests `disabled` on Railway as a rollback.
+
+Evidence (2026-11-04, working tree on `4e5e27b`):
+
+| Check | Result |
+|---|---|
+| Backend pytest, audited venv + disposable PostgreSQL 16 | **2205 PASS, 129 SKIP, 0 FAIL** (baseline 2093/129; skips unchanged: 86 nginx, 41 DSN, 2 by design) |
+| Backend pytest, operator `.venv` without PostgreSQL | 2116 PASS, 217 SKIP, 1 FAIL (`test_compliance_check`: pre-existing `.venv` dependency advisories, documented PENDING); the former 20 ERROR now skip |
+| Auth + BFF suites | 227 PASS (baseline 115) |
+| New negative suite `test_auth_mode_fail_closed.py` | 111 PASS; in-memory mutants (lab always allowed, unstarted = lab, OIDC without token = lab) all killed |
+| Real uvicorn on 127.0.0.1 | 6 unsafe configurations exit 3; lab direct 200; XFF, CF-Connecting-IP, public Host, public Origin 403; `/openapi.json` 200 direct, 404 proxied |
+| E2E Chromium | **42/42 PASS**, 0 `LocalProtocolError`, 0 HTTP 403 |
+| frontend-next typecheck / lint | PASS / 0 warnings |
+| Compliance (audited venv) | PASS with 2 warnings; `secret_scan` clean |
+
+Closure review 2026-11-10 (working tree on `4e5e27b`):
+
+- Instance isolation: the lifespan installed and removed `AuthSettings` on the
+  module-level `app` instead of the instance being started. Same object in
+  production, so no exposure, but a second FastAPI sharing the lifespan
+  overwrote/unbound the wrong instance (fail-closed: 503 or startup error).
+  Fixed (`install(_app, …)`); regression test
+  `test_two_instances_keep_their_own_settings` fails on the old code. All
+  auth dependencies already read `request.app`.
+- Lab (condition B) confirmed; `ACCESS_CONTROL.md` now records the same-host
+  relay residual risk and no longer says the Railway backend is live.
+- Focused: fail-closed 112 PASS; auth + BFF + BFF unit 228 PASS; hardening 11
+  PASS. `compliance_check`: `secret_scan` PASS; `deps.audit` FAIL on `.venv`
+  transitive packages (certifi, filelock, msgpack; not in `pyproject.toml`) —
+  environment advisory, PENDING owner decision on upgrading the venv.
+
+Not verified: binding to a non-loopback interface with real uvicorn (not done
+to avoid LAN exposure; covered by ASGI-scope tests), production OIDC with a
+real issuer, `frontend/README.md` (frozen) still says the mode may be unset.
+
 ## 2026-11-03 (cutover preparation) — acceptance and cutover plan; nothing executed
 
 **PENDING DECISION.** Documentation and local lab only; no push, deploy,

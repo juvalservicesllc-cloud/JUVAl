@@ -24,7 +24,8 @@ elimina la variable de Supabase.
 export LAB=$(mktemp -d /tmp/juval-owner.XXXXXX); mkdir -p "$LAB/runs"
 .venv/bin/python frontend-next/e2e/fixtures.py build "$LAB/files"   # 17 XLSX sintéticos
 echo "$LAB"                                                         # anotar para la terminal 2 y la limpieza
-env -u JUVAL_SUPABASE_DB_URL JUVAL_AUTH_MODE=disabled JUVAL_EXECUTION_STORE=sqlite \
+env -u JUVAL_SUPABASE_DB_URL JUVAL_AUTH_MODE=disabled \
+  JUVAL_AUTH_DISABLED_CONFIRM=yes-loopback-lab-only JUVAL_EXECUTION_STORE=sqlite \
   JUVAL_EXECUTION_DB_PATH="$LAB/juval.db" JUVAL_RUN_STORAGE_DIR="$LAB/runs" \
   JUVAL_CORS_ORIGINS=http://127.0.0.1:18772 \
   .venv/bin/python -m uvicorn juval.interfaces.api.main:app --host 127.0.0.1 --port 18771
@@ -37,7 +38,10 @@ VITE_API_BASE_URL=http://127.0.0.1:18771 npx vite --host 127.0.0.1 --port 18772 
 Abrir `http://127.0.0.1:18772/` en Chromium/Chrome con un **perfil nuevo** (sin
 preferencias previas). Al terminar: `Ctrl+C` en ambas terminales y
 `rm -rf "$LAB"`. La API avisa de que `JUVAL_AUTH_MODE=disabled` deja todo sin
-autenticar: es esperado y solo aceptable en loopback.
+autenticar: es esperado y solo aceptable en loopback. Desde ADR-055 este modo
+exige la confirmación de la línea anterior y responde 403 a cualquier petición
+que no llegue directamente desde loopback (proxy, túnel público, otro host u
+otra web).
 
 **Desde otro equipo (sin exponer servicios).** Los dos servidores escuchan
 solo en `127.0.0.1` del servidor (`juval-server`). Desde el equipo del
@@ -126,4 +130,4 @@ Ver procedimiento y evidencia de laboratorio en el
 | Firma del propietario | |
 
 La aceptación visual **no autoriza el cutover**; esa autorización se da aparte
-(runbook §5).
+(runbook §9).

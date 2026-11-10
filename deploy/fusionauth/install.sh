@@ -281,5 +281,6 @@ Then, per deploy/fusionauth/README.md:
   3. run tools/verify_oidc.py;
   4. schedule deploy/fusionauth/backup.sh.
 
-JUVAL_AUTH_MODE stays `disabled` until step 3 passes against the real issuer.
+The backend stays offline until step 3 passes against the real issuer; then it
+starts with JUVAL_AUTH_MODE=oidc (disabled is refused on hosting, ADR-055).
 NEXT

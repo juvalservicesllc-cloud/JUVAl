@@ -73,8 +73,9 @@ fallback to a less secure mode:
 
 | Setting | Enforced by | Failure behavior |
 |---|---|---|
-| `JUVAL_AUTH_MODE` | `interfaces/api/auth.py::auth_mode` | Unrecognized value raises `RuntimeError` |
-| `JUVAL_OIDC_ISSUER` / `JUVAL_OIDC_AUDIENCE` | `auth.py::build_verifier` | Missing in `oidc` mode raises `RuntimeError` — never degrades to unauthenticated |
+| `JUVAL_AUTH_MODE` | `interfaces/api/auth.py::auth_mode` / `resolve_settings` (lifespan) | **Required, no default (ADR-055)**: missing, empty or unrecognized value stops startup; the value is never echoed |
+| `JUVAL_AUTH_DISABLED_CONFIRM` | `auth.py::check_lab_environment` | Required as `yes-loopback-lab-only` for `disabled`; `disabled` also refuses `RAILWAY_*`/`VERCEL*` variables and non-loopback `JUVAL_CORS_ORIGINS` |
+| `JUVAL_OIDC_ISSUER` / `JUVAL_OIDC_AUDIENCE` | `auth.py::build_verifier`, at startup | Missing in `oidc` mode stops startup — never degrades to unauthenticated |
 | `JUVAL_EXECUTION_STORE` | `interfaces/api/main.py::_execution_run_store` | Unrecognized value, or missing connection variable for the selected mode, raises `RuntimeError` — never silently switches store |
 | `JUVAL_SUPABASE_DB_URL` | Same | Required when `supabase` is selected |
 | `JUVAL_SESSION_STORE` | `interfaces/api/bff.py::build_stores`, called from the FastAPI **lifespan** (`main.py::_lifespan`) | Unrecognized value raises `RuntimeError` **at startup**; `memory` under `oidc` raises unless `JUVAL_SESSION_STORE_MEMORY_CONFIRM` carries the exact opt-in sentence. There is no fallback to memory, ever |

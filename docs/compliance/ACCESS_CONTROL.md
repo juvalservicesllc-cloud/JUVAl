@@ -80,19 +80,41 @@ refresh (that revokes it).
 
 **Production enforcement is NOT_VERIFIED**: the last recorded deployment state
 had `JUVAL_AUTH_MODE` unset; deployment variables were not reread in this recovery.
+SEC-01A (2026-11-04) found the documented Railway URL answering Railway's
+"Application not found" (no application bound); the service itself was not
+inspected.
+
+**Fail-closed mode selection (ADR-055, local, pending commit review).**
+`JUVAL_AUTH_MODE` has no default: missing, empty or unknown stops startup.
+`disabled` is a confirmed loopback lab (`JUVAL_AUTH_DISABLED_CONFIRM`), refused
+on Railway/Vercel and with public CORS origins, and answers 403 to any request
+that is not a direct loopback request. The mode is fixed per instance at
+startup; OIDC configuration is validated then; no verifier failure grants
+access; `/docs` and `/openapi.json` are lab-only. The configuration under which
+the 2026-08-18 deployment ran (variable unset) can no longer start. Evidence:
+`tests/integration/test_auth_mode_fail_closed.py`. Settings are bound to the
+FastAPI instance being started, never to another instance sharing the lifespan
+(regression test `test_two_instances_keep_their_own_settings`).
+
+Residual risk (ADR-055, *Garantías y límites*): a process on the same host that
+relays outside traffic to `127.0.0.1`, rewrites `Host` to loopback and strips
+every forwarding header is indistinguishable from a local client. It cannot be
+detected in-process and is excluded by policy: a `disabled` API is never
+published through a proxy, tunnel or port forward. The owner's SSH tunnel to
+their own workstation is the only intended remote use.
 
 Verify: `.venv/bin/python -m pytest tests/integration/test_api_auth.py
 tests/integration/test_api_bff.py -q` (counts must be measured for the tested revision) and
 `python tools/compliance_check.py` (static check of direct main.py route
 permission dependencies; included routers and runtime behavior are not checked).
 
-> **Not yet active in production.** The backend is deployed
-> (`https://juval-backend-production.up.railway.app`, since 2026-08-18), so
-> deployment is no longer the blocker. Enforcement runs only when
-> `JUVAL_AUTH_MODE=oidc`, and that variable is deliberately unset in
-> production. The provider decision is **ADR-028** (FusionAuth) with **ADR-031**
+> **Not yet active in production.** The Railway backend deployed on 2026-08-18
+> (`https://juval-backend-production.up.railway.app`) ran with
+> `JUVAL_AUTH_MODE` unset; SEC-01A (2026-11) found it offline ("Application not
+> found") and it stays offline. Under ADR-055 that configuration can no longer
+> start, and a hosted backend can only start with `JUVAL_AUTH_MODE=oidc`. The provider decision is **ADR-028** (FusionAuth) with **ADR-031**
 > (self-hosted on `juval-server`) — the ADR-022/Okta citation that stood here
-> was stale, that ADR is `RECHAZADA`. Turning the variable on requires, and
+> was stale, that ADR is `RECHAZADA`. Bringing a backend online in `oidc` requires, and
 > does not yet have: a tenant with real users, the migration of ADR-036 applied,
 > the public nginx surface measured and deployed, and the frontend integrated
 > with the BFF contract. Setting it without those would reject every request.

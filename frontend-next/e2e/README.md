@@ -15,7 +15,10 @@ remaining capability gaps and human sign-off.
 
 `npm run e2e` starts everything it needs and tears it down:
 
-- a **disposable API**: uvicorn on `127.0.0.1:18771`, `JUVAL_AUTH_MODE=disabled`,
+- a **disposable API**: uvicorn on `127.0.0.1:18771`, `JUVAL_AUTH_MODE=disabled`
+  with `JUVAL_AUTH_DISABLED_CONFIRM=yes-loopback-lab-only` (ADR-055: the
+  unauthenticated lab only starts confirmed and only serves direct loopback
+  requests),
   `JUVAL_EXECUTION_STORE=sqlite` in a fresh `/tmp/juval-e2e-*` directory,
   `JUVAL_SUPABASE_DB_URL` stripped from its environment;
 - the **Vite dev server** on `127.0.0.1:18772`, pointed at that API;
