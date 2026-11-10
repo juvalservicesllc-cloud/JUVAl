@@ -35,7 +35,7 @@ def test_implements_the_execution_run_store_port_shape():
     save_params = list(inspect.signature(store.save_execution_run).parameters)
     load_params = list(inspect.signature(store.load_execution_run).parameters)
     list_params = list(inspect.signature(store.list_execution_runs).parameters)
-    assert save_params == ["run", "records", "financial_records", "capture_diagnostics"]
+    assert save_params == ["run", "records", "financial_records", "capture_diagnostics", "owner"]  # ADR-056
     assert load_params == ["execution_id"]
     assert list_params == ["limit"]
 
@@ -52,7 +52,7 @@ def test_implements_the_batch_store_port_shape():
     store = SupabaseExecutionRunStore("postgresql://localhost/postgres")
     assert callable(store.save_batch)
     assert callable(store.load_batch)
-    assert list(inspect.signature(store.save_batch).parameters) == ["batch"]
+    assert list(inspect.signature(store.save_batch).parameters) == ["batch", "owner"]  # ADR-056
     assert list(inspect.signature(store.load_batch).parameters) == ["batch_id"]
 
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping, NamedTuple, Optional, Protocol, Sequence
 
+from juval.application.tenancy import Ownership
 from juval.domain.batch import Batch
 from juval.domain.execution_run import ExecutionRun
 
@@ -27,7 +28,7 @@ class RunWrite(NamedTuple):
 
 
 class AtomicBatchStore(Protocol):
-    def save_batch_with_runs(self, batch: Batch, runs: Sequence[RunWrite]) -> None:
+    def save_batch_with_runs(self, batch: Batch, runs: Sequence[RunWrite], owner: Optional[Ownership] = None) -> None:
         """Persist every child run (with its records, financial documents and
         diagnostics) and the batch with its file outcomes in ONE transaction:
         any failure leaves nothing of this call stored (ADR-050)."""

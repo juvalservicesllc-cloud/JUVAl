@@ -50,6 +50,8 @@ integrity checks stay in application/financial_persistence.py.
 
 from __future__ import annotations
 
+import copy
+from datetime import datetime
 from typing import Any, Mapping, Optional, Sequence
 
 
@@ -58,9 +60,10 @@ from juval.domain.batch import Batch, BatchFile, BatchFileStatus, BatchStatus
 from juval.application.batch_store import RunWrite
 from juval.application.financial_persistence import FinancialStorageUnavailable
 from juval.application.record_snapshot_store import RecordSnapshotPage, RecordSnapshotQuery
+from juval.application.tenancy import OutOfScopeError, Ownership, TenantScope, canonical_organization_id
 from juval.application.review_classification import PENDING_DEMAND_VERIFICATION
 from juval.application.run_analytics import brand_distribution, decision_counts_by_run, issue_types, numeric_summary, price_spread
-from juval.infrastructure.logging.sqlite_execution_run_store import _diagnostics_row, _financial_row
+from juval.infrastructure.logging.sqlite_execution_run_store import _diagnostics_row, _financial_row, _owner_values
 
 _INSERT = """
 INSERT INTO execution_runs (
@@ -70,6 +73,12 @@ INSERT INTO execution_runs (
     records_successful, records_with_errors, warnings
 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
 """
+
+# ADR-056: an owned run names its organization and creator. Unowned writes
+# (unscoped tools only) keep the column list above, so they still work on a
+# database that predates migration 20261110000008.
+_INSERT_OWNED = _INSERT.replace(
+    "warnings\n) VALUES (", "warnings,\n    organization_id, created_by_issuer, created_by_subject\n) VALUES (%s, %s, %s, ")
 
 _INSERT_RECORD = """
 INSERT INTO execution_run_records (execution_id, ordinal, record_ref, snapshot)
@@ -100,6 +109,17 @@ SELECT execution_id, started_at, finished_at, status,
        records_total, records_processed,
        records_successful, records_with_errors, warnings
 FROM execution_runs ORDER BY started_at DESC LIMIT %s
+"""
+
+# ADR-056 scoped forms (the RLS of migration 20261110000008 applies the same
+# filter again in the database; NULL-owned history never matches either).
+_SELECT_OWNED = _SELECT.rstrip() + " AND organization_id = %s\n"
+_SELECT_LIST_OWNED = """
+SELECT execution_id, started_at, finished_at, status,
+       input_filename, input_hash, application_version,
+       records_total, records_processed,
+       records_successful, records_with_errors, warnings
+FROM execution_runs WHERE organization_id = %s ORDER BY started_at DESC LIMIT %s
 """
 
 _SELECT_RECORDS = """
@@ -185,11 +205,13 @@ def _row_to_run(row: tuple) -> ExecutionRun:
 
 def _write_run(conn, run: ExecutionRun, records: Sequence[Mapping[str, Any]],
                financial_records: Sequence[Mapping[str, Any]],
-               capture_diagnostics: Sequence[Mapping[str, Any]]) -> None:
+               capture_diagnostics: Sequence[Mapping[str, Any]],
+               owner: Optional[Ownership] = None) -> None:
     """The run's inserts on `conn`, inside the caller's transaction."""
     _, Json = _require_driver()
+    owned = owner is not None
     conn.execute(
-        _INSERT,
+        _INSERT_OWNED if owned else _INSERT,
         (
             run.execution_id,
             run.started_at,
@@ -203,6 +225,7 @@ def _write_run(conn, run: ExecutionRun, records: Sequence[Mapping[str, Any]],
             run.records_successful,
             run.records_with_errors,
             run.warnings,
+            *(_owner_values(owner) if owned else ()),
         ),
     )
     for ordinal, record in enumerate(records):
@@ -216,10 +239,16 @@ def _write_run(conn, run: ExecutionRun, records: Sequence[Mapping[str, Any]],
         conn.execute(_INSERT_DIAGNOSTICS, _diagnostics_row(run.execution_id, payload))
 
 
-def _write_batch(conn, batch: Batch) -> None:
+def _write_batch(conn, batch: Batch, owner: Optional[Ownership] = None) -> None:
     """The batch's inserts on `conn`, inside the caller's transaction."""
     _, Json = _require_driver()
-    conn.execute("INSERT INTO batches (batch_id, created_at, status) VALUES (%s, %s, %s)", (batch.batch_id, batch.created_at, batch.status.value))
+    if owner is None:  # unscoped tools: pre-ADR-056 column list
+        conn.execute("INSERT INTO batches (batch_id, created_at, status) VALUES (%s, %s, %s)",
+                     (batch.batch_id, batch.created_at, batch.status.value))
+    else:
+        conn.execute(
+            "INSERT INTO batches (batch_id, created_at, status, organization_id, created_by_issuer, created_by_subject) "
+            "VALUES (%s, %s, %s, %s, %s, %s)", (batch.batch_id, batch.created_at, batch.status.value, *_owner_values(owner)))
     for file in batch.files:
         conn.execute(
             f"INSERT INTO batch_files (batch_id, {_BATCH_FILE_COLUMNS}) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
@@ -249,10 +278,93 @@ class SupabaseExecutionRunStore:
 
     def __init__(self, connection_string: str) -> None:
         self._connection_string = connection_string
+        self._scope: Optional[TenantScope] = None
 
     def _connect(self):
+        """A connection; a scoped store also binds its organization for RLS.
+
+        `set_config(..., true)` is transaction-local: it lasts for exactly the
+        `with` block that uses this connection and cannot leak to another
+        request through a pooled session. Without it, the tenant policies of
+        migration 20261110000008 return no rows and accept no inserts.
+        """
         psycopg, _ = _require_driver()
-        return psycopg.connect(self._connection_string)
+        conn = psycopg.connect(self._connection_string)
+        if self._scope is not None:
+            try:
+                conn.execute("SELECT set_config('juval.organization_id', %s, true)", (self._scope.organization_id,))
+            except BaseException:
+                conn.close()
+                raise
+        return conn
+
+    # --- ADR-056 tenant scope ------------------------------------------------
+
+    def scoped(self, scope: TenantScope) -> "SupabaseExecutionRunStore":
+        """Same contract as `SqliteExecutionRunStore.scoped`, plus RLS binding."""
+        if not isinstance(scope, TenantScope):
+            raise TypeError("scoped() requires a TenantScope")
+        view = copy.copy(self)
+        view._scope = scope
+        return view
+
+    def _owner_for_write(self, owner: Optional[Ownership]) -> Optional[Ownership]:
+        if self._scope is not None and (owner is None or owner.organization_id != self._scope.organization_id):
+            raise OutOfScopeError("a scoped store writes only its own organization's resources")
+        return owner
+
+    def _require_runs_in_scope(self, conn, execution_ids: Sequence[str]) -> None:
+        """Application-level twin of the RLS policy, so a missing policy is not silent."""
+        if self._scope is None or not execution_ids:
+            return
+        owned = conn.execute(
+            "SELECT COUNT(DISTINCT execution_id) FROM execution_runs WHERE organization_id = %s AND execution_id = ANY(%s)",
+            (self._scope.organization_id, list(execution_ids))).fetchone()[0]
+        if owned != len(set(execution_ids)):
+            raise OutOfScopeError("child read outside the store's organization")
+
+    def organization_ids_for(self, issuer: str, subject: str) -> list[str]:
+        """The organizations this identity belongs to (at most one, OD-6).
+
+        The runtime role may only read its own membership row: the policy
+        compares against these transaction-local settings (migration
+        20261110000008).
+        """
+        with self._connect() as conn:
+            conn.execute("SELECT set_config('juval.issuer', %s, true), set_config('juval.subject', %s, true)",
+                         (issuer, subject))
+            rows = conn.execute(
+                "SELECT organization_id::text FROM organization_memberships WHERE issuer = %s AND subject = %s",
+                (issuer, subject)).fetchall()
+        return [row[0] for row in rows]
+
+    def create_organization(self, organization_id: str, name: str, created_by: str, created_at: datetime) -> None:
+        """Operator action with an administrative DSN; the runtime role cannot write here."""
+        canonical_organization_id(organization_id)
+        if not name.strip() or not created_by:
+            raise ValueError("organization requires a name and created_by")
+        with self._connect() as conn:
+            conn.execute("INSERT INTO organizations (organization_id, name, created_at, created_by) VALUES (%s, %s, %s, %s)",
+                         (organization_id, name, created_at, created_by))
+
+    def remove_membership(self, issuer: str, subject: str) -> Optional[str]:
+        """Operator action (offboarding): the organization the identity left, or
+        None if it had no membership. Access ends on the identity's next request."""
+        with self._connect() as conn:
+            row = conn.execute("DELETE FROM organization_memberships WHERE issuer = %s AND subject = %s "
+                               "RETURNING organization_id::text", (issuer, subject)).fetchone()
+        return row[0] if row is not None else None
+
+    def add_membership(self, organization_id: str, issuer: str, subject: str, created_by: str,
+                       created_at: datetime) -> None:
+        """Operator action; a second organization for one identity is refused (OD-6)."""
+        canonical_organization_id(organization_id)
+        if not issuer or not subject or not created_by:
+            raise ValueError("membership requires issuer, subject and created_by")
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO organization_memberships (issuer, subject, organization_id, created_at, created_by) "
+                "VALUES (%s, %s, %s, %s, %s)", (issuer, subject, organization_id, created_at, created_by))
 
     def save_execution_run(
         self,
@@ -261,25 +373,30 @@ class SupabaseExecutionRunStore:
         *,
         financial_records: Sequence[Mapping[str, Any]] = (),
         capture_diagnostics: Sequence[Mapping[str, Any]] = (),
+        owner: Optional[Ownership] = None,
     ) -> None:
         """Run, record snapshots and (optionally) native financial payloads and
         capture diagnostics, all in one transaction: any failure, including a
         financial or diagnostics one, rolls back everything."""
+        owner = self._owner_for_write(owner)
         with self._connect() as conn:
-            _write_run(conn, run, records, financial_records, capture_diagnostics)
+            _write_run(conn, run, records, financial_records, capture_diagnostics, owner)
 
-    def save_batch_with_runs(self, batch: Batch, runs: Sequence[RunWrite]) -> None:
+    def save_batch_with_runs(self, batch: Batch, runs: Sequence[RunWrite], owner: Optional[Ownership] = None) -> None:
         """Every child run (records, financial documents, diagnostics) and the
-        batch in ONE transaction: any failure rolls back all of it (ADR-050)."""
+        batch in ONE transaction: any failure rolls back all of it (ADR-050).
+        The batch and every child share one owner."""
+        owner = self._owner_for_write(owner)
         with self._connect() as conn:
             for item in runs:
-                _write_run(conn, item.run, item.records, item.financial_records, item.capture_diagnostics)
-            _write_batch(conn, batch)
+                _write_run(conn, item.run, item.records, item.financial_records, item.capture_diagnostics, owner)
+            _write_batch(conn, batch, owner)
 
     def _payload_row(self, table: str, execution_id: str, record_ref: str) -> Optional[tuple[str, int, str]]:
         psycopg, _ = _require_driver()
         try:
             with self._connect() as conn:
+                self._require_runs_in_scope(conn, (execution_id,))
                 row = conn.execute(f"SELECT format, format_version, payload FROM {table} "
                                    "WHERE execution_id = %s AND record_ref = %s", (execution_id, record_ref)).fetchone()
         except psycopg.errors.UndefinedTable as error:
@@ -298,6 +415,7 @@ class SupabaseExecutionRunStore:
         found = []
         try:
             with self._connect() as conn:
+                self._require_runs_in_scope(conn, (execution_id,))
                 for table in ("execution_run_financial_records", "execution_run_capture_diagnostics"):
                     sql = f"SELECT record_ref, format, format_version, payload FROM {table} WHERE execution_id = %s"
                     params: list[Any] = [execution_id]
@@ -320,32 +438,47 @@ class SupabaseExecutionRunStore:
         return self._payload_row("execution_run_capture_diagnostics", execution_id, record_ref)
 
     def load_execution_run(self, execution_id: str) -> Optional[ExecutionRun]:
+        """The run, or None -- also when it belongs to another organization."""
         with self._connect() as conn:
-            row = conn.execute(_SELECT, (execution_id,)).fetchone()
+            if self._scope is None:
+                row = conn.execute(_SELECT, (execution_id,)).fetchone()
+            else:
+                row = conn.execute(_SELECT_OWNED, (execution_id, self._scope.organization_id)).fetchone()
         return _row_to_run(row) if row is not None else None
 
     def list_execution_runs(self, limit: int = 20) -> list[ExecutionRun]:
         with self._connect() as conn:
-            rows = conn.execute(_SELECT_LIST, (limit,)).fetchall()
+            if self._scope is None:
+                rows = conn.execute(_SELECT_LIST, (limit,)).fetchall()
+            else:
+                rows = conn.execute(_SELECT_LIST_OWNED, (self._scope.organization_id, limit)).fetchall()
         return [_row_to_run(row) for row in rows]
 
     def load_records(self, execution_id: str) -> list[dict[str, Any]]:
         with self._connect() as conn:
+            self._require_runs_in_scope(conn, (execution_id,))
             rows = conn.execute(_SELECT_RECORDS, (execution_id,)).fetchall()
         return [snapshot for (snapshot,) in rows]
 
     def load_record(self, execution_id: str, record_ref: str) -> Optional[dict[str, Any]]:
         with self._connect() as conn:
+            self._require_runs_in_scope(conn, (execution_id,))
             row = conn.execute(_SELECT_RECORD, (execution_id, record_ref)).fetchone()
         return row[0] if row is not None else None
 
-    def save_batch(self, batch: Batch) -> None:
+    def save_batch(self, batch: Batch, owner: Optional[Ownership] = None) -> None:
+        owner = self._owner_for_write(owner)
         with self._connect() as conn:
-            _write_batch(conn, batch)
+            _write_batch(conn, batch, owner)
 
     def load_batch(self, batch_id: str) -> Optional[Batch]:
+        """The batch, or None -- also when it belongs to another organization."""
         with self._connect() as conn:
-            row = conn.execute("SELECT batch_id, created_at, status FROM batches WHERE batch_id = %s", (batch_id,)).fetchone()
+            if self._scope is None:
+                row = conn.execute("SELECT batch_id, created_at, status FROM batches WHERE batch_id = %s", (batch_id,)).fetchone()
+            else:
+                row = conn.execute("SELECT batch_id, created_at, status FROM batches WHERE batch_id = %s AND organization_id = %s",
+                                   (batch_id, self._scope.organization_id)).fetchone()
             if row is None:
                 return None
             files = conn.execute(f"SELECT {_BATCH_FILE_COLUMNS} FROM batch_files WHERE batch_id = %s ORDER BY ordinal", (batch_id,)).fetchall()
@@ -358,8 +491,9 @@ class SupabaseExecutionRunStore:
     def load_batch_for_run(self, execution_id: str) -> Optional[Batch]:
         """The batch a child run belongs to, or None when it ran on its own."""
         with self._connect() as conn:
+            self._require_runs_in_scope(conn, (execution_id,))
             row = conn.execute("SELECT batch_id FROM batch_files WHERE execution_id = %s LIMIT 1", (execution_id,)).fetchone()
-        return self.load_batch(row[0]) if row is not None else None
+        return self.load_batch(row[0]) if row is not None else None  # load_batch re-applies the scope
 
     def list_records(self, execution_id: str, query: RecordSnapshotQuery) -> RecordSnapshotPage:
         clauses = ["execution_id = %s"]
@@ -396,6 +530,7 @@ class SupabaseExecutionRunStore:
         sql = f"SELECT snapshot FROM execution_run_records WHERE {where} ORDER BY {expression} {order} NULLS LAST, ordinal ASC LIMIT %s OFFSET %s"
         count_sql = f"SELECT COUNT(*) FROM execution_run_records WHERE {where}"
         with self._connect() as conn:
+            self._require_runs_in_scope(conn, (execution_id,))
             total = conn.execute(count_sql, params).fetchone()[0]
             rows = conn.execute(sql, [*params, query.limit, query.offset]).fetchall()
         return RecordSnapshotPage(items=[snapshot for (snapshot,) in rows], total=total)
@@ -404,12 +539,14 @@ class SupabaseExecutionRunStore:
         if not execution_ids:
             return {}
         with self._connect() as conn:
+            self._require_runs_in_scope(conn, execution_ids)
             rows = conn.execute("SELECT execution_id, snapshot->>'decision', COUNT(*) FROM execution_run_records WHERE execution_id = ANY(%s) GROUP BY 1, 2", (list(execution_ids),)).fetchall()
         return decision_counts_by_run(rows)
 
     def get_run_analytics(self, execution_id: str) -> dict[str, Any]:
         fields = ("asin", "weight", "selling_price", "profit", "roi", "margin")
         with self._connect() as conn:
+            self._require_runs_in_scope(conn, (execution_id,))
             total = conn.execute("SELECT COUNT(*) FROM execution_run_records WHERE execution_id=%s", (execution_id,)).fetchone()[0]
             def grouped(expression):
                 return {str(k) if k is not None else "UNKNOWN": n for k, n in conn.execute(f"SELECT {expression}, COUNT(*) FROM execution_run_records WHERE execution_id=%s GROUP BY {expression}", (execution_id,))}

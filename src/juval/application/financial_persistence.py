@@ -58,6 +58,7 @@ from juval.application.capture_diagnostics import (
     deserialize_capture_diagnostics,
     serialize_capture_diagnostics,
 )
+from juval.application.tenancy import Ownership
 from juval.domain.execution_run import ExecutionRun
 
 
@@ -85,7 +86,8 @@ def _serialize(document: AnyFinancialRecord) -> dict[str, Any]:
 class FinancialRecordStore(Protocol):
     def save_execution_run(self, run: ExecutionRun, records: Sequence[Mapping[str, Any]] = (), *,
                            financial_records: Sequence[Mapping[str, Any]] = (),
-                           capture_diagnostics: Sequence[Mapping[str, Any]] = ()) -> None: ...
+                           capture_diagnostics: Sequence[Mapping[str, Any]] = (),
+                           owner: Optional[Ownership] = None) -> None: ...
 
     def load_financial_record(self, execution_id: str, record_ref: str) -> Optional[tuple[str, int, str]]: ...
 
@@ -98,6 +100,7 @@ def save_run_with_financial_records(
     snapshots: Sequence[Mapping[str, Any]],
     documents: Sequence[AnyFinancialRecord],
     capture_diagnostics: Sequence[RecordCaptureDiagnostics] = (),
+    owner: Optional[Ownership] = None,
 ) -> None:
     """Save run + snapshots + financial documents + capture diagnostics atomically.
 
@@ -107,7 +110,7 @@ def save_run_with_financial_records(
     """
     payloads, diagnostics_payloads = financial_payloads(run, snapshots, documents, capture_diagnostics)
     store.save_execution_run(run, snapshots, financial_records=payloads,
-                             capture_diagnostics=diagnostics_payloads)
+                             capture_diagnostics=diagnostics_payloads, owner=owner)
 
 
 def financial_payloads(

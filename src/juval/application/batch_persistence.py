@@ -18,12 +18,13 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, Optional, Sequence
 
 from juval.application.batch_store import AtomicBatchStore, RunWrite
 from juval.application.capture_diagnostics import RecordCaptureDiagnostics
 from juval.application.financial_persistence import AnyFinancialRecord, financial_payloads
 from juval.domain.batch import Batch, BatchFileStatus
+from juval.application.tenancy import Ownership
 from juval.domain.execution_run import ExecutionRun
 
 
@@ -41,7 +42,8 @@ class BatchChild:
     capture_diagnostics: Sequence[RecordCaptureDiagnostics] = ()
 
 
-def save_batch_with_runs(store: AtomicBatchStore, batch: Batch, children: Sequence[BatchChild]) -> None:
+def save_batch_with_runs(store: AtomicBatchStore, batch: Batch, children: Sequence[BatchChild],
+                         owner: Optional[Ownership] = None) -> None:
     child_ids = Counter(child.run.execution_id for child in children)
     named = Counter(file.execution_id for file in batch.files if file.execution_id is not None)
     for file in batch.files:
@@ -59,4 +61,4 @@ def save_batch_with_runs(store: AtomicBatchStore, batch: Batch, children: Sequen
         payloads, diagnostics = financial_payloads(child.run, child.snapshots, child.documents,
                                                    child.capture_diagnostics)
         writes.append(RunWrite(child.run, child.snapshots, payloads, diagnostics))
-    store.save_batch_with_runs(batch, writes)
+    store.save_batch_with_runs(batch, writes, owner)

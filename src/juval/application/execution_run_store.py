@@ -33,11 +33,13 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Optional, Protocol, Sequence
 
+from juval.application.tenancy import Ownership, TenantScope
 from juval.domain.execution_run import ExecutionRun
 
 
 class ExecutionRunStore(Protocol):
-    def save_execution_run(self, run: ExecutionRun, records: Sequence[Mapping[str, Any]] = ()) -> None:
+    def save_execution_run(self, run: ExecutionRun, records: Sequence[Mapping[str, Any]] = (), *,
+                           owner: Optional[Ownership] = None) -> None:
         """Persist `run`, and -- atomically, same transaction -- `records`
         if given (ADR-019). Each item of `records` is a JSON-safe snapshot
         dict shaped like `record_snapshot.py::record_to_snapshot()` output;
@@ -50,7 +52,18 @@ class ExecutionRunStore(Protocol):
         ADR-013, "comportamiento ante execution_id duplicado"). A
         duplicate must leave neither the run nor any of its records
         persisted (atomic failure, not a partial write).
+
+        `owner` (ADR-056) records the owning organization and creator in the
+        same transaction. A scoped store refuses a missing or foreign owner;
+        None on an unscoped store leaves the run unowned, i.e. quarantined.
         """
+        ...
+
+    def scoped(self, scope: TenantScope) -> "ExecutionRunStore":
+        """A view limited to one organization (ADR-056). Every lookup is
+        filtered by it -- a foreign or unowned id reads as absent -- and every
+        child read of a run outside it raises `OutOfScopeError`. The API uses
+        only scoped views."""
         ...
 
     def load_execution_run(self, execution_id: str) -> Optional[ExecutionRun]:

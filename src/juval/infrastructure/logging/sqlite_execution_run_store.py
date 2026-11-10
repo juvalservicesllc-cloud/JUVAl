@@ -57,6 +57,7 @@ access, which is out of scope (see ADR-013).
 from __future__ import annotations
 
 import json
+import copy
 import sqlite3
 from contextlib import closing
 from datetime import datetime
@@ -69,6 +70,7 @@ from juval.application.batch_store import RunWrite
 from juval.application.record_snapshot_store import RecordSnapshotPage, RecordSnapshotQuery
 from juval.application.review_classification import PENDING_DEMAND_VERIFICATION
 from juval.application.run_analytics import brand_distribution, decision_counts_by_run, issue_types, numeric_summary, price_spread
+from juval.application.tenancy import OutOfScopeError, Ownership, TenantScope, canonical_organization_id
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS execution_runs (
@@ -159,8 +161,9 @@ INSERT INTO execution_runs (
     execution_id, started_at, finished_at, status,
     input_filename, input_hash, application_version,
     records_total, records_processed,
-    records_successful, records_with_errors, warnings
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    records_successful, records_with_errors, warnings,
+    organization_id, created_by_issuer, created_by_subject
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 _INSERT_RECORD = """
@@ -184,6 +187,17 @@ SELECT execution_id, started_at, finished_at, status,
 FROM execution_runs ORDER BY started_at DESC LIMIT ?
 """
 
+# ADR-056: the scoped forms. A row whose organization_id is NULL (history,
+# CLI) never equals a scope, so it stays in quarantine.
+_SELECT_OWNED = _SELECT.rstrip() + " AND organization_id = ?\n"
+_SELECT_LIST_OWNED = """
+SELECT execution_id, started_at, finished_at, status,
+       input_filename, input_hash, application_version,
+       records_total, records_processed,
+       records_successful, records_with_errors, warnings
+FROM execution_runs WHERE organization_id = ? ORDER BY started_at DESC LIMIT ?
+"""
+
 _SELECT_RECORDS = """
 SELECT snapshot FROM execution_run_records
 WHERE execution_id = ? ORDER BY ordinal ASC
@@ -195,6 +209,7 @@ WHERE execution_id = ? AND record_ref = ?
 """
 
 _SELECT_BATCH = "SELECT batch_id, created_at, status FROM batches WHERE batch_id = ?"
+_SELECT_BATCH_OWNED = _SELECT_BATCH + " AND organization_id = ?"
 _SELECT_BATCH_ID_FOR_RUN = "SELECT batch_id FROM batch_files WHERE execution_id = ? LIMIT 1"
 _SELECT_BATCH_FILES = f"SELECT {_BATCH_FILE_COLUMNS} FROM batch_files WHERE batch_id = ? ORDER BY ordinal"
 
@@ -225,6 +240,46 @@ _BATCH_FILE_COUNT_COLUMNS = (
     ("records_with_errors", "INTEGER NOT NULL DEFAULT 0"),
     ("warning_count", "INTEGER NOT NULL DEFAULT 0"),
 )
+
+
+# ADR-056 ownership: additive, nullable columns. Existing rows keep NULL and
+# are therefore quarantined (OD-3); nothing assigns them automatically.
+_OWNER_COLUMNS = (
+    ("organization_id", "TEXT"),
+    ("created_by_issuer", "TEXT"),
+    ("created_by_subject", "TEXT"),
+)
+
+_ORGANIZATIONS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS organizations (
+    organization_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    created_by TEXT NOT NULL
+)
+"""
+
+_ORGANIZATIONS_NAME_INDEX = """
+CREATE UNIQUE INDEX IF NOT EXISTS idx_organizations_name ON organizations (lower(trim(name)))
+"""
+
+# One membership per identity in phase 1 (OD-6): the primary key is the
+# identity, so a second organization for the same person cannot be stored.
+_MEMBERSHIPS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS organization_memberships (
+    issuer TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    organization_id TEXT NOT NULL REFERENCES organizations(organization_id),
+    created_at TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    PRIMARY KEY (issuer, subject)
+)
+"""
+
+_RUNS_ORGANIZATION_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_execution_runs_organization
+    ON execution_runs (organization_id, started_at)
+"""
 
 
 _FINANCIAL_SCHEMA = """
@@ -269,9 +324,16 @@ def _diagnostics_row(execution_id: str, payload: Mapping[str, Any]) -> tuple[str
             json.dumps(payload, sort_keys=True))
 
 
+def _owner_values(owner: Optional[Ownership]) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    if owner is None:
+        return (None, None, None)
+    return (owner.organization_id, owner.created_by_issuer, owner.created_by_subject)
+
+
 def _write_run(conn: sqlite3.Connection, run: ExecutionRun, records: Sequence[Mapping[str, Any]],
                financial_records: Sequence[Mapping[str, Any]],
-               capture_diagnostics: Sequence[Mapping[str, Any]]) -> None:
+               capture_diagnostics: Sequence[Mapping[str, Any]],
+               owner: Optional[Ownership] = None) -> None:
     """The run's inserts on `conn`, inside the caller's transaction."""
     conn.execute(
         _INSERT,
@@ -288,6 +350,7 @@ def _write_run(conn: sqlite3.Connection, run: ExecutionRun, records: Sequence[Ma
             run.records_successful,
             run.records_with_errors,
             run.warnings,
+            *_owner_values(owner),
         ),
     )
     for ordinal, record in enumerate(records):
@@ -309,9 +372,12 @@ def _write_run(conn: sqlite3.Connection, run: ExecutionRun, records: Sequence[Ma
         )
 
 
-def _write_batch(conn: sqlite3.Connection, batch: Batch) -> None:
+def _write_batch(conn: sqlite3.Connection, batch: Batch, owner: Optional[Ownership] = None) -> None:
     """The batch's inserts on `conn`, inside the caller's transaction."""
-    conn.execute("INSERT INTO batches (batch_id, created_at, status) VALUES (?, ?, ?)", (batch.batch_id, batch.created_at.isoformat(), batch.status.value))
+    conn.execute(
+        "INSERT INTO batches (batch_id, created_at, status, organization_id, created_by_issuer, created_by_subject) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (batch.batch_id, batch.created_at.isoformat(), batch.status.value, *_owner_values(owner)))
     for file in batch.files:
         conn.execute(
             f"INSERT INTO batch_files (batch_id, {_BATCH_FILE_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -381,6 +447,7 @@ class SqliteExecutionRunStore:
 
     def __init__(self, db_path: Path) -> None:
         self._db_path = Path(db_path)
+        self._scope: Optional[TenantScope] = None
         with closing(sqlite3.connect(self._db_path)) as conn:
             with conn:
                 conn.execute(_SCHEMA)
@@ -392,6 +459,94 @@ class SqliteExecutionRunStore:
                 conn.execute(_FINANCIAL_SCHEMA)
                 conn.execute(_DIAGNOSTICS_SCHEMA)
                 _add_missing_columns(conn, "batch_files", _BATCH_FILE_COUNT_COLUMNS)
+                _add_missing_columns(conn, "execution_runs", _OWNER_COLUMNS)
+                _add_missing_columns(conn, "batches", _OWNER_COLUMNS)
+                conn.execute(_RUNS_ORGANIZATION_INDEX)
+                conn.execute(_ORGANIZATIONS_SCHEMA)
+                conn.execute(_ORGANIZATIONS_NAME_INDEX)
+                conn.execute(_MEMBERSHIPS_SCHEMA)
+
+    # --- ADR-056 tenant scope ------------------------------------------------
+
+    def scoped(self, scope: TenantScope) -> "SqliteExecutionRunStore":
+        """A view of this store limited to `scope`'s organization.
+
+        Runs and batches are looked up *within* the organization (a foreign or
+        unowned id reads as absent); child reads refuse a run outside it; writes
+        must carry that organization's ownership. The unscoped store remains
+        for local tools (CLI, maintenance) and is never used by the API.
+        """
+        if not isinstance(scope, TenantScope):
+            raise TypeError("scoped() requires a TenantScope")
+        view = copy.copy(self)
+        view._scope = scope
+        return view
+
+    def _owner_for_write(self, owner: Optional[Ownership]) -> Optional[Ownership]:
+        if self._scope is not None and (owner is None or owner.organization_id != self._scope.organization_id):
+            raise OutOfScopeError("a scoped store writes only its own organization's resources")
+        return owner
+
+    def _require_runs_in_scope(self, conn: sqlite3.Connection, execution_ids: Sequence[str]) -> None:
+        if self._scope is None or not execution_ids:
+            return
+        placeholders = ",".join("?" for _ in execution_ids)
+        owned = conn.execute(
+            f"SELECT COUNT(DISTINCT execution_id) FROM execution_runs WHERE organization_id = ? AND execution_id IN ({placeholders})",
+            [self._scope.organization_id, *execution_ids]).fetchone()[0]
+        if owned != len(set(execution_ids)):
+            raise OutOfScopeError("child read outside the store's organization")
+
+    def _connect_in_scope(self, *execution_ids: str) -> sqlite3.Connection:
+        """A connection whose run(s) were checked against the scope first."""
+        conn = sqlite3.connect(self._db_path)
+        try:
+            self._require_runs_in_scope(conn, execution_ids)
+        except BaseException:
+            conn.close()
+            raise
+        return conn
+
+    def organization_ids_for(self, issuer: str, subject: str) -> list[str]:
+        """The organizations this identity belongs to (at most one, OD-6)."""
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            rows = conn.execute(
+                "SELECT organization_id FROM organization_memberships WHERE issuer = ? AND subject = ?",
+                (issuer, subject)).fetchall()
+        return [row[0] for row in rows]
+
+    def create_organization(self, organization_id: str, name: str, created_by: str, created_at: datetime) -> None:
+        """Operator action (tools/tenancy_admin.py); never called by the API."""
+        canonical_organization_id(organization_id)
+        if not name.strip() or not created_by:
+            raise ValueError("organization requires a name and created_by")
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            with conn:
+                conn.execute("INSERT INTO organizations (organization_id, name, created_at, created_by) VALUES (?, ?, ?, ?)",
+                             (organization_id, name, created_at.isoformat(), created_by))
+
+    def remove_membership(self, issuer: str, subject: str) -> Optional[str]:
+        """Operator action (offboarding): the organization the identity left, or
+        None if it had no membership. Access ends on the identity's next request."""
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            with conn:
+                row = conn.execute("SELECT organization_id FROM organization_memberships WHERE issuer = ? AND subject = ?",
+                                   (issuer, subject)).fetchone()
+                conn.execute("DELETE FROM organization_memberships WHERE issuer = ? AND subject = ?", (issuer, subject))
+        return row[0] if row is not None else None
+
+    def add_membership(self, organization_id: str, issuer: str, subject: str, created_by: str,
+                       created_at: datetime) -> None:
+        """Operator action; a second organization for one identity is refused (OD-6)."""
+        canonical_organization_id(organization_id)
+        if not issuer or not subject or not created_by:
+            raise ValueError("membership requires issuer, subject and created_by")
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            conn.execute("PRAGMA foreign_keys = ON")
+            with conn:
+                conn.execute(
+                    "INSERT INTO organization_memberships (issuer, subject, organization_id, created_at, created_by) "
+                    "VALUES (?, ?, ?, ?, ?)", (issuer, subject, organization_id, created_at.isoformat(), created_by))
 
     def save_execution_run(
         self,
@@ -400,29 +555,34 @@ class SqliteExecutionRunStore:
         *,
         financial_records: Sequence[Mapping[str, Any]] = (),
         capture_diagnostics: Sequence[Mapping[str, Any]] = (),
+        owner: Optional[Ownership] = None,
     ) -> None:
         """Run, record snapshots and (optionally) native financial payloads and
         capture diagnostics, all in one transaction: any failure, including a
-        financial or diagnostics one, rolls back everything."""
+        financial or diagnostics one, rolls back everything. `owner` None
+        (CLI, unscoped store only) leaves the run unowned, i.e. quarantined."""
+        owner = self._owner_for_write(owner)
         with closing(sqlite3.connect(self._db_path)) as conn:
             conn.execute("PRAGMA foreign_keys = ON")
             with conn:
-                _write_run(conn, run, records, financial_records, capture_diagnostics)
+                _write_run(conn, run, records, financial_records, capture_diagnostics, owner)
 
-    def save_batch_with_runs(self, batch: Batch, runs: Sequence[RunWrite]) -> None:
+    def save_batch_with_runs(self, batch: Batch, runs: Sequence[RunWrite], owner: Optional[Ownership] = None) -> None:
         """Every child run (records, financial documents, diagnostics) and the
-        batch in ONE transaction: any failure rolls back all of it (ADR-050)."""
+        batch in ONE transaction: any failure rolls back all of it (ADR-050).
+        The batch and every child share one owner."""
+        owner = self._owner_for_write(owner)
         with closing(sqlite3.connect(self._db_path)) as conn:
             conn.execute("PRAGMA foreign_keys = ON")
             with conn:
                 for item in runs:
-                    _write_run(conn, item.run, item.records, item.financial_records, item.capture_diagnostics)
-                _write_batch(conn, batch)
+                    _write_run(conn, item.run, item.records, item.financial_records, item.capture_diagnostics, owner)
+                _write_batch(conn, batch, owner)
 
     def load_financial_record(self, execution_id: str, record_ref: str) -> Optional[tuple[str, int, str]]:
         """(format, format_version, payload JSON text) of one run's record, or None
         when that record has no financial document. Parsing is the caller's job."""
-        with closing(sqlite3.connect(self._db_path)) as conn:
+        with closing(self._connect_in_scope(execution_id)) as conn:
             row = conn.execute(
                 "SELECT format, format_version, payload FROM execution_run_financial_records "
                 "WHERE execution_id = ? AND record_ref = ?", (execution_id, record_ref)).fetchone()
@@ -431,7 +591,7 @@ class SqliteExecutionRunStore:
     def load_capture_diagnostics(self, execution_id: str, record_ref: str) -> Optional[tuple[str, int, str]]:
         """(format, format_version, payload JSON text) of one record's stored
         diagnostics, or None when none were stored for it."""
-        with closing(sqlite3.connect(self._db_path)) as conn:
+        with closing(self._connect_in_scope(execution_id)) as conn:
             row = conn.execute(
                 "SELECT format, format_version, payload FROM execution_run_capture_diagnostics "
                 "WHERE execution_id = ? AND record_ref = ?", (execution_id, record_ref)).fetchone()
@@ -443,38 +603,50 @@ class SqliteExecutionRunStore:
         """Financial and diagnostics rows of many records of one run, keyed by
         record_ref, over one connection (two queries). None = the whole run;
         a record with nothing stored is simply missing from the dict."""
-        with closing(sqlite3.connect(self._db_path)) as conn:
+        with closing(self._connect_in_scope(execution_id)) as conn:
             return (_rows_by_ref(conn, "execution_run_financial_records", execution_id, record_refs),
                     _rows_by_ref(conn, "execution_run_capture_diagnostics", execution_id, record_refs))
 
     def load_execution_run(self, execution_id: str) -> Optional[ExecutionRun]:
+        """The run, or None -- also when it belongs to another organization."""
         with closing(sqlite3.connect(self._db_path)) as conn:
-            row = conn.execute(_SELECT, (execution_id,)).fetchone()
+            if self._scope is None:
+                row = conn.execute(_SELECT, (execution_id,)).fetchone()
+            else:
+                row = conn.execute(_SELECT_OWNED, (execution_id, self._scope.organization_id)).fetchone()
         return _row_to_run(row) if row is not None else None
 
     def list_execution_runs(self, limit: int = 20) -> list[ExecutionRun]:
         with closing(sqlite3.connect(self._db_path)) as conn:
-            rows = conn.execute(_SELECT_LIST, (limit,)).fetchall()
+            if self._scope is None:
+                rows = conn.execute(_SELECT_LIST, (limit,)).fetchall()
+            else:
+                rows = conn.execute(_SELECT_LIST_OWNED, (self._scope.organization_id, limit)).fetchall()
         return [_row_to_run(row) for row in rows]
 
     def load_records(self, execution_id: str) -> list[dict[str, Any]]:
-        with closing(sqlite3.connect(self._db_path)) as conn:
+        with closing(self._connect_in_scope(execution_id)) as conn:
             rows = conn.execute(_SELECT_RECORDS, (execution_id,)).fetchall()
         return [json.loads(snapshot) for (snapshot,) in rows]
 
     def load_record(self, execution_id: str, record_ref: str) -> Optional[dict[str, Any]]:
-        with closing(sqlite3.connect(self._db_path)) as conn:
+        with closing(self._connect_in_scope(execution_id)) as conn:
             row = conn.execute(_SELECT_RECORD, (execution_id, record_ref)).fetchone()
         return json.loads(row[0]) if row is not None else None
 
-    def save_batch(self, batch: Batch) -> None:
+    def save_batch(self, batch: Batch, owner: Optional[Ownership] = None) -> None:
+        owner = self._owner_for_write(owner)
         with closing(sqlite3.connect(self._db_path)) as conn:
             with conn:
-                _write_batch(conn, batch)
+                _write_batch(conn, batch, owner)
 
     def load_batch(self, batch_id: str) -> Optional[Batch]:
+        """The batch, or None -- also when it belongs to another organization."""
         with closing(sqlite3.connect(self._db_path)) as conn:
-            row = conn.execute(_SELECT_BATCH, (batch_id,)).fetchone()
+            if self._scope is None:
+                row = conn.execute(_SELECT_BATCH, (batch_id,)).fetchone()
+            else:
+                row = conn.execute(_SELECT_BATCH_OWNED, (batch_id, self._scope.organization_id)).fetchone()
             if row is None:
                 return None
             files = conn.execute(_SELECT_BATCH_FILES, (batch_id,)).fetchall()
@@ -486,9 +658,9 @@ class SqliteExecutionRunStore:
 
     def load_batch_for_run(self, execution_id: str) -> Optional[Batch]:
         """The batch a child run belongs to, or None when it ran on its own."""
-        with closing(sqlite3.connect(self._db_path)) as conn:
+        with closing(self._connect_in_scope(execution_id)) as conn:
             row = conn.execute(_SELECT_BATCH_ID_FOR_RUN, (execution_id,)).fetchone()
-        return self.load_batch(row[0]) if row is not None else None
+        return self.load_batch(row[0]) if row is not None else None  # load_batch re-applies the scope
 
     def list_records(self, execution_id: str, query: RecordSnapshotQuery) -> RecordSnapshotPage:
         """Query JSON snapshots in SQLite; never load a whole run for a page."""
@@ -525,7 +697,7 @@ class SqliteExecutionRunStore:
         order = query.direction.upper()
         sql = f"SELECT snapshot FROM execution_run_records WHERE {where} ORDER BY {expression} {order}, ordinal ASC LIMIT ? OFFSET ?"
         count_sql = f"SELECT COUNT(*) FROM execution_run_records WHERE {where}"
-        with closing(sqlite3.connect(self._db_path)) as conn:
+        with closing(self._connect_in_scope(execution_id)) as conn:
             total = conn.execute(count_sql, params).fetchone()[0]
             rows = conn.execute(sql, [*params, query.limit, query.offset]).fetchall()
         return RecordSnapshotPage(items=[json.loads(snapshot) for (snapshot,) in rows], total=total)
@@ -534,14 +706,14 @@ class SqliteExecutionRunStore:
         if not execution_ids:
             return {}
         placeholders = ",".join("?" for _ in execution_ids)
-        with closing(sqlite3.connect(self._db_path)) as conn:
+        with closing(self._connect_in_scope(*execution_ids)) as conn:
             rows = conn.execute(f"SELECT execution_id, json_extract(snapshot, '$.decision'), COUNT(*) FROM execution_run_records WHERE execution_id IN ({placeholders}) GROUP BY 1, 2", list(execution_ids)).fetchall()
         return decision_counts_by_run(rows)
 
     def get_run_analytics(self, execution_id: str) -> dict[str, Any]:
         """Use SQL grouping; only numeric value/status pairs leave SQLite."""
         fields = ("asin", "weight", "selling_price", "profit", "roi", "margin")
-        with closing(sqlite3.connect(self._db_path)) as conn:
+        with closing(self._connect_in_scope(execution_id)) as conn:
             total = conn.execute("SELECT COUNT(*) FROM execution_run_records WHERE execution_id=?", (execution_id,)).fetchone()[0]
             def grouped(expression):
                 return {str(k) if k is not None else "UNKNOWN": n for k, n in conn.execute(f"SELECT {expression}, COUNT(*) FROM execution_run_records WHERE execution_id=? GROUP BY {expression}", (execution_id,))}
