@@ -1,9 +1,9 @@
 # ADR-055 — Selección del modo de autenticación fail-closed
 
 - Estado: **Aceptada** (2026-11-04). Las decisiones 1–10 fueron aprobadas
-  explícitamente por el propietario en la instrucción SEC-01C. La
-  implementación local está **pendiente de revisión y commit**; no se ha
-  desplegado.
+  explícitamente por el propietario en la instrucción SEC-01C. Implementado
+  en commits locales `ece45e9` (código) y `2638074` (documentación) el
+  2026-11-10; sin push ni despliegue.
 - Origen: SEC-01A (backend Railway documentado inactivo, «Application not
   found») y SEC-01B (diseño).
 - Relacionado: ADR-028/031 (FusionAuth), ADR-034 (BFF), ADR-036 (sesiones

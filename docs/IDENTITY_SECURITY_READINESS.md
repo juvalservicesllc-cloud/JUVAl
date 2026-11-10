@@ -5,6 +5,23 @@ workspace: `/home/juval/JUVAl/APP`. This ledger supersedes dated implementation
 snapshots in project plans, contracts and research; historical experiments are
 not reclassified as production evidence. Git commits identify the exact changes.
 
+## SEC-01C closed / SEC-01D designed — 2026-11-10
+
+- SEC-01C (ADR-055, fail-closed mode) committed locally: `ece45e9`, `2638074`.
+  Not pushed, not deployed. Railway stays offline.
+- SEC-01D: **HIGH open finding** — no per-resource authorization; any
+  authenticated reader sees every run (measured in the OIDC lab). ADR-056
+  **Proposed**, owner decisions OD-1..OD-7 pending. Fixed meanwhile: an encoded
+  `..` in `/runs/{id}/download` escaped the run storage (local, uncommitted).
+- Activation with more than one user is blocked until ADR-056 M2+M3.
+- **Update, same day:** owner approved OD-1..OD-7; ADR-056 **Accepted** and
+  implemented locally (M0–M4); committed locally the same day (`56a3aa5`,
+  `2517cf4`, `0859ace`, `2102a11`, `51f6fe1` + docs), not pushed.
+  Per-organization isolation on all 14 data routes, tenant RLS migrations
+  08/09 tested on disposable PostgreSQL 16 only. Still required before any
+  multi-user activation: apply 08+09 (owner), create real organizations and
+  memberships (`tools/tenancy_admin.py`), commit/review, deploy.
+
 ## Unblock plan — 2026-10-26 (isolated clone, plan only)
 
 Ordered steps, owners, pending decisions D0–D8 and proofs per ADR-040 criterion:

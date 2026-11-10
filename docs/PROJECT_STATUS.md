@@ -1,5 +1,111 @@
 # Juval — Project Status
 
+## 2026-11-10 (SEC-01D, consolidation) — local commits; not pushed, not deployed
+
+**SEC-01D closed locally** (IMPLEMENTED_LOCAL, VERIFIED_LOCAL); **not**
+PRODUCTION_DEPLOYED. Owner-approved commits: `56a3aa5` ownership model,
+`2517cf4` migrations 08/09, `0859ace` whitespace fix in migration 08 (the
+check flagged it after `2517cf4`; fixed forward, no history rewrite),
+`2102a11` operator tool, `51f6fe1` API authorization, then this documentation
+commit. Each code commit was tested in a clean worktree holding only the
+previous HEAD plus its own files (`PYTHONPATH` pinned to that worktree):
+1284 / 25 / 9 / 2104 (+43 skip) PASS respectively.
+
+- Dependencies (`.venv` only; `pyproject.toml` and lockfiles untouched):
+  certifi 2026.7.22 → 2026.10.18, msgpack 1.2.1 → 1.2.3, filelock 3.32.4 →
+  4.2.1 (the fix versions pip-audit named; filelock is CacheControl's
+  `filecache` extra used by pip-audit itself, so it was upgraded, not
+  removed). `pip check`: no broken requirements; `pip-audit`: no known
+  vulnerabilities (the local `juval` package is skipped: coverage PARTIAL);
+  `tools/compliance_check.py`: PASS WITH WARNINGS; `tests/compliance` PASS.
+- E2E: 42/42 PASS with the documented `JUVAL_CHROME_BIN` (see the correction
+  below); no regression, no Codex work needed.
+- Activation plan (not executed): `docs/architecture/TENANCY_ACTIVATION_RUNBOOK.md`.
+
+## 2026-11-10 (SEC-01D, final audit) — READY_FOR_REVIEW; local, not committed
+
+IMPLEMENTED_LOCAL + VERIFIED_LOCAL + READY_FOR_REVIEW; **not**
+PRODUCTION_DEPLOYED. Audit fixes: FK from runs/batches to `organizations`;
+migration 09 re-checks `juval_backend` (no superuser/BYPASSRLS/INHERIT/
+memberships), requires RLS and non-runtime ownership on all 8 tables, and
+limits `batch_files` to same-organization runs; `tenancy_admin.py` gains
+`remove-member`, `created_by` for organizations, unique organization names and
+issuer/subject validation; downloads refuse symlinks leaving the organization
+directory; structural test for included routers. Runbook:
+[TENANCY_ACTIVATION_RUNBOOK](architecture/TENANCY_ACTIVATION_RUNBOOK.md).
+
+Focused evidence (operator `.venv`): isolation 56 PASS (the 11 original BOLA
+cases pass, no xfail/skip markers); PostgreSQL 16 disposable 103 PASS (tenant
+suite 15, incl. reused connection, no-context and unknown-organization writes,
+cross-organization batch file, runtime UPDATE/DELETE denied, BYPASSRLS refused,
+offboarding); tool 9 PASS; affected API/store suites 331 PASS. The single full-
+suite FAIL remains `test_compliance_check` (`deps.audit`: `.venv` packages
+certifi 2026.7.22, filelock 3.32.4, msgpack 1.2.1; none declared in
+`pyproject.toml`; present before SEC-01D) — environment, PENDING owner
+decision; not a SEC-01D regression.
+
+## 2026-11-10 (SEC-01D, implementation) — per-organization isolation (ADR-056 Accepted); local, not committed
+
+**IMPLEMENTED locally (M0–M4), not committed (owner instruction), not
+deployed; migrations 08/09 not applied to any real database.** Owner decisions
+OD-1..OD-7 approved 2026-11-10 (one organization per customer plus JUVAl's
+own; members share their organization's runs under RBAC with `created_by`
+recorded; unowned history quarantined; no cross-organization access for
+anyone; memberships in JUVAl's DB; one organization per identity; foreign =
+404).
+
+- `application/tenancy.py` (`TenantScope`, `Ownership`, `OutOfScopeError`);
+  `Principal.issuer`; scoped store views (SQLite and PostgreSQL) with ownership
+  columns, organizations and memberships; `tenant_access` and `run_in_scope`
+  dependencies on all 14 data routes (order: authentication, RBAC, CSRF,
+  organization); files under `juval_runs/<organization>/<run>/`.
+- PostgreSQL: `20261110000008_tenant_ownership.sql` (+down) and
+  `20261110000009_tenant_rls.sql` (+down) replace ADR-048 `USING (true)` with
+  per-organization policies bound by `set_config` per transaction.
+- `tools/tenancy_admin.py` for organizations and memberships.
+- Tests: isolation suite 52 (no xfail left; 3 mutations killed), PostgreSQL
+  tenant suite 8, tool 3; existing tests adapted only in setup (explicit lab
+  owner for directly saved or CLI runs, memberships for OIDC identities, new
+  file path, owner parameter in contract-shape tests, migrations 08/09 in
+  API-driven PostgreSQL tests). No assertion relaxed.
+- Residual: changing the OIDC issuer requires revoking stored BFF sessions
+  first (sessions do not store `iss`); CLI runs are invisible to the API.
+- Evidence 2026-11-10, operator `.venv`: backend with disposable PostgreSQL 16
+  **2268 PASS, 129 SKIP** (86 nginx, 41 DSN, 2 by design), 1 FAIL
+  (`test_compliance_check`: pre-existing `.venv` advisories certifi/filelock/
+  msgpack, PENDING). `compliance_check`: `auth.endpoints` and `secret_scan`
+  PASS. frontend-next Chromium E2E: 37/42 PASS after the lab seeds in
+  `frontend-next/e2e/fixtures.py` were given the lab owner (only change under
+  `frontend-next/`, no UI); the other 5 (C2 and four parity gates,
+  `expectSameTab` sees an extra popup tab) fail identically on committed HEAD
+  `2638074` in a separate worktree. **Corrected the same day (consolidation):**
+  those runs used Playwright's bundled headless shell instead of the
+  documented `JUVAL_CHROME_BIN` (snap Chromium, `frontend-next/e2e/README.md`);
+  the bundled shell keeps the `noopener` export popup open. With the
+  documented browser: **42/42 PASS**, including ADR-056.
+
+## 2026-11-10 (SEC-01D) — multi-user isolation designed (ADR-056 Proposed); local, not committed
+
+**PARTIALLY IMPLEMENTED / PENDING DECISION.** No push, deploy or production
+change; no commit (SEC-01D commits need review).
+
+- Measured (OIDC lab, SQLite, two synthetic subjects): no per-resource
+  authorization. B as `viewer` lists and reads A's run (detail, records,
+  analytics, financial); as `operator` exports and downloads it. HIGH; blocks
+  activation with more than one user. RLS is `USING (true)` for
+  `juval_backend` (ADR-048): role isolation, not tenant isolation.
+- Fixed: `/api/v1/runs/%2E%2E/download` served `<storage>/output.xlsx`.
+  `service.run_dir` accepts one plain path component only; the download
+  answers 404 otherwise. The regression test fails on the old code.
+- [ADR-056](adr/ADR-056-multi-tenant-resource-authorization.md) proposes
+  organization + membership (JUVAl DB) + IdP RBAC, a single per-resource
+  authorization point, scoped store reads, 404 for foreign resources,
+  tenant-partitioned files, tenant RLS, quarantine for unowned history.
+  Owner decisions OD-1..OD-7 pending; no ownership code until accepted.
+- `tests/integration/test_resource_isolation.py`: 19 controls PASS; 11
+  isolation invariants `xfail(strict=True)` failing with 200 (verified with
+  `--runxfail`).
+
 ## 2026-11-04 (SEC-01C) — fail-closed authentication mode (ADR-055); committed locally 2026-11-10, not pushed
 
 **IMPLEMENTED locally; closure review 2026-11-10, local commits, no push.** No push, deploy, Railway

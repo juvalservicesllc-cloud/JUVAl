@@ -156,6 +156,19 @@ no autorizado).
 `[DECISIÓN PENDIENTE]`: qué policy de RLS exacta corresponde una vez
 que exista autenticación (Fase 9) — no se decide aquí.
 
+> **Actualización 2026-11-10 (ADR-056).** La decisión ya existe: aislamiento
+> por organización. `20261110000008_tenant_ownership.sql` (organizaciones,
+> membresías, columnas de propietario; historia en cuarentena) y
+> `20261110000009_tenant_rls.sql` (sustituye las políticas `USING (true)` de
+> ADR-048 por políticas que sólo ven la organización fijada con
+> `set_config('juval.organization_id', …, true)` en la transacción) están
+> **probadas sólo en PostgreSQL 16 desechable**
+> (`tests/integration/test_postgres_tenant_isolation.py`) y **no aplicadas** al
+> proyecto real. El backend con ADR-056 exige ambas: sin la 08 no puede
+> escribir runs con propietario. Aplicarlas es una acción del propietario:
+> orden, verificación y rollback en
+> [`TENANCY_ACTIVATION_RUNBOOK.md`](TENANCY_ACTIVATION_RUNBOOK.md).
+
 ## 5. Secrets — variables de entorno
 
 | Variable | Dónde vive | Nunca en |

@@ -96,6 +96,26 @@ the 2026-08-18 deployment ran (variable unset) can no longer start. Evidence:
 FastAPI instance being started, never to another instance sharing the lifespan
 (regression test `test_two_instances_keep_their_own_settings`).
 
+**Per-organization authorization (SEC-01D, ADR-056 Accepted; committed
+locally 2026-11-10, not pushed, not deployed).** Measured 2026-11-10 before the change: any
+authenticated `viewer` read every run and any `operator` exported and
+downloaded every run (HIGH). Now every data route resolves the caller's single
+organization membership (`(iss, sub)` in JUVAl's database) and looks runs and
+batches up inside that organization: a foreign resource answers exactly like a
+missing one (404), an identity without membership gets 403, files are
+partitioned per organization, unowned history is visible to nobody, and no role
+crosses organizations. PostgreSQL migrations `20261110000008`/`09` add tenant
+RLS for `juval_backend` (tested on disposable PostgreSQL only, **not applied**).
+Until they are applied and real memberships exist, the finding stays open for
+any deployment. Status labels: IMPLEMENTED_LOCAL yes, VERIFIED_LOCAL yes,
+READY_FOR_REVIEW yes, PRODUCTION_DEPLOYED **no**. Authorization matrix,
+provisioning (including offboarding with `remove-member`, effective on the
+next request) and rollback:
+[TENANCY_ACTIVATION_RUNBOOK](../architecture/TENANCY_ACTIVATION_RUNBOOK.md).
+Evidence: `tests/integration/test_resource_isolation.py`,
+`tests/integration/test_postgres_tenant_isolation.py`,
+`tests/unit/test_tenancy_admin.py`.
+
 Residual risk (ADR-055, *Garantías y límites*): a process on the same host that
 relays outside traffic to `127.0.0.1`, rewrites `Host` to loopback and strips
 every forwarding header is indistinguishable from a local client. It cannot be
@@ -208,7 +228,7 @@ proving the gap was under 24 hours.
 | ≤24-hour removal | **DOCUMENTED, NEVER EXERCISED** | §4 |
 | Supabase RLS | **ENABLED, FAIL-CLOSED, VERIFIED LIVE 2026-08-18** (zero policies, by design) | `NETWORK_SECURITY.md` §3.1 |
 | Backend deployed | **DONE 2026-08-18** — `https://juval-backend-production.up.railway.app` | `PROJECT_PLAN.md` |
-| Production operation (auth enforcement) | **BLOCKED** — backend is deployed, but `JUVAL_AUTH_MODE` is deliberately unset (IdP already approved; public flow/migration/human verification pending) | Needs public identity flow and activation evidence; tenant exists |
+| Production operation (auth enforcement) | **BLOCKED** — the Railway backend is offline (SEC-01A) and may only return with `JUVAL_AUTH_MODE=oidc` (ADR-055); per-resource isolation is missing (ADR-056 Proposed); public flow/migration/human verification pending | Needs public identity flow and activation evidence; tenant exists |
 
 `RF-04 = PARTIAL` — technical control implemented and tested; organizational
 control documented but not operating, with current user inventory not independently reverified.

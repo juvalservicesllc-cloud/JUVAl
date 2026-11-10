@@ -7,6 +7,26 @@ como está implementado hoy — si hay discrepancia, el código gana
 
 Versionado: prefijo `/api/v1/` desde el primer endpoint.
 
+## 0. Autorización por organización (ADR-056, 2026-11-10)
+
+Las 14 rutas de datos (`/api/v1/*` salvo `/api/v1/auth/*`) aplican, en este
+orden: autenticación (ADR-055) → permiso RBAC (`runs:*`, 403
+`insufficient permissions`) → CSRF en rutas que escriben → organización.
+
+- La organización sale de la **única** membresía de la identidad
+  `(iss, sub)` en la base de JUVAl (OD-5/OD-6). Sin membresía, o con más de
+  una: **403** `no organization access for this identity` en todas las rutas
+  de datos, incluida `preview`. Bajo OIDC sin store configurado: **503**.
+- Un run, registro o batch de otra organización responde **exactamente** como
+  uno inexistente: mismo 404 y mismo cuerpo de cada ruta (OD-7). Los listados,
+  contadores y paginación sólo incluyen la organización del llamador.
+- Los miembros de una organización comparten sus runs según RBAC (OD-2).
+  `created_by_issuer/subject` se registra para auditoría, no para acceso.
+- Runs y batches sin organización (historia anterior, CLI) no son visibles
+  para nadie (OD-3). No hay acceso entre organizaciones para ningún rol (OD-4).
+- El laboratorio loopback (ADR-055) actúa para la organización sintética fija
+  `00000000-0000-4000-8000-000000000001`.
+
 ## 1. `POST /api/v1/runs`
 
 `multipart/form-data`:
@@ -550,7 +570,12 @@ para cómo recuperarlos después.
 ## 6. Almacenamiento temporal de archivos
 
 `JUVAL_RUN_STORAGE_DIR` (opcional, default: directorio temporal del
-sistema) — cada corrida usa `{JUVAL_RUN_STORAGE_DIR}/juval_runs/{execution_id}/`.
+sistema) — cada corrida usa
+`{JUVAL_RUN_STORAGE_DIR}/juval_runs/{organization_id}/{execution_id}/`
+(ADR-056: la descarga sólo mira el directorio de la organización del
+llamador; los archivos anteriores en `juval_runs/{execution_id}/` quedan
+inaccesibles). Ambos componentes deben ser un único segmento de ruta: un
+`..` codificado responde 404.
 El archivo de entrada (`input.xlsx`) se elimina inmediatamente después
 de procesar (nunca queda en disco más de lo que dura el request). El
 archivo de salida (`output.xlsx`) permanece para que `GET .../download`
