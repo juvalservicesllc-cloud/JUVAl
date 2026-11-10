@@ -78,7 +78,7 @@ from juval.infrastructure.logging.sqlite_execution_run_store import SqliteExecut
 from juval.infrastructure.persistence.supabase_execution_run_store import SupabaseExecutionRunStore
 
 from . import bff, service
-from . import auth
+from . import auth, security_events
 from .auth import RUNS_CREATE, RUNS_EXPORT, RUNS_READ, Principal, current_principal, require, set_session_resolver
 from .models import (
     FeesIn,
@@ -134,10 +134,26 @@ async def _lifespan(_app: FastAPI):
     # Bound to the instance being started (`_app`), never the module-level
     # `app`: another FastAPI built on this lifespan must not install onto, or
     # on shutdown unbind, a different instance.
-    settings = auth.resolve_settings()
+    stage = "authentication"
+    try:
+        settings = auth.resolve_settings()
+    except Exception:
+        security_events.emit("startup.failed", logging.ERROR, stage=stage)
+        raise
     auth.install(_app, settings)
     try:
-        bff.ensure_configured()
+        try:
+            stage = "sessions"
+            bff.ensure_configured()
+            # The execution store is built per request; build it once here so a
+            # bad selection stops startup instead of
+            # failing every data request (SEC-01E). Construction does not connect.
+            stage = "execution_store"
+            _execution_run_store()
+        except Exception:
+            # The stage only: the exception itself may quote configuration.
+            security_events.emit("startup.failed", logging.ERROR, stage=stage)
+            raise
         if settings.mode == "disabled":
             # Loud on purpose: an unauthenticated lab cannot satisfy Amazon
             # RF-03/RF-04 (docs/compliance/ACCESS_CONTROL.md).
@@ -191,6 +207,21 @@ async def _api_docs_policy(request, call_next):
     if request.url.path in _API_DOCS_PATHS and not auth.api_docs_allowed(request):
         return JSONResponse({"detail": "Not Found"}, status_code=404)
     return await call_next(request)
+
+
+@app.get("/healthz", include_in_schema=False)
+def healthz() -> JSONResponse:
+    """Liveness: this process is up and answering. Nothing else.
+
+    The only route here without authentication -- an explicit, owner-approved
+    exception (SEC-01E) pinned by `tools/compliance_check.py::PUBLIC_ROUTES`.
+    It takes no parameters and touches no store, so it reveals no version,
+    database, configuration or user state and cannot amplify load onto a
+    dependency. It is not readiness: an instance whose configuration is wrong
+    never starts (ADR-036/055), and dependency failures surface as 503 on the
+    routes that need them.
+    """
+    return JSONResponse({"status": "ok"}, headers={"Cache-Control": "no-store"})
 
 
 def _execution_run_store() -> Optional[ExecutionRunStore]:
@@ -278,10 +309,12 @@ def tenant_access(request: Request, principal: Principal = Depends(current_princ
         organizations = store.organization_ids_for(principal.issuer, principal.subject)
     except Exception:
         # Driver errors can carry connection details: neither chained nor logged.
-        logger.error("tenant access unavailable: membership lookup failed")
+        security_events.emit("membership.store_unavailable", logging.ERROR)
         raise HTTPException(status_code=503, detail="organization membership is temporarily unavailable") from None
     if len(organizations) != 1:
-        logger.warning("tenant access denied: subject=%s memberships=%d", principal.subject, len(organizations))
+        security_events.emit("access.denied", kind="tenant",
+                             reason="no_membership" if not organizations else "several_memberships",
+                             subject_fp=security_events.subject_fingerprint(principal.subject))
         raise HTTPException(status_code=403, detail="no organization access for this identity")
     return Access(principal, TenantScope(organizations[0]))
 
@@ -311,8 +344,8 @@ def run_in_scope(not_found: str):
         store = _scoped_store(access)
         run = store.load_execution_run(execution_id)
         if run is None:
-            logger.info("run not found in scope: subject=%s organization=%s", access.principal.subject,
-                        access.scope.organization_id)
+            logger.info("run not found in scope: subject_fp=%s organization=%s",
+                        security_events.subject_fingerprint(access.principal.subject), access.scope.organization_id)
             raise HTTPException(status_code=404, detail=not_found)
         return AuthorizedRun(run, store, access)
 

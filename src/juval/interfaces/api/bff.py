@@ -65,6 +65,7 @@ from juval.infrastructure.sessions.in_memory_session_store import (
 )
 
 from . import auth as auth_module
+from . import security_events
 from .auth import ROLE_PERMISSIONS, Principal
 
 logger = logging.getLogger("juval.interfaces.api.bff")
@@ -673,7 +674,7 @@ def _load_session(session_id: Optional[str]) -> Optional[SessionRecord]:
     try:
         return session_store().load(session_id, _now())
     except Exception:
-        logger.error("session store unavailable; refusing the cookie-authenticated request")
+        security_events.emit("session.store_unavailable", logging.ERROR)
         raise HTTPException(status_code=503, detail="session service unavailable") from None
 
 
@@ -730,7 +731,8 @@ def require_csrf(request: Request, session: Optional[SessionRecord] = None) -> N
         return
     supplied = request.headers.get(CSRF_HEADER, "")
     if not supplied or not hmac.compare_digest(digest(supplied), session.csrf_digest):
-        logger.warning("csrf check failed for subject=%s", session.subject)
+        security_events.emit("access.denied", kind="csrf",
+                             subject_fp=security_events.subject_fingerprint(session.subject))
         raise HTTPException(status_code=403, detail="csrf token missing or invalid")
 
 
@@ -779,7 +781,7 @@ def _fresh_session(
     if expires is not None and expires > _now():
         return current
     if current.refresh_token is None:
-        logger.info("session ended: its access token expired and cannot be refreshed")
+        security_events.emit("session.ended", logging.INFO, reason="access_token_expired_no_refresh")
         session_store().revoke(session_id, _now())
         return None
     raise HTTPException(status_code=503, detail="identity provider temporarily unavailable")
@@ -823,7 +825,7 @@ def _refresh_exclusive(
     except _RefreshRejected:
         # The IdP refused it. Holding a refused refresh token is worse than
         # holding none, and a replayed token means the session is suspect.
-        logger.warning("refresh rejected by the identity provider; revoking session")
+        security_events.emit("session.ended", reason="refresh_rejected")
         session_store().revoke(session_id, _now())
         return None
     except Exception:  # transport failure, IdP down
@@ -839,10 +841,10 @@ def _refresh_exclusive(
     except HTTPException:
         principal = None
     if principal is None:
-        logger.warning("refreshed access token failed verification; session not updated")
+        security_events.emit("auth.token_rejected", reason="refreshed_access_token")
         return None
     if principal.subject != record.subject:
-        logger.warning("refreshed access token names another subject; revoking session")
+        security_events.emit("session.ended", reason="refreshed_token_other_subject")
         session_store().revoke(session_id, _now())
         return None
     refresh = token_response.get("refresh_token") or record.refresh_token

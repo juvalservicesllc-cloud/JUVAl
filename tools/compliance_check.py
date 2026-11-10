@@ -233,8 +233,31 @@ def check_auth_posture() -> list[Finding]:
         findings.append(Finding("auth.endpoints", FAIL, "static route check incomplete: main.py unreadable or invalid"))
         return findings
 
+    routes, missing = _route_permission_gaps(module)
+    if not routes:
+        findings.append(Finding("auth.endpoints", FAIL, "static route check found no main.py HTTP routes; coverage not established"))
+    elif missing:
+        findings.append(Finding("auth.endpoints", FAIL,
+            f"main.py HTTP handler(s) missing a direct permission dependency: {', '.join(sorted(set(missing)))}"))
+    else:
+        findings.append(Finding("auth.endpoints", PASS,
+            f"static AST check: all {len(routes)} main.py HTTP route declaration(s) bind a direct permission dependency "
+            f"except the {len(PUBLIC_ROUTES)} explicit public liveness route(s) {sorted(p for _, p, _ in PUBLIC_ROUTES)}; "
+            "runtime behavior and included routers not checked"))
+
+    return findings
+
+
+#: The only main.py routes allowed without a permission dependency (owner
+#: decision, SEC-01E): (method, path, handler). Matched exactly, and only for a
+#: handler that takes no parameters, so it cannot read a request or a store.
+PUBLIC_ROUTES = frozenset({("get", "/healthz", "healthz")})
+
+
+def _route_permission_gaps(module: ast.Module) -> tuple[list[ast.AST], list[str]]:
+    """(route handlers, names of handlers lacking a permission dependency)."""
     methods = {"get", "post", "put", "patch", "delete", "options", "head", "trace", "api_route"}
-    routes = []
+    routes, missing = [], []
     for node in ast.walk(module):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
@@ -245,20 +268,13 @@ def check_auth_posture() -> list[Finding]:
                     and decorator.func.value.id == "app"
                     and decorator.func.attr in methods):
                 routes.append(node)
-    missing = [node.name for node in routes if not any(
-        _is_permission_dependency(default)
-        for default in [*node.args.defaults, *node.args.kw_defaults]
-    )]
-    if not routes:
-        findings.append(Finding("auth.endpoints", FAIL, "static route check found no main.py HTTP routes; coverage not established"))
-    elif missing:
-        findings.append(Finding("auth.endpoints", FAIL,
-            f"main.py HTTP handler(s) missing a direct permission dependency: {', '.join(sorted(set(missing)))}"))
-    else:
-        findings.append(Finding("auth.endpoints", PASS,
-            f"static AST check: all {len(routes)} main.py HTTP route declaration(s) bind a direct permission dependency; runtime behavior and included routers not checked"))
-
-    return findings
+                path = decorator.args[0].value if decorator.args and isinstance(decorator.args[0], ast.Constant) else None
+                public = ((decorator.func.attr, path, node.name) in PUBLIC_ROUTES
+                          and not (node.args.args or node.args.kwonlyargs or node.args.vararg or node.args.kwarg))
+                if not public and not any(_is_permission_dependency(default)
+                                          for default in [*node.args.defaults, *node.args.kw_defaults]):
+                    missing.append(node.name)
+    return routes, missing
 
 
 def _is_permission_dependency(expression: ast.AST | None) -> bool:

@@ -38,6 +38,8 @@ from urllib.parse import urlsplit
 import jwt
 from fastapi import Depends, HTTPException, Request
 
+from . import security_events
+
 logger = logging.getLogger("juval.interfaces.api.auth")
 
 # --- Permissions ------------------------------------------------------
@@ -181,10 +183,10 @@ class TokenVerifier:
         except jwt.InvalidTokenError as exc:
             # Deliberately generic to the caller (no oracle about *why* the
             # token failed); the specific reason stays in the server log.
-            logger.warning("token rejected: %s", type(exc).__name__)
+            security_events.emit("auth.token_rejected", reason=type(exc).__name__)
             raise _invalid_token() from exc
         except Exception as exc:  # key retrieval failure (JWKS unreachable, etc.)
-            logger.warning("token key resolution failed: %s", type(exc).__name__)
+            security_events.emit("auth.jwks_unavailable", reason=type(exc).__name__)
             raise _invalid_token() from exc
 
         roles = _roles_from_claims(claims, self._roles_claim)
@@ -568,12 +570,8 @@ def require(permission: str) -> Callable[[Principal], Principal]:
 
     def dependency(principal: Principal = Depends(current_principal)) -> Principal:
         if not principal.has(permission):
-            logger.warning(
-                "authorization denied: subject=%s permission=%s roles=%s",
-                principal.subject,
-                permission,
-                ",".join(principal.roles) or "-",
-            )
+            security_events.emit("access.denied", kind="rbac", permission=permission,
+                                 subject_fp=security_events.subject_fingerprint(principal.subject))
             raise HTTPException(status_code=403, detail="insufficient permissions")
         return principal
 
