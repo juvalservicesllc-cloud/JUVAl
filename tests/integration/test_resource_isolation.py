@@ -218,6 +218,15 @@ def test_another_organization_cannot_export_or_download_the_run(api, as_user, a_
     same_as_absent(api, as_user("user-b", "operator"), path, run, "no-such-ref")
 
 
+def test_an_admin_of_another_organization_gets_no_exception(api, as_user, a_run):
+    """OD-4: the admin role grants every permission *within* its organization only."""
+    run, ref = a_run
+    for path in RUN_READS + RUN_EXPORTS:
+        same_as_absent(api, as_user("user-b", "admin"), path, run, ref)
+    listed = api.get("/api/v1/runs", headers=as_user("user-b", "admin")).json()
+    assert run not in str(listed)
+
+
 def test_another_organization_cannot_read_the_batch_or_its_runs(api, as_user, a_batch):
     batch_id, child = a_batch
     headers = as_user("user-b", "operator")

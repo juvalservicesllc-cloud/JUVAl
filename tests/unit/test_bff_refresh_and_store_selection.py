@@ -21,6 +21,27 @@ def _now():
     return datetime.now(timezone.utc)
 
 
+class _TokenVerifier:
+    """Stands in for the API verifier: accepts only the synthetic tokens these
+    tests mint ("<subject>|<role>,<role>"), rejects everything else."""
+
+    def verify(self, token):
+        from fastapi import HTTPException
+
+        subject, sep, roles = token.partition("|")
+        if not sep or not subject:
+            raise HTTPException(status_code=401, detail="invalid or expired token")
+        return auth_module.Principal(subject=subject, roles=tuple(r for r in roles.split(",") if r),
+                                     permissions=frozenset(), issuer="https://idp.test.invalid")
+
+
+VERIFIER = _TokenVerifier()
+
+
+def refresh(session_id, record):
+    return bff.refresh_if_needed(session_id, record, VERIFIER)
+
+
 @pytest.fixture()
 def wired(monkeypatch):
     monkeypatch.setenv("JUVAL_AUTH_MODE", "oidc")
@@ -71,7 +92,7 @@ def test_no_refresh_while_the_access_token_is_fresh(wired, monkeypatch):
     called = {"n": 0}
     monkeypatch.setattr(bff, "_refresh_tokens", lambda *a: called.__setitem__("n", called["n"] + 1))
     session_id, record = _session(wired, access_ttl=timedelta(hours=1))
-    assert bff.refresh_if_needed(session_id, record) is None
+    assert refresh(session_id, record) is None
     assert called["n"] == 0
 
 
@@ -80,35 +101,36 @@ def test_refresh_when_the_access_token_is_near_expiry(wired, monkeypatch):
         bff,
         "_refresh_tokens",
         lambda config, token: {
-            "access_token": "new-access",
+            "access_token": "user-1|viewer",
             "refresh_token": "new-refresh",
             "expires_in": 3600,
         },
     )
     session_id, record = _session(wired, access_ttl=timedelta(seconds=30))
-    updated = bff.refresh_if_needed(session_id, record)
+    updated = refresh(session_id, record)
     assert updated is not None
-    assert updated.access_token == "new-access"
+    assert updated.access_token == "user-1|viewer"
     assert updated.refresh_token == "new-refresh"
     assert updated.refresh_generation == 1
+    assert updated.roles == ("viewer",)   # re-derived from the verified token (SEC-01E)
 
 
 def test_session_id_does_not_rotate_on_refresh(wired, monkeypatch):
     """Rotating it would log out every other in-flight request from the tab."""
     monkeypatch.setattr(
-        bff, "_refresh_tokens", lambda c, t: {"access_token": "a", "expires_in": 3600}
+        bff, "_refresh_tokens", lambda c, t: {"access_token": "user-1|operator", "expires_in": 3600}
     )
     session_id, record = _session(wired, access_ttl=timedelta(seconds=10))
-    bff.refresh_if_needed(session_id, record)
+    refresh(session_id, record)
     assert wired.load(session_id, _now()) is not None
 
 
 def test_refresh_token_is_kept_when_the_idp_does_not_return_a_new_one(wired, monkeypatch):
     monkeypatch.setattr(
-        bff, "_refresh_tokens", lambda c, t: {"access_token": "a2", "expires_in": 3600}
+        bff, "_refresh_tokens", lambda c, t: {"access_token": "user-1|operator", "expires_in": 3600}
     )
     session_id, record = _session(wired, access_ttl=timedelta(seconds=10))
-    updated = bff.refresh_if_needed(session_id, record)
+    updated = refresh(session_id, record)
     assert updated.refresh_token == "old-refresh"
 
 
@@ -128,7 +150,7 @@ def test_session_without_a_refresh_token_is_left_alone(wired, monkeypatch):
             access_token_expires_at=_now() + timedelta(seconds=5),
         )
     )
-    assert bff.refresh_if_needed(session_id, wired.load(session_id, _now())) is None
+    assert refresh(session_id, wired.load(session_id, _now())) is None
 
 
 # --- failure modes ------------------------------------------------------
@@ -140,7 +162,7 @@ def test_rejected_refresh_revokes_the_session(wired, monkeypatch):
 
     monkeypatch.setattr(bff, "_refresh_tokens", reject)
     session_id, record = _session(wired, access_ttl=timedelta(seconds=5))
-    assert bff.refresh_if_needed(session_id, record) is None
+    assert refresh(session_id, record) is None
     assert wired.load(session_id, _now()) is None  # revoked, not merely unrefreshed
 
 
@@ -150,13 +172,13 @@ def test_unreachable_idp_keeps_the_session(wired, monkeypatch):
 
     monkeypatch.setattr(bff, "_refresh_tokens", boom)
     session_id, record = _session(wired, access_ttl=timedelta(seconds=5))
-    assert bff.refresh_if_needed(session_id, record) is None
+    assert refresh(session_id, record) is None
     assert wired.load(session_id, _now()) is not None  # still usable for RBAC
 
 
 def test_persistence_failure_leaves_the_session_untouched(wired, monkeypatch):
     monkeypatch.setattr(
-        bff, "_refresh_tokens", lambda c, t: {"access_token": "n", "expires_in": 3600}
+        bff, "_refresh_tokens", lambda c, t: {"access_token": "user-1|operator", "expires_in": 3600}
     )
     session_id, record = _session(wired, access_ttl=timedelta(seconds=5))
 
@@ -164,19 +186,19 @@ def test_persistence_failure_leaves_the_session_untouched(wired, monkeypatch):
         raise RuntimeError("database unavailable")
 
     monkeypatch.setattr(wired, "replace_tokens", failing_replace)
-    assert bff.refresh_if_needed(session_id, record) is None
+    assert refresh(session_id, record) is None
     assert wired.load(session_id, _now()).access_token == "old-access"
 
 
 def test_concurrent_refresh_loser_reads_the_winners_tokens(wired, monkeypatch):
     monkeypatch.setattr(
-        bff, "_refresh_tokens", lambda c, t: {"access_token": "mine", "expires_in": 3600}
+        bff, "_refresh_tokens", lambda c, t: {"access_token": "user-1|operator", "expires_in": 3600}
     )
     session_id, record = _session(wired, access_ttl=timedelta(seconds=5))
     # A concurrent request wins first, bumping the generation.
     assert wired.replace_tokens(session_id, 0, "winner-access", "winner-refresh", None, _now())
     # This caller still holds the stale generation-0 record.
-    result = bff.refresh_if_needed(session_id, record)
+    result = refresh(session_id, record)
     assert result is not None
     assert result.access_token == "winner-access"  # did not clobber
     assert result.refresh_generation == 1
@@ -352,20 +374,20 @@ def test_overlapping_refresh_calls_contact_provider_once(wired, monkeypatch):
         calls.append(token)
         entered.set()
         assert release.wait(5)
-        return {'access_token': 'new', 'refresh_token': 'rotated', 'expires_in': 3600}
+        return {'access_token': 'user-1|operator', 'refresh_token': 'rotated', 'expires_in': 3600}
     monkeypatch.setattr(bff, '_refresh_tokens', rotating_provider)
     session_id, record = _session(wired, access_ttl=timedelta(seconds=5))
     with ThreadPoolExecutor(max_workers=2) as pool:
-        first = pool.submit(bff.refresh_if_needed, session_id, record)
+        first = pool.submit(refresh, session_id, record)
         try:
             assert entered.wait(5)
-            assert pool.submit(bff.refresh_if_needed, session_id, record).result(timeout=5) is None
+            assert pool.submit(refresh, session_id, record).result(timeout=5) is None
         finally:
             release.set()
         assert first.result(timeout=5).refresh_generation == 1
     assert calls == ['old-refresh']
     # Even after release a stale request must not replay the consumed token.
-    assert bff.refresh_if_needed(session_id, record).refresh_generation == 1
+    assert refresh(session_id, record).refresh_generation == 1
     assert calls == ['old-refresh']
 
 
@@ -373,9 +395,9 @@ def test_logout_during_refresh_cannot_resurrect_session(wired, monkeypatch):
     session_id, record = _session(wired, access_ttl=timedelta(seconds=5))
     def provider(config, token):
         wired.revoke(session_id, _now())
-        return {'access_token': 'new', 'refresh_token': 'rotated', 'expires_in': 3600}
+        return {'access_token': 'user-1|operator', 'refresh_token': 'rotated', 'expires_in': 3600}
     monkeypatch.setattr(bff, '_refresh_tokens', provider)
-    assert bff.refresh_if_needed(session_id, record) is None
+    assert refresh(session_id, record) is None
     assert wired.load(session_id, _now()) is None
 
 
@@ -387,5 +409,5 @@ def test_provider_http_outage_does_not_revoke_session(wired, monkeypatch, status
                                      'unavailable', {}, None)
     monkeypatch.setattr(bff.urllib.request, 'urlopen', unavailable)
     session_id, record = _session(wired, access_ttl=timedelta(seconds=5))
-    assert bff.refresh_if_needed(session_id, record) is None
+    assert refresh(session_id, record) is None
     assert wired.load(session_id, _now()) is not None

@@ -50,6 +50,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from juval.application.session_store import (
+    DEFAULT_IDLE_TIMEOUT,
     OAuthTransaction,
     OAuthTransactionStore,
     Session,
@@ -221,6 +222,28 @@ _transactions: OAuthTransactionStore = InMemoryOAuthTransactionStore()
 #: and it cannot be arrived at by copying a boolean from another variable.
 _MEMORY_OPT_IN = "yes-single-process-development-only"
 
+IDLE_TIMEOUT_ENV = "JUVAL_SESSION_IDLE_TIMEOUT_MINUTES"
+
+
+def idle_timeout() -> timedelta:
+    """Inactivity timeout (owner decision: 30 min), configurable on the server only.
+
+    Bounded by the absolute session lifetime: an idle timeout longer than the
+    session itself would be meaningless, and a non-number is a startup error,
+    never a silent default.
+    """
+    raw = os.environ.get(IDLE_TIMEOUT_ENV)
+    if raw is None:
+        return DEFAULT_IDLE_TIMEOUT
+    try:
+        minutes = int(raw)
+    except ValueError:
+        minutes = 0
+    if not 1 <= minutes <= int(_SESSION_TTL.total_seconds() // 60):
+        raise RuntimeError(f"{IDLE_TIMEOUT_ENV} must be a whole number of minutes between 1 and "
+                           f"{int(_SESSION_TTL.total_seconds() // 60)}")
+    return timedelta(minutes=minutes)
+
 
 def build_stores() -> tuple[SessionStore, OAuthTransactionStore]:
     """Select the session backend. **Fails closed; never falls back silently.**
@@ -269,7 +292,7 @@ def build_stores() -> tuple[SessionStore, OAuthTransactionStore]:
             "JUVAL_SESSION_STORE=memory -- sessions are process-local and lost on "
             "restart. Single-process development only; never production (ADR-036)."
         )
-        return InMemorySessionStore(), InMemoryOAuthTransactionStore()
+        return InMemorySessionStore(idle_timeout()), InMemoryOAuthTransactionStore()
 
     if backend != "postgres":
         raise RuntimeError(
@@ -295,9 +318,9 @@ def build_stores() -> tuple[SessionStore, OAuthTransactionStore]:
         PostgresSessionStore,
         verify_session_database,
     )
-
+    idle = idle_timeout()
     verify_session_database(dsn)
-    return PostgresSessionStore(dsn, cipher), PostgresOAuthTransactionStore(dsn, cipher)
+    return PostgresSessionStore(dsn, cipher, idle), PostgresOAuthTransactionStore(dsn, cipher)
 
 
 def configure(
@@ -408,7 +431,29 @@ def _safe_return_to(raw: Optional[str], fallback: str) -> str:
     """
     if not raw or not raw.startswith("/") or raw.startswith("//"):
         return fallback
+    # Browsers read "\" as "/" and drop tabs/newlines, so "/\evil" and
+    # "/<tab>/evil" become "//evil". Starlette percent-encodes both today;
+    # refusing them here keeps that from depending on the response class.
+    if "\\" in raw or any(ord(c) < 0x20 or ord(c) == 0x7F for c in raw):
+        return fallback
     return raw
+
+
+def _post_login_target(return_to: Optional[str], post_login_redirect: str) -> str:
+    """Where the browser lands after `/callback`.
+
+    ADR-038 puts the app and the API on different hosts, and the callback is
+    served by the API: a bare path would land on the API host. When the
+    configured post-login destination is an absolute URL (the app), the
+    requested path is resolved against *its* origin -- never another one.
+    """
+    path = _safe_return_to(return_to, "")
+    if not path:
+        return post_login_redirect
+    target = urllib.parse.urlsplit(post_login_redirect)
+    if target.scheme and target.netloc:
+        return f"{target.scheme}://{target.netloc}{path}"
+    return path
 
 
 # --- Endpoints --------------------------------------------------------
@@ -427,7 +472,7 @@ def login(request: Request, return_to: Optional[str] = None) -> Response:
         redirect_uri=config.redirect_uri,
         created_at=_now(),
         expires_at=_now() + _TRANSACTION_TTL,
-        return_to=_safe_return_to(return_to, config.post_login_redirect),
+        return_to=_safe_return_to(return_to, "") or None,
     )
     transaction_store().start(transaction)
 
@@ -495,12 +540,24 @@ def callback(request: Request, code: Optional[str] = None, state: Optional[str] 
         expires_at=_now() + _SESSION_TTL,
         access_token=token_response.get("access_token"),
         refresh_token=token_response.get("refresh_token"),
-        access_token_expires_at=_expires_at(token_response.get("expires_in")),
+        # Roles are trusted only until this instant (see `_fresh_session`), so it
+        # is never left unknown: the token's own `exp` when `expires_in` is absent.
+        access_token_expires_at=(
+            _expires_at(token_response.get("expires_in"))
+            or _token_exp(token_response.get("access_token"))
+            or _token_exp(id_token)
+        ),
     )
+    # A login always ends the session this browser held before: overwriting
+    # the cookie alone would leave that id valid for whoever captured it, and a
+    # shared browser would keep the previous user's session alive server-side.
+    previous_session_id = request.cookies.get(SESSION_COOKIE)
+    if previous_session_id:
+        session_store().revoke(previous_session_id, _now())
     session_store().save(session)
 
     response = RedirectResponse(
-        _safe_return_to(transaction.return_to, config.post_login_redirect), status_code=302
+        _post_login_target(transaction.return_to, config.post_login_redirect), status_code=302
     )
     _set_session_cookies(response, session)
     response.delete_cookie(TRANSACTION_COOKIE, path="/api/v1/auth")
@@ -517,17 +574,13 @@ def session_view(request: Request) -> JSONResponse:
     and it is not a bearer credential -- it authorizes nothing on its own.
     """
     session_id = request.cookies.get(SESSION_COOKIE)
-    session = session_store().load(session_id, _now()) if session_id else None
+    session = _load_session(session_id)
     if session is None:
         return JSONResponse({"authenticated": False}, status_code=200)
 
-    # Opportunistic refresh: this is the endpoint the SPA polls, so it is the
-    # natural place to keep the access token alive. Doing it on every request
-    # instead would put a network call to the IdP in the hot path.
-    refresh_if_needed(session_id, session)
-    # None can mean either no refresh or revocation. Never revive the snapshot
-    # loaded before a rejected refresh (or a concurrent logout).
-    session = session_store().load(session_id, _now())
+    # Same rule as every data route: roles past their access token's expiry
+    # are refreshed and re-verified, or the session ends (`_fresh_session`).
+    session = _fresh_session(session_id, session, auth_module.installed_settings(request.app).verifier)
     if session is None:
         response = JSONResponse({"authenticated": False}, status_code=200)
         _clear_session_cookies(response)
@@ -554,7 +607,7 @@ def session_view(request: Request) -> JSONResponse:
 def logout(request: Request) -> JSONResponse:
     """End the session. CSRF-protected, and idempotent by design."""
     session_id = request.cookies.get(SESSION_COOKIE)
-    session = session_store().load(session_id, _now()) if session_id else None
+    session = _load_session(session_id)
     if session is not None:
         require_csrf(request, session)
         # Revoke server-side: clearing the cookie alone would leave a valid
@@ -609,11 +662,23 @@ def _clear_session_cookies(response: Response) -> None:
     response.delete_cookie(CSRF_COOKIE, path="/")
 
 
-def _session_from_request(request: Request) -> Optional[SessionRecord]:
-    session_id = request.cookies.get(SESSION_COOKIE)
+def _load_session(session_id: Optional[str]) -> Optional[SessionRecord]:
+    """Load a presented session; an unavailable store is a 503, never anonymous.
+
+    Driver errors can carry connection details, so they are neither chained
+    nor logged -- only the fact that the store failed.
+    """
     if not session_id:
         return None
-    return session_store().load(session_id, _now())
+    try:
+        return session_store().load(session_id, _now())
+    except Exception:
+        logger.error("session store unavailable; refusing the cookie-authenticated request")
+        raise HTTPException(status_code=503, detail="session service unavailable") from None
+
+
+def _session_from_request(request: Request) -> Optional[SessionRecord]:
+    return _load_session(request.cookies.get(SESSION_COOKIE))
 
 
 def _permissions_for(roles: tuple[str, ...]) -> frozenset[str]:
@@ -628,7 +693,11 @@ def principal_from_session(request: Request) -> Optional[Principal]:
     Returning None rather than raising is deliberate: absence of a session is
     not an error, it just means the bearer path should be tried next.
     """
-    session = _session_from_request(request)
+    session_id = request.cookies.get(SESSION_COOKIE)
+    session = _load_session(session_id)
+    if session is None:
+        return None
+    session = _fresh_session(session_id, session, auth_module.installed_settings(request.app).verifier)
     if session is None:
         return None
     # Sessions are created only from ID tokens this instance's verifier
@@ -678,7 +747,47 @@ def csrf_guard(request: Request) -> None:
 _REFRESH_SKEW = timedelta(seconds=120)
 
 
-def refresh_if_needed(session_id: str, record: SessionRecord) -> Optional[SessionRecord]:
+def _refresh_due(record: SessionRecord) -> bool:
+    expires = record.access_token_expires_at
+    return expires is None or expires - _now() <= _REFRESH_SKEW
+
+
+def _fresh_session(
+    session_id: str, session: SessionRecord, verifier: auth_module.TokenVerifier
+) -> Optional[SessionRecord]:
+    """Authorize only with roles the IdP still vouches for (SEC-01E).
+
+    A session's roles were true when its access token was issued. Near or
+    past that token's expiry they are re-derived from a refreshed, verified
+    token; otherwise the session stops authorizing. A role change or a
+    disabled account at the IdP therefore reaches JUVAl within one
+    access-token lifetime, never the 8 h of the session.
+
+    * no refresh token (or the IdP refused it): the session ends -> 401;
+    * IdP unreachable after expiry: 503, session kept for a retry -- stale
+      roles are never used, and a transient outage logs nobody out.
+    """
+    if not _refresh_due(session):
+        return session
+    refresh_if_needed(session_id, session, verifier)
+    # Never reuse the snapshot: the refresh may have been rejected (revoked)
+    # or a concurrent logout may have happened.
+    current = _load_session(session_id)
+    if current is None:
+        return None
+    expires = current.access_token_expires_at
+    if expires is not None and expires > _now():
+        return current
+    if current.refresh_token is None:
+        logger.info("session ended: its access token expired and cannot be refreshed")
+        session_store().revoke(session_id, _now())
+        return None
+    raise HTTPException(status_code=503, detail="identity provider temporarily unavailable")
+
+
+def refresh_if_needed(
+    session_id: str, record: SessionRecord, verifier: auth_module.TokenVerifier
+) -> Optional[SessionRecord]:
     """Renew under store-wide exclusion; preserve session id and CAS writes.
 
     Reload after acquiring the guard: the caller may hold an older generation.
@@ -686,9 +795,7 @@ def refresh_if_needed(session_id: str, record: SessionRecord) -> Optional[Sessio
     A process/DB failure after provider rotation can still require a new login;
     the database and external provider do not share an atomic transaction.
     """
-    if record.refresh_token is None or record.access_token_expires_at is None:
-        return None
-    if record.access_token_expires_at - _now() > _REFRESH_SKEW:
+    if record.refresh_token is None or not _refresh_due(record):
         return None
     with session_store().refresh_guard(session_id) as acquired:
         if not acquired:
@@ -698,13 +805,13 @@ def refresh_if_needed(session_id: str, record: SessionRecord) -> Optional[Sessio
             return None
         if current.refresh_generation != record.refresh_generation:
             return current
-        return _refresh_exclusive(session_id, current)
+        return _refresh_exclusive(session_id, current, verifier)
 
 
-def _refresh_exclusive(session_id: str, record: SessionRecord) -> Optional[SessionRecord]:
-    if record.refresh_token is None or record.access_token_expires_at is None:
-        return None
-    if record.access_token_expires_at - _now() > _REFRESH_SKEW:
+def _refresh_exclusive(
+    session_id: str, record: SessionRecord, verifier: auth_module.TokenVerifier
+) -> Optional[SessionRecord]:
+    if record.refresh_token is None or not _refresh_due(record):
         return None
 
     config = current_config()
@@ -724,8 +831,22 @@ def _refresh_exclusive(session_id: str, record: SessionRecord) -> Optional[Sessi
         return None
 
     access = token_response.get("access_token")
+    # The new roles come only from a token this instance verifies, exactly as
+    # a bearer token is verified. Unverifiable: nothing is stored, and an
+    # expired session stops authorizing (`_fresh_session`).
+    try:
+        principal = verifier.verify(access) if isinstance(access, str) else None
+    except HTTPException:
+        principal = None
+    if principal is None:
+        logger.warning("refreshed access token failed verification; session not updated")
+        return None
+    if principal.subject != record.subject:
+        logger.warning("refreshed access token names another subject; revoking session")
+        session_store().revoke(session_id, _now())
+        return None
     refresh = token_response.get("refresh_token") or record.refresh_token
-    expires_at = _expires_at(token_response.get("expires_in"))
+    expires_at = _expires_at(token_response.get("expires_in")) or _token_exp(access)
 
     try:
         won = session_store().replace_tokens(
@@ -735,6 +856,7 @@ def _refresh_exclusive(session_id: str, record: SessionRecord) -> Optional[Sessi
             refresh_token=refresh,
             access_token_expires_at=expires_at,
             now=_now(),
+            roles=principal.roles,
         )
     except Exception:
         logger.warning("refresh persistence failed; existing session left untouched")
@@ -831,6 +953,18 @@ def _verify_id_token(id_token: str, expected_nonce_digest: str, verifier: auth_m
         logger.warning("id_token nonce mismatch")
         raise HTTPException(status_code=400, detail="invalid authorization response")
     return claims
+
+
+def _token_exp(token: Any) -> Optional[datetime]:
+    """`exp` of a JWT, read without verification -- used only for a token that
+    was (or is about to be) verified; anything else yields None."""
+    if not isinstance(token, str):
+        return None
+    try:
+        exp = jwt.decode(token, options={"verify_signature": False}).get("exp")
+        return datetime.fromtimestamp(int(exp), timezone.utc)
+    except Exception:
+        return None
 
 
 def _expires_at(expires_in: Any) -> Optional[datetime]:

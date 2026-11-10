@@ -292,6 +292,20 @@ def test_a_failing_session_resolver_never_grants_access(oidc, monkeypatch):
     assert oidc.get("/api/v1/runs").status_code == 500
 
 
+def test_an_unavailable_membership_store_is_a_503_without_details(oidc, keypair, monkeypatch, caplog):  # noqa: F811
+    from juval.interfaces.api import main
+
+    class Unavailable:
+        def organization_ids_for(self, issuer, subject):
+            raise RuntimeError("SYNTHETIC-DRIVER-DETAIL host=db.internal")
+
+    monkeypatch.setattr(main, "_execution_run_store", lambda: Unavailable())
+    response = oidc.get("/api/v1/runs", headers=bearer(make_token(keypair, roles=("viewer",))))
+    assert (response.status_code, response.json()) == (
+        503, {"detail": "organization membership is temporarily unavailable"})
+    assert "SYNTHETIC-DRIVER-DETAIL" not in caplog.text
+
+
 def test_valid_token_still_works(oidc, keypair):  # noqa: F811
     token = make_token(keypair, roles=("viewer",))
     assert oidc.get("/api/v1/runs", headers=bearer(token)).status_code not in (401, 403)

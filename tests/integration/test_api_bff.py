@@ -7,6 +7,7 @@ leaves the process. No production credential, no real issuer.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import urllib.parse
 from datetime import datetime, timedelta, timezone
@@ -318,6 +319,34 @@ def test_open_redirect_is_not_possible_via_return_to(configured, rsa_key, monkey
         assert callback.headers["location"] == "/dashboard"
 
 
+def _callback_location(client, return_to):
+    response = client.get("/api/v1/auth/login", params={"return_to": return_to}, follow_redirects=False)
+    query = urllib.parse.parse_qs(urllib.parse.urlsplit(response.headers["location"]).query)
+    callback = client.get("/api/v1/auth/callback", params={"code": "c", "state": query["state"][0]},
+                          follow_redirects=False)
+    return callback.headers["location"]
+
+
+@pytest.mark.parametrize("return_to", ["/\\evil.test.invalid", "/\t/evil.test.invalid", "/\n/evil.test.invalid",
+                                       "\\\\evil.test.invalid", "https:/evil.test.invalid"])
+def test_return_to_that_a_browser_could_read_as_another_host_is_rejected(configured, rsa_key, monkeypatch,
+                                                                           return_to):
+    _stub_token_endpoint(monkeypatch, rsa_key, nonce_from=_raw_nonce)
+    with TestClient(app) as client:
+        assert _callback_location(client, return_to) == "/dashboard"
+
+
+def test_return_to_lands_on_the_app_origin_in_the_adr038_topology(configured, rsa_key, monkeypatch):
+    """The callback is served by the API host; a bare path would land there."""
+    bff.configure(config=dataclasses.replace(bff.current_config(),
+                                             post_login_redirect="https://app.test.invalid/home"))
+    _stub_token_endpoint(monkeypatch, rsa_key, nonce_from=_raw_nonce)
+    with TestClient(app) as client:
+        assert _callback_location(client, "/runs/abc?tab=records") == "https://app.test.invalid/runs/abc?tab=records"
+        assert _callback_location(client, "https://evil.test.invalid/x") == "https://app.test.invalid/home"
+        assert _callback_location(client, "//evil.test.invalid") == "https://app.test.invalid/home"
+
+
 def test_protocol_relative_return_to_is_rejected(configured, rsa_key, monkeypatch):
     _stub_token_endpoint(monkeypatch, rsa_key, nonce_from=_raw_nonce)
     with TestClient(app) as client:
@@ -485,6 +514,49 @@ def test_expired_session_is_not_authenticated(configured, rsa_key, monkeypatch):
             stored.record, expires_at=datetime.now(timezone.utc) - timedelta(seconds=1)
         )
         assert client.get("/api/v1/auth/session").json()["authenticated"] is False
+
+
+def test_a_revoked_session_cannot_be_reused(configured, rsa_key, monkeypatch):
+    """Logout revokes server-side: replaying the captured cookie and CSRF token gets nothing."""
+    with TestClient(app) as client:
+        session = _login(client, rsa_key, monkeypatch, roles=("admin",))
+        captured = client.cookies[bff.SESSION_COOKIE]
+        assert client.post("/api/v1/auth/logout", headers={bff.CSRF_HEADER: session["csrf_token"]}).status_code == 200
+        client.cookies.set(bff.SESSION_COOKIE, captured)
+        client.cookies.set(bff.CSRF_COOKIE, session["csrf_token"])
+        assert client.get("/api/v1/auth/session").json() == {"authenticated": False}
+        assert client.get("/api/v1/runs").status_code == 401
+        replay = client.post("/api/v1/runs", headers={bff.CSRF_HEADER: session["csrf_token"]},
+                             files={"file": ("a.csv", b"x", "text/csv")})
+        assert replay.status_code == 401
+
+
+def test_a_new_login_revokes_the_session_the_browser_held(configured, rsa_key, monkeypatch):
+    with TestClient(app) as client:
+        _login(client, rsa_key, monkeypatch, roles=("admin",))
+        previous = client.cookies[bff.SESSION_COOKIE]
+        session = _login(client, rsa_key, monkeypatch, roles=("viewer",))
+        assert client.cookies[bff.SESSION_COOKIE] != previous
+        assert session["roles"] == ["viewer"]
+        assert bff.session_store().load(previous, datetime.now(timezone.utc)) is None
+        client.cookies.set(bff.SESSION_COOKIE, previous)
+        assert client.get("/api/v1/auth/session").json()["authenticated"] is False
+
+
+class _UnavailableSessionStore(InMemorySessionStore):
+    def load(self, session_id, now):
+        raise RuntimeError("SYNTHETIC-DRIVER-DETAIL host=db.internal user=juval_backend")
+
+
+def test_an_unavailable_session_store_fails_closed_without_details(configured, caplog):
+    bff.configure(sessions=_UnavailableSessionStore())
+    with TestClient(app) as client:
+        client.cookies.set(bff.SESSION_COOKIE, "some-session-id")
+        for method, path in (("get", "/api/v1/runs"), ("get", "/api/v1/auth/session"),
+                             ("post", "/api/v1/auth/logout")):
+            response = getattr(client, method)(path)
+            assert (response.status_code, response.json()) == (503, {"detail": "session service unavailable"})
+    assert "SYNTHETIC-DRIVER-DETAIL" not in caplog.text and "db.internal" not in caplog.text
 
 
 # --- disabled mode -----------------------------------------------------
@@ -695,6 +767,9 @@ def test_session_projection_uses_state_after_refresh(configured, rsa_key, monkey
         raise OSError("provider unavailable")
 
     monkeypatch.setattr(bff, "_refresh_tokens", fail_refresh)
+    # The clock jumps ~60 min to reach the token's expiry; isolate refresh from
+    # the 30-min idle timeout, which has its own tests.
+    bff.configure(config=bff.current_config(), sessions=InMemorySessionStore(idle_timeout=timedelta(hours=2)))
     with TestClient(app) as client:
         _, query = _begin_login(client)
         client.get("/api/v1/auth/callback", params={"code": "c", "state": query["state"][0]},
@@ -717,6 +792,7 @@ def test_session_projection_uses_state_after_refresh(configured, rsa_key, monkey
 
 def test_rotation_persistence_failure_eventually_requires_and_allows_relogin(configured, rsa_key, monkeypatch):
     """Provider rotation and DB write are not atomic; exercise the documented recovery."""
+    bff.configure(config=bff.current_config(), sessions=InMemorySessionStore(idle_timeout=timedelta(hours=2)))  # see above
     with TestClient(app) as client:
         assert _login(client, rsa_key, monkeypatch)['authenticated'] is True
         old_session = client.cookies[bff.SESSION_COOKIE]
@@ -727,7 +803,9 @@ def test_rotation_persistence_failure_eventually_requires_and_allows_relogin(con
             if token in used:
                 raise bff._RefreshRejected('synthetic consumed token')
             used.add(token)
-            return {'access_token': 'synthetic-new', 'refresh_token': 'synthetic-rotated', 'expires_in': 3600}
+            # A verifiable access token, so the write -- not verification -- fails.
+            return {'access_token': _id_token(rsa_key, nonce='unused'), 'refresh_token': 'synthetic-rotated',
+                    'expires_in': 3600}
         monkeypatch.setattr(bff, '_refresh_tokens', rotating_provider)
         store = bff.session_store()
         real_replace = store.replace_tokens
@@ -743,3 +821,116 @@ def test_rotation_persistence_failure_eventually_requires_and_allows_relogin(con
         assert _login(client, rsa_key, monkeypatch)['authenticated'] is True
         assert client.cookies[bff.SESSION_COOKIE] != old_session
         assert store.load(old_session, near_expiry) is None
+
+
+# --- SEC-01E: inactivity and role freshness (controlled clock, no sleeps) -----
+
+
+def _advance(monkeypatch, delta):
+    later = bff._now() + delta
+    monkeypatch.setattr(bff, "_now", lambda: later)
+    return later
+
+
+def test_a_session_idle_for_30_minutes_is_over(configured, rsa_key, monkeypatch):
+    with TestClient(app) as client:
+        _login(client, rsa_key, monkeypatch)
+        _advance(monkeypatch, timedelta(minutes=29))
+        assert client.get("/api/v1/auth/session").json()["authenticated"] is True   # activity
+        _advance(monkeypatch, timedelta(minutes=30, seconds=1))
+        assert client.get("/api/v1/runs").status_code == 401
+        assert client.get("/api/v1/auth/session").json() == {"authenticated": False}
+
+
+def test_browser_declared_activity_does_not_count(configured, rsa_key, monkeypatch):
+    """Only requests the server resolves are activity; headers or cookies cannot fake it."""
+    with TestClient(app) as client:
+        _login(client, rsa_key, monkeypatch)
+        _advance(monkeypatch, timedelta(minutes=31))
+        response = client.get("/api/v1/runs", headers={"X-Last-Activity": "now", "X-Requested-With": "x"})
+        assert response.status_code == 401
+
+
+def _long_idle(rsa_key):
+    """Reach the access token's expiry (1 h) without tripping the idle timeout."""
+    bff.configure(config=bff.current_config(), sessions=InMemorySessionStore(idle_timeout=timedelta(hours=2)))
+
+
+def test_roles_are_re_derived_from_the_refreshed_verified_token(configured, rsa_key, monkeypatch):
+    _long_idle(rsa_key)
+    with TestClient(app) as client:
+        assert _login(client, rsa_key, monkeypatch, roles=("admin",))["roles"] == ["admin"]
+        monkeypatch.setattr(bff, "_refresh_tokens", lambda config, token: {
+            "access_token": _id_token(rsa_key, nonce="unused", roles=("viewer",)),
+            "refresh_token": "rotated", "expires_in": 3600})
+        _advance(monkeypatch, timedelta(minutes=59))
+        session = client.get("/api/v1/auth/session").json()
+        assert session["roles"] == ["viewer"] and "runs:create" not in session["permissions"]
+        assert client.post("/api/v1/runs", headers={bff.CSRF_HEADER: session["csrf_token"]},
+                           files={"file": ("a.csv", b"x", "text/csv")}).status_code == 403
+
+
+def test_without_a_refresh_token_the_session_ends_with_its_access_token(configured, rsa_key, monkeypatch):
+    _long_idle(rsa_key)
+    with TestClient(app) as client:
+        _login(client, rsa_key, monkeypatch, roles=("admin",))
+        session_id = client.cookies[bff.SESSION_COOKIE]
+        stored = bff.session_store()._items[digest(session_id)]
+        stored.record = dataclasses.replace(stored.record, refresh_token=None)
+        _advance(monkeypatch, timedelta(minutes=61))
+        assert client.get("/api/v1/runs").status_code == 401
+        assert bff.session_store().load(session_id, bff._now()) is None     # revoked
+
+
+def test_after_expiry_an_unreachable_idp_is_a_503_never_stale_roles(configured, rsa_key, monkeypatch):
+    _long_idle(rsa_key)
+    with TestClient(app) as client:
+        _login(client, rsa_key, monkeypatch, roles=("admin",))
+        session_id = client.cookies[bff.SESSION_COOKIE]
+
+        def down(config, token):
+            raise OSError("synthetic outage")
+
+        monkeypatch.setattr(bff, "_refresh_tokens", down)
+        _advance(monkeypatch, timedelta(minutes=61))
+        response = client.get("/api/v1/runs")
+        assert (response.status_code, response.json()) == (503, {"detail": "identity provider temporarily unavailable"})
+        assert bff.session_store().load(session_id, bff._now()) is not None   # kept for a retry
+
+
+@pytest.mark.parametrize("token", ["not-a-jwt", "subject-mismatch"])
+def test_an_unverifiable_or_foreign_refreshed_token_never_grants_roles(configured, rsa_key, monkeypatch, token):
+    _long_idle(rsa_key)
+    with TestClient(app) as client:
+        _login(client, rsa_key, monkeypatch, roles=("viewer",))
+        session_id = client.cookies[bff.SESSION_COOKIE]
+        issued = "not-a-jwt" if token == "not-a-jwt" else _id_token(rsa_key, nonce="x", sub="someone-else",
+                                                                     roles=("admin",))
+        monkeypatch.setattr(bff, "_refresh_tokens", lambda config, t: {"access_token": issued, "expires_in": 3600})
+        _advance(monkeypatch, timedelta(minutes=61))
+        assert client.get("/api/v1/runs").status_code in (401, 503)
+        record = bff.session_store().load(session_id, bff._now())
+        assert record is None or record.roles == ("viewer",)
+        if token == "subject-mismatch":
+            assert record is None                                             # revoked
+
+
+@pytest.mark.parametrize("value", ["0", "481", "thirty", "-5"])
+def test_an_invalid_idle_timeout_stops_store_selection(monkeypatch, value):
+    monkeypatch.setenv("JUVAL_AUTH_MODE", "oidc")
+    monkeypatch.setenv("JUVAL_SESSION_STORE", "memory")
+    monkeypatch.setenv("JUVAL_SESSION_STORE_MEMORY_CONFIRM", "yes-single-process-development-only")
+    monkeypatch.setenv(bff.IDLE_TIMEOUT_ENV, value)
+    with pytest.raises(RuntimeError, match=bff.IDLE_TIMEOUT_ENV):
+        bff.build_stores()
+
+
+def test_the_idle_timeout_is_configured_on_the_server(monkeypatch):
+    monkeypatch.setenv("JUVAL_AUTH_MODE", "oidc")
+    monkeypatch.setenv("JUVAL_SESSION_STORE", "memory")
+    monkeypatch.setenv("JUVAL_SESSION_STORE_MEMORY_CONFIRM", "yes-single-process-development-only")
+    monkeypatch.setenv(bff.IDLE_TIMEOUT_ENV, "45")
+    sessions, _ = bff.build_stores()
+    assert sessions._idle_timeout == timedelta(minutes=45)
+    monkeypatch.delenv(bff.IDLE_TIMEOUT_ENV)
+    assert bff.build_stores()[0]._idle_timeout == timedelta(minutes=30)

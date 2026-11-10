@@ -38,8 +38,13 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import ContextManager, Optional, Protocol, Tuple
+
+#: Owner decision (SEC-01E): a session nobody has used for this long is dead.
+#: Activity is a request the *server* resolved for this session -- nothing the
+#: browser declares. It never extends the absolute expiry (8 h, set at login).
+DEFAULT_IDLE_TIMEOUT = timedelta(minutes=30)
 
 
 def digest(value: str) -> str:
@@ -160,7 +165,12 @@ class SessionStore(Protocol):
         """Create or replace a session."""
 
     def load(self, session_id: str, now: datetime) -> Optional[SessionRecord]:
-        """Return the session, or None when unknown, expired or revoked."""
+        """Return the session, or None when unknown, expired, idle or revoked.
+
+        A successful load is activity: it advances `last_seen_at`, never
+        backwards, in the same atomic step that checks the idle timeout. A
+        session found idle is revoked, so it can never come back.
+        """
 
     def revoke(self, session_id: str, now: datetime) -> None:
         """End a session immediately. Idempotent -- logging out twice is fine."""
@@ -173,8 +183,13 @@ class SessionStore(Protocol):
         refresh_token: Optional[str],
         access_token_expires_at: Optional[datetime],
         now: datetime,
+        roles: Optional[Tuple[str, ...]] = None,
     ) -> bool:
         """Atomically swap the stored tokens after a refresh.
+
+        `roles`, when given, replaces the roles too: they come from the
+        refreshed, verified access token, so a role change at the IdP reaches
+        the session at the next refresh (SEC-01E).
 
         Returns True when this caller won. Returns **False** when
         `expected_generation` no longer matches -- meaning a concurrent refresh

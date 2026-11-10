@@ -48,10 +48,11 @@ from __future__ import annotations
 from contextlib import contextmanager
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Optional
 
 from juval.application.session_store import (
+    DEFAULT_IDLE_TIMEOUT,
     OAuthTransaction,
     OAuthTransactionRecord,
     Session,
@@ -294,6 +295,10 @@ class PostgresOAuthTransactionStore(_PostgresBacked):
 
 
 class PostgresSessionStore(_PostgresBacked):
+    def __init__(self, dsn: str, cipher: TokenCipher, idle_timeout: timedelta = DEFAULT_IDLE_TIMEOUT) -> None:
+        super().__init__(dsn, cipher)
+        self._idle_timeout = idle_timeout
+
     @contextmanager
     def refresh_guard(self, session_id: str):
         # Transaction-scoped lock: released on normal exit, exception or lost
@@ -351,18 +356,40 @@ class PostgresSessionStore(_PostgresBacked):
     def load(self, session_id: str, now: datetime) -> Optional[SessionRecord]:
         session_digest = digest(session_id)
         with self._connect() as conn:
+            # Check validity, idle timeout and record activity in ONE
+            # statement: two concurrent requests cannot interleave a stale
+            # check with a touch, and activity never moves backwards.
+            params = {"digest": session_digest, "now": now, "idle": self._idle_timeout}
             row = conn.execute(
                 """
-                select subject, roles, csrf_digest,
+                update identity_sessions
+                   set last_seen_at = greatest(last_seen_at, %(now)s)
+                 where session_digest = %(digest)s
+                   and revoked_at is null
+                   and expires_at > %(now)s
+                   and last_seen_at > %(now)s - %(idle)s
+             returning subject, roles, csrf_digest,
                        access_token_ciphertext, refresh_token_ciphertext,
                        access_token_expires_at, created_at, expires_at,
-                       revoked_at, refresh_generation
-                  from identity_sessions
-                 where session_digest = %s
+                       refresh_generation
                 """,
-                (session_digest,),
+                params,
             ).fetchone()
             if row is None:
+                # An idle session is revoked, not merely refused, so neither a
+                # clock correction nor a longer timeout can revive it.
+                conn.execute(
+                    """
+                    update identity_sessions
+                       set revoked_at = %(now)s,
+                           access_token_ciphertext = null,
+                           refresh_token_ciphertext = null
+                     where session_digest = %(digest)s
+                       and revoked_at is null
+                       and last_seen_at <= %(now)s - %(idle)s
+                    """,
+                    params,
+                )
                 return None
             (
                 subject,
@@ -373,18 +400,8 @@ class PostgresSessionStore(_PostgresBacked):
                 access_expires_at,
                 created_at,
                 expires_at,
-                revoked_at,
                 generation,
             ) = row
-            if revoked_at is not None or expires_at <= now:
-                return None
-            # Touch last_seen_at on the same connection. Purely observational --
-            # nothing authorises on it -- so a failure here must never deny a
-            # valid session.
-            conn.execute(
-                "update identity_sessions set last_seen_at = %s where session_digest = %s",
-                (now, session_digest),
-            )
 
         try:
             access = self._open(access_ct, session_digest, _ACCESS)
@@ -429,6 +446,7 @@ class PostgresSessionStore(_PostgresBacked):
         refresh_token: Optional[str],
         access_token_expires_at: Optional[datetime],
         now: datetime,
+        roles: Optional[tuple] = None,
     ) -> bool:
         session_digest = digest(session_id)
         access = self._seal(access_token, session_digest, _ACCESS)
@@ -441,7 +459,8 @@ class PostgresSessionStore(_PostgresBacked):
                        refresh_token_ciphertext = %s,
                        crypto_key_id            = %s,
                        access_token_expires_at  = %s,
-                       last_seen_at             = %s,
+                       last_seen_at             = greatest(last_seen_at, %s),
+                       roles                    = coalesce(%s::text[], roles),
                        refresh_generation       = refresh_generation + 1
                  where session_digest     = %s
                    and refresh_generation = %s
@@ -454,6 +473,7 @@ class PostgresSessionStore(_PostgresBacked):
                     self._cipher.primary_key_id,
                     access_token_expires_at,
                     now,
+                    list(roles) if roles is not None else None,
                     session_digest,
                     expected_generation,
                     now,
@@ -480,3 +500,25 @@ class PostgresSessionStore(_PostgresBacked):
         if envelope is None:
             return None
         return self._cipher.decrypt(envelope, context=context_for(session_digest, field))
+
+
+def revoke_sessions(dsn: str, now: datetime, subject: Optional[str] = None) -> int:
+    """Operator revocation (SEC-01E): every live session, or every one of `subject`.
+
+    Used before an issuer change (all) and when a person's roles change or
+    they leave (one subject). Same effect as `revoke()`: the row stays for
+    audit, the encrypted tokens are erased. Returns how many were revoked.
+    """
+    with _require_driver().connect(dsn, connect_timeout=5) as conn:
+        cur = conn.execute(
+            """
+            update identity_sessions
+               set revoked_at = %(now)s,
+                   access_token_ciphertext = null,
+                   refresh_token_ciphertext = null
+             where revoked_at is null
+               and (%(subject)s::text is null or subject = %(subject)s::text)
+            """,
+            {"now": now, "subject": subject},
+        )
+        return cur.rowcount or 0

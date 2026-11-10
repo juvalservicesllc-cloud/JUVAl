@@ -486,3 +486,86 @@ def test_readiness_requires_digest_primary_key(session_db_dsn, table, column, de
                 sql.Identifier(table), sql.Identifier(column)))
     with pytest.raises(RuntimeError, match='readiness failed'):
         verify_session_database(session_db_dsn)
+
+
+# --- SEC-01E: inactivity, absolute expiry, roles, operator revocation --------
+# A controlled clock: `now` is passed explicitly; nothing sleeps.
+
+
+def test_an_idle_session_dies_and_stays_dead(stores):
+    sessions, _ = stores
+    session = _session()
+    sessions.save(session)
+    t0 = session.created_at
+    assert sessions.load(session.session_id, t0 + timedelta(minutes=29)) is not None
+    assert sessions.load(session.session_id, t0 + timedelta(minutes=58)) is not None   # activity at 29
+    assert sessions.load(session.session_id, t0 + timedelta(minutes=88, seconds=1)) is None
+    # Revoked, not merely refused: an earlier clock cannot bring it back.
+    assert sessions.load(session.session_id, t0 + timedelta(minutes=60)) is None
+
+
+def test_activity_never_moves_backwards(stores):
+    sessions, _ = stores
+    session = _session()
+    sessions.save(session)
+    t0 = session.created_at
+    assert sessions.load(session.session_id, t0 + timedelta(minutes=20)) is not None
+    assert sessions.load(session.session_id, t0 + timedelta(minutes=10)) is not None   # a slower request
+    # Last activity is still minute 20: minute 45 is 25 minutes idle, not 35.
+    assert sessions.load(session.session_id, t0 + timedelta(minutes=45)) is not None
+
+
+def test_activity_never_extends_the_absolute_expiry(stores):
+    sessions, _ = stores
+    session = _session()
+    sessions.save(session)
+    t0 = session.created_at
+    minute = 0
+    while minute < 8 * 60 - 20:
+        minute += 20
+        assert sessions.load(session.session_id, t0 + timedelta(minutes=minute)) is not None
+    assert sessions.load(session.session_id, session.expires_at) is None
+
+
+def test_the_idle_timeout_is_configurable(stores):
+    sessions, _ = stores
+    session = _session()
+    short = type(sessions)(*_store_args(sessions), idle_timeout=timedelta(minutes=5))
+    short.save(session)
+    assert short.load(session.session_id, session.created_at + timedelta(minutes=5, seconds=1)) is None
+
+
+def _store_args(sessions):
+    return () if isinstance(sessions, InMemorySessionStore) else (sessions._dsn, sessions._cipher)
+
+
+def test_refresh_can_replace_the_roles(stores):
+    sessions, _ = stores
+    session = _session()
+    sessions.save(session)
+    assert sessions.replace_tokens(session.session_id, 0, "a1", "r1", None, _now(), roles=("viewer",))
+    assert sessions.load(session.session_id, _now()).roles == ("viewer",)
+    assert sessions.replace_tokens(session.session_id, 1, "a2", "r2", None, _now())  # roles kept
+    assert sessions.load(session.session_id, _now()).roles == ("viewer",)
+
+
+def test_operator_revocation_by_subject_and_globally(session_db_dsn):
+    import psycopg
+    from juval.infrastructure.persistence.postgres_session_store import PostgresSessionStore, revoke_sessions
+
+    with psycopg.connect(session_db_dsn) as conn:
+        conn.execute(Path(MIGRATION).read_text(encoding="utf-8"))
+    store = PostgresSessionStore(session_db_dsn, _cipher())
+    alice_1, alice_2, bob = _session(), _session(), _session(subject="user-2")
+    for s in (alice_1, alice_2, bob):
+        store.save(s)
+    assert revoke_sessions(session_db_dsn, _now(), subject="user-1") == 2
+    assert store.load(alice_1.session_id, _now()) is None and store.load(alice_2.session_id, _now()) is None
+    assert store.load(bob.session_id, _now()) is not None
+    with psycopg.connect(session_db_dsn) as conn:
+        assert conn.execute("select count(*) from identity_sessions where revoked_at is not null "
+                            "and (access_token_ciphertext is not null or refresh_token_ciphertext is not null)"
+                            ).fetchone() == (0,)
+    assert revoke_sessions(session_db_dsn, _now()) == 1          # global: issuer change
+    assert store.load(bob.session_id, _now()) is None
+    assert revoke_sessions(session_db_dsn, _now()) == 0          # idempotent

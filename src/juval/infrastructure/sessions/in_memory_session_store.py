@@ -22,10 +22,11 @@ from __future__ import annotations
 import threading
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, Optional
 
 from juval.application.session_store import (
+    DEFAULT_IDLE_TIMEOUT,
     OAuthTransaction,
     OAuthTransactionRecord,
     Session,
@@ -43,6 +44,7 @@ class _StoredTransaction:
 @dataclass
 class _StoredSession:
     record: SessionRecord
+    last_seen_at: datetime
     revoked_at: Optional[datetime] = None
 
 
@@ -81,7 +83,8 @@ class InMemoryOAuthTransactionStore:
 
 
 class InMemorySessionStore:
-    def __init__(self) -> None:
+    def __init__(self, idle_timeout: timedelta = DEFAULT_IDLE_TIMEOUT) -> None:
+        self._idle_timeout = idle_timeout
         self._lock = threading.Lock()
         self._items: Dict[str, _StoredSession] = {}
         self._refreshing: set[str] = set()
@@ -114,7 +117,7 @@ class InMemorySessionStore:
             refresh_generation=0,
         )
         with self._lock:
-            self._items[record.session_digest] = _StoredSession(record=record)
+            self._items[record.session_digest] = _StoredSession(record=record, last_seen_at=session.created_at)
 
     def load(self, session_id: str, now: datetime) -> Optional[SessionRecord]:
         key = digest(session_id)
@@ -122,11 +125,17 @@ class InMemorySessionStore:
             stored = self._items.get(key)
             if stored is None:
                 return None
-            if stored.revoked_at is not None or stored.record.expires_at <= now:
+            if (
+                stored.revoked_at is not None
+                or stored.record.expires_at <= now
+                or stored.last_seen_at <= now - self._idle_timeout
+            ):
                 # Removed on read rather than by a sweeper: no background task,
-                # and an expired or revoked id can never be resurrected.
+                # and an expired, idle or revoked id can never be resurrected.
                 self._items.pop(key, None)
                 return None
+            # Check and touch under one lock; never move activity backwards.
+            stored.last_seen_at = max(stored.last_seen_at, now)
             return stored.record
 
     def revoke(self, session_id: str, now: datetime) -> None:
@@ -141,6 +150,7 @@ class InMemorySessionStore:
         refresh_token: Optional[str],
         access_token_expires_at: Optional[datetime],
         now: datetime,
+        roles: Optional[tuple] = None,
     ) -> bool:
         key = digest(session_id)
         with self._lock:
@@ -157,6 +167,7 @@ class InMemorySessionStore:
                 refresh_token=refresh_token,
                 access_token_expires_at=access_token_expires_at,
                 refresh_generation=expected_generation + 1,
+                roles=tuple(roles) if roles is not None else stored.record.roles,
             )
             return True
 

@@ -274,7 +274,12 @@ def tenant_access(request: Request, principal: Principal = Depends(current_princ
     if store is None:
         logger.error("tenant access unavailable: no execution store configured for memberships")
         raise HTTPException(status_code=503, detail="organization membership is not available on this deployment")
-    organizations = store.organization_ids_for(principal.issuer, principal.subject)
+    try:
+        organizations = store.organization_ids_for(principal.issuer, principal.subject)
+    except Exception:
+        # Driver errors can carry connection details: neither chained nor logged.
+        logger.error("tenant access unavailable: membership lookup failed")
+        raise HTTPException(status_code=503, detail="organization membership is temporarily unavailable") from None
     if len(organizations) != 1:
         logger.warning("tenant access denied: subject=%s memberships=%d", principal.subject, len(organizations))
         raise HTTPException(status_code=403, detail="no organization access for this identity")
