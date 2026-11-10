@@ -9,6 +9,11 @@ audit line to keep with the access-review record (ACCESS_CONTROL.md).
     tenancy_admin.py --postgres-dsn-env JUVAL_TENANCY_ADMIN_DB_URL \\
         add-member --organization <uuid> --issuer <iss> --subject <sub> --created-by <operator>
     tenancy_admin.py ... remove-member --issuer <iss> --subject <sub> --created-by <operator>
+    tenancy_admin.py --postgres-dsn-env ... revoke-sessions (--subject <sub> | --all) --created-by <operator>
+
+`revoke-sessions` ends BFF sessions immediately (SEC-01E): `--subject` after
+a person's roles change or they leave, `--all` before the OIDC issuer changes
+(sessions do not record the issuer). Sessions live only in PostgreSQL.
 
 PostgreSQL needs an administrative DSN (the runtime role `juval_backend` may
 only read its own membership). The DSN is read from the named environment
@@ -41,12 +46,22 @@ def _store(args):
         from juval.infrastructure.logging.sqlite_execution_run_store import SqliteExecutionRunStore
 
         return SqliteExecutionRunStore(Path(args.sqlite))
+    from juval.infrastructure.persistence.supabase_execution_run_store import SupabaseExecutionRunStore
+
+    return SupabaseExecutionRunStore(_postgres_dsn(args))
+
+
+def _postgres_dsn(args) -> str:
     dsn = os.environ.get(args.postgres_dsn_env)
     if not dsn:
         raise SystemExit(f"environment variable {args.postgres_dsn_env} is not set")
-    from juval.infrastructure.persistence.supabase_execution_run_store import SupabaseExecutionRunStore
+    from juval.infrastructure.persistence.postgres_tls import require_tls_for_remote
 
-    return SupabaseExecutionRunStore(dsn)
+    try:
+        require_tls_for_remote(dsn, args.postgres_dsn_env)
+    except RuntimeError as exc:
+        raise SystemExit(str(exc)) from None
+    return dsn
 
 
 def _identity(issuer: str, subject: str) -> tuple[str, str]:
@@ -54,9 +69,13 @@ def _identity(issuer: str, subject: str) -> tuple[str, str]:
     parts = urlsplit(issuer)
     if issuer == LAB_ISSUER or parts.scheme != "https" or not parts.hostname or parts.username or parts.password:
         raise SystemExit("--issuer must be the IdP's https issuer URL, exactly as in the token's iss claim")
+    return issuer, _subject(subject)
+
+
+def _subject(subject: str) -> str:
     if not subject.strip() or subject != subject.strip() or "@" in subject:
         raise SystemExit("--subject must be the IdP sub (user id), not an email address or a padded value")
-    return issuer, subject
+    return subject
 
 
 def main(argv=None) -> int:
@@ -73,7 +92,11 @@ def main(argv=None) -> int:
     for command in (member, remove):
         command.add_argument("--issuer", required=True)
         command.add_argument("--subject", required=True)
-    for command in (create, member, remove):
+    sessions = commands.add_parser("revoke-sessions")
+    whose = sessions.add_mutually_exclusive_group(required=True)
+    whose.add_argument("--subject", help="the IdP sub whose sessions end (roles changed, offboarding)")
+    whose.add_argument("--all", action="store_true", help="every session (before an issuer change)")
+    for command in (create, member, remove, sessions):
         command.add_argument("--created-by", required=True, help="who performs this change (audit trail)")
     args = parser.parse_args(argv)
     if not args.created_by.strip():
@@ -84,6 +107,17 @@ def main(argv=None) -> int:
         organization_id = str(uuid.uuid4())
         _store(args).create_organization(organization_id, args.name, args.created_by, now)
         print(f"{now.isoformat()} create-organization {organization_id} name={args.name!r} by={args.created_by}")
+        return 0
+
+    if args.command == "revoke-sessions":
+        if args.sqlite:
+            raise SystemExit("revoke-sessions needs --postgres-dsn-env: BFF sessions live only in PostgreSQL")
+        subject = None if args.all else _subject(args.subject)
+        from juval.infrastructure.persistence.postgres_session_store import revoke_sessions
+
+        count = revoke_sessions(_postgres_dsn(args), now, subject)
+        scope = "all" if subject is None else f"subject={subject}"
+        print(f"{now.isoformat()} revoke-sessions {scope} revoked={count} by={args.created_by}")
         return 0
 
     issuer, subject = _identity(args.issuer, args.subject)

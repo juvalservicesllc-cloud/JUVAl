@@ -13,7 +13,7 @@ COMMANDS = {
     "identity_sessions": ("SELECT", "INSERT", "UPDATE", "DELETE"),
     "identity_oauth_transactions": ("SELECT", "INSERT", "DELETE"),
 }
-FAKE_DSN = "synthetic-readiness-dsn"
+FAKE_DSN = "host=/synthetic/readiness-socket dbname=synthetic"  # parseable: startup now checks TLS first
 
 
 class Result:

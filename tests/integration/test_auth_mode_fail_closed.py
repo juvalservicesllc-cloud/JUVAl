@@ -306,6 +306,15 @@ def test_an_unavailable_membership_store_is_a_503_without_details(oidc, keypair,
     assert "SYNTHETIC-DRIVER-DETAIL" not in caplog.text
 
 
+def test_a_remote_execution_store_without_tls_stops_startup(monkeypatch, keypair):  # noqa: F811
+    _, public_key = keypair
+    monkeypatch.setenv("JUVAL_AUTH_MODE", "oidc")
+    monkeypatch.setenv("JUVAL_EXECUTION_STORE", "supabase")
+    monkeypatch.setenv("JUVAL_RUNTIME_DB_URL", "postgresql://db.example.com/postgres")
+    auth.set_verifier(auth.TokenVerifier(issuer=ISSUER, audience=AUDIENCE, key_resolver=lambda token: public_key))
+    assert "without TLS" in startup_error()
+
+
 def test_valid_token_still_works(oidc, keypair):  # noqa: F811
     token = make_token(keypair, roles=("viewer",))
     assert oidc.get("/api/v1/runs", headers=bearer(token)).status_code not in (401, 403)

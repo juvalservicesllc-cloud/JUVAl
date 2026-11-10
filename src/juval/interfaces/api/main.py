@@ -76,6 +76,7 @@ from juval.infrastructure.excel.exporter import append_literal_row, export_excel
 from juval.infrastructure.excel.importer import SUPPORTED_INPUT_SUFFIXES, UnsupportedInputFormat
 from juval.infrastructure.logging.sqlite_execution_run_store import SqliteExecutionRunStore
 from juval.infrastructure.persistence.supabase_execution_run_store import SupabaseExecutionRunStore
+from juval.infrastructure.persistence.postgres_tls import require_tls_for_remote
 
 from . import bff, service
 from . import auth, security_events
@@ -146,7 +147,7 @@ async def _lifespan(_app: FastAPI):
             stage = "sessions"
             bff.ensure_configured()
             # The execution store is built per request; build it once here so a
-            # bad selection stops startup instead of
+            # bad selection or a remote DSN without TLS stops startup instead of
             # failing every data request (SEC-01E). Construction does not connect.
             stage = "execution_store"
             _execution_run_store()
@@ -253,6 +254,7 @@ def _execution_run_store() -> Optional[ExecutionRunStore]:
         db_url = os.environ.get("JUVAL_RUNTIME_DB_URL")
         if not db_url:
             raise RuntimeError("JUVAL_EXECUTION_STORE=supabase requires JUVAL_RUNTIME_DB_URL to be set")
+        require_tls_for_remote(db_url, "JUVAL_RUNTIME_DB_URL")
         return SupabaseExecutionRunStore(db_url)
 
     raise RuntimeError(f"JUVAL_EXECUTION_STORE has an unrecognized value: {mode!r} (expected 'sqlite' or 'supabase')")

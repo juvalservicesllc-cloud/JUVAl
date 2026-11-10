@@ -244,6 +244,9 @@ Do not collapse these concepts:
 - Responses must not expose tracebacks, filesystem paths, queries, secrets, or credentials.
 - Connected list UIs may offer retry.
 - `API ERROR != USE DEMO DATA`.
+- Authentication, session, CSRF, logout and the exact 401/403/404/503 texts:
+  [`architecture/BFF_FRONTEND_CONTRACT.md`](architecture/BFF_FRONTEND_CONTRACT.md)
+  (SEC-01E); Codex task prompt alongside it.
 
 ## 11. Local Development Connection
 

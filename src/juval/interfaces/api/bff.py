@@ -319,6 +319,9 @@ def build_stores() -> tuple[SessionStore, OAuthTransactionStore]:
         PostgresSessionStore,
         verify_session_database,
     )
+    from juval.infrastructure.persistence.postgres_tls import require_tls_for_remote
+
+    require_tls_for_remote(dsn, "JUVAL_RUNTIME_DB_URL")
     idle = idle_timeout()
     verify_session_database(dsn)
     return PostgresSessionStore(dsn, cipher, idle), PostgresOAuthTransactionStore(dsn, cipher)

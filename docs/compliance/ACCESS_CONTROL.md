@@ -200,7 +200,7 @@ On termination, role change, or suspected compromise:
 | # | Step | Deadline |
 |---|---|---|
 | 1 | Suspend the IdP account | Immediately |
-| 2 | Terminate live sessions — suspension alone does not invalidate an already-issued token | Immediately |
+| 2 | Terminate live sessions — suspension alone does not invalidate an already-issued token. JUVAl: `tenancy_admin.py remove-member` (data, next request) **and** `tenancy_admin.py revoke-sessions --subject <sub>` (sessions, immediately; TENANCY_ACTIVATION_RUNBOOK §6). Role changes: `revoke-sessions --subject` too, or they apply when the access token expires | Immediately |
 | 3 | Revoke provider access (Railway, Vercel, Supabase, GitHub) | ≤24 h |
 | 4 | Rotate any shared/provider credential the person could reach (`SECRETS.md` §5) | ≤24 h |
 | 5 | Record the completion timestamp as evidence | ≤24 h |

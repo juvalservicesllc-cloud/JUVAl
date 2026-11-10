@@ -87,3 +87,43 @@ def test_postgres_dsn_comes_only_from_the_environment(monkeypatch):
     with pytest.raises(SystemExit, match="SYNTHETIC_ADMIN_DSN is not set"):
         tenancy_admin.main(["--postgres-dsn-env", "SYNTHETIC_ADMIN_DSN", "create-organization", "--name", "A",
                             "--created-by", "ops"])
+
+
+# --- revoke-sessions (SEC-01E) -------------------------------------------------
+# The SQL itself runs against PostgreSQL in test_session_store_contract.py
+# (tools/session_store_lab.py); here: arguments, target and audit line.
+
+
+@pytest.fixture
+def revoked(monkeypatch):
+    from juval.infrastructure.persistence import postgres_session_store
+
+    calls = []
+    monkeypatch.setattr(postgres_session_store, "revoke_sessions",
+                        lambda dsn, now, subject=None: calls.append((dsn, subject)) or 3)
+    monkeypatch.setenv("SYNTHETIC_ADMIN_DSN", "host=/synthetic/socket dbname=juval")
+    return calls
+
+
+def test_revoke_sessions_of_one_subject_or_all(revoked, capsys):
+    base = ["--postgres-dsn-env", "SYNTHETIC_ADMIN_DSN", "revoke-sessions", "--created-by", "ops"]
+    assert tenancy_admin.main(base + ["--subject", "fa-user-1"]) == 0
+    assert "revoke-sessions subject=fa-user-1 revoked=3 by=ops" in capsys.readouterr().out
+    assert tenancy_admin.main(base + ["--all"]) == 0
+    assert "revoke-sessions all revoked=3 by=ops" in capsys.readouterr().out
+    assert revoked == [("host=/synthetic/socket dbname=juval", "fa-user-1"),
+                       ("host=/synthetic/socket dbname=juval", None)]
+
+
+@pytest.mark.parametrize("extra", [[], ["--subject", "a", "--all"], ["--subject", "person@example.com"],
+                                   ["--subject", " padded"]])
+def test_revoke_sessions_refuses_ambiguous_or_wrong_targets(revoked, extra):
+    with pytest.raises(SystemExit):
+        tenancy_admin.main(["--postgres-dsn-env", "SYNTHETIC_ADMIN_DSN", "revoke-sessions",
+                            "--created-by", "ops", *extra])
+    assert revoked == []
+
+
+def test_revoke_sessions_needs_postgres(tmp_path, revoked):
+    with pytest.raises(SystemExit, match="PostgreSQL"):
+        tenancy_admin.main(["--sqlite", str(tmp_path / "x.db"), "revoke-sessions", "--all", "--created-by", "ops"])

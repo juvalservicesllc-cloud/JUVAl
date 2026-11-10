@@ -1,5 +1,60 @@
 # Juval — Project Status
 
+## 2026-11-10 (SEC-01E, closure) — owner decisions applied; local commits, not pushed
+
+Owner decisions APPROVED and implemented locally: 30-min server-side idle
+timeout (configurable, atomic check-and-touch, idle sessions revoked) within
+the 8 h absolute limit; roles re-derived from a refreshed and **verified**
+access token, session ends when its access token expires without refresh,
+IdP outage after expiry is 503 (never stale roles); `tenancy_admin.py
+revoke-sessions --subject|--all` (role change, offboarding, issuer change);
+remote PostgreSQL DSNs require `sslmode=verify-full`; public `GET /healthz`
+liveness as the single compliance-pinned exception; structured security
+events on `juval.security` (closed vocabulary, subject fingerprint only).
+Residual: FusionAuth issues no refresh token without `offline_access` and
+refresh enabled (not requested today) → sessions last one access-token TTL
+until the owner decides (PENDING).
+Measured: unit+integration with disposable PostgreSQL 16 **2195 passed, 49
+skipped** (PostgreSQL contract cases run in the lab); `session_store_lab.py`
+64 passed, 2 memory-only skips, restart PASS; compliance PASS WITH WARNINGS
+(secret scan 719 files); `git diff --check` clean. Commits: see `git log`.
+
+## 2026-11-10 (SEC-01E) — sessions, OIDC and activation readiness; local, not committed
+
+Base `ef4cf26`. PARTIALLY IMPLEMENTED: local fixes and preparation only; no
+commit, push, deployment, migration or contact with a real service.
+
+- **E1 (fixed):** the API accepted tokens signed by a JWKS key the IdP had
+  retired, until restart (PyJWT per-key LRU without expiry). Now set-cache only,
+  ≤ 300 s; refresh cooldown pinned at 30 s.
+- **E2 (fixed):** a new login now revokes the browser's previous session.
+- **E3 (fixed):** session-store failure → 503 without driver details (was 500
+  with the exception, possibly the DSN, in the log).
+- **E4:** `tools/verify_oidc.py --audience --token-env` verifies a real test
+  token with the API verifier and checks JWKS URI parity with discovery.
+- Docs: session/OIDC review and PENDING decisions in
+  `IDENTITY_SECURITY_READINESS.md` §SEC-01E; activation sequence validated
+  against dependencies (runbook §0, adds ledger reconciliation and splits
+  session/RLS checks) and infrastructure matrix (runbook §11); stale
+  «owner role» statement for the session DSN corrected (ADR-036, ADR-048 wins).
+- Measured: `tests/unit` + `tests/integration` with disposable PostgreSQL 16:
+  **2120 passed, 43 skipped**; new tests failed before their fix; compliance
+  PASS WITH WARNINGS (secret scan 711 files clean); `git diff --check` clean.
+  E2E not re-run (lab mode, BFF not exercised).
+- **Second pass (same day):** E5 membership lookup failure → 503 without
+  driver details; E6 `return_to` resolved against the absolute post-login
+  origin (ADR-038), `\` and control characters refused; E7 remote PostgreSQL
+  DSNs require `sslmode=require|verify-ca|verify-full` (startup aborts; the
+  execution store is now built once at startup). JWKS expiry, outage and
+  recovery measured on the real PyJWKClient at PyJWT 2.15.1 (= declared
+  minimum). BFF contract and Codex prompt:
+  `docs/architecture/BFF_FRONTEND_CONTRACT.md`, `CODEX_BFF_INTEGRATION_PROMPT.md`.
+  Health endpoint and alerts: proposals only (PENDING).
+  Measured: unit+integration with disposable PostgreSQL 16 **2148 passed,
+  43 skipped**; `tools/session_store_lab.py` 53 passed, 2 memory-only skips,
+  real PostgreSQL restart PASS; E2E Chromium **42/42**; compliance PASS WITH
+  WARNINGS (secret scan 715 files); `git diff --check` clean.
+
 ## 2026-11-10 (SEC-01D, consolidation) — local commits; not pushed, not deployed
 
 **SEC-01D closed locally** (IMPLEMENTED_LOCAL, VERIFIED_LOCAL); **not**

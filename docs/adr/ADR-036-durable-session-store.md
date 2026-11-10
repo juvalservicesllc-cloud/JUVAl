@@ -287,3 +287,24 @@ or single-use custody. Four PostgreSQL negative cases verify both tables; the
 original migration passes. No SQL migration or automatic repair was introduced.
 This still is not a complete type/default/index fingerprint or proof of the
 production DB target, backup or pooler. Operators must review migration metadata.
+
+### Revisión SEC-01E — 2026-11-10 (local, sin commit)
+
+- **Superado:** «`JUVAL_SESSION_DB_URL` debe conectar con el rol propietario»
+  (§Migración). Desde ADR-048 el almacén usa `JUVAL_RUNTIME_DB_URL` con
+  `juval_backend` **no propietario** y políticas explícitas; el arranque
+  rechaza el propietario. `JUVAL_SESSION_DB_URL` sólo lo usa la comprobación
+  de operador `tools/session_migration_preflight.py --check-database`.
+- Un login nuevo revoca la sesión que el navegador presentaba (antes quedaba
+  válida en el servidor hasta su TTL).
+- Un fallo del almacén al resolver una cookie responde 503 sin detalles del
+  driver; nunca degrada a anónimo.
+- Decisiones del propietario aplicadas (enmienda de §TTL): inactividad de
+  30 min configurable (`JUVAL_SESSION_IDLE_TIMEOUT_MINUTES`), comprobada y
+  registrada atómicamente en `load` (la sesión inactiva se revoca); absoluta
+  8 h sin extensión. §«Rotación de refresh»: el refresh ahora verifica el
+  access token nuevo y sustituye los roles; tras vencer el access token, sin
+  refresh posible la sesión termina e IdP caído es 503 (antes: se autorizaba
+  con los roles del login). La sesión sigue sin guardar `iss`:
+  `tenancy_admin.py revoke-sessions --all` antes de cambiar el emisor.
+  Detalle: `IDENTITY_SECURITY_READINESS.md` §SEC-01E.

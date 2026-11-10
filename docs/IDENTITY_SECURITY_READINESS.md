@@ -22,6 +22,101 @@ not reclassified as production evidence. Git commits identify the exact changes.
   multi-user activation: apply 08+09 (owner), create real organizations and
   memberships (`tools/tenancy_admin.py`), commit/review, deploy.
 
+## SEC-01E — sesiones BFF, OIDC y preparación de activación — 2026-11-10
+
+Revisión local sobre `ef4cf26`; sin commits, push, despliegue ni acceso a
+servicios reales. Fixtures sintéticas (IdP en loopback con claves generadas en
+el test). Secuencia de activación y matriz de infraestructura:
+[`TENANCY_ACTIVATION_RUNBOOK.md`](architecture/TENANCY_ACTIVATION_RUNBOOK.md) §0 y §11.
+
+**Correcciones locales (sin commit):**
+
+| # | Hallazgo (demostrado con test que fallaba antes) | Corrección |
+|---|---|---|
+| E1 | **Clave de firma retirada seguía siendo válida.** `cache_keys=True` de PyJWT es una LRU por `kid` sin expiración: un token firmado con una clave que el IdP retiró del JWKS (p. ej. por compromiso) se aceptaba hasta reiniciar el proceso. | `auth.jwks_verifier`: sólo caché del conjunto (300 s); la clave retirada deja de verificar en ≤ 300 s. `cooldown_duration=30` fijado explícitamente (antes heredado de la librería). |
+| E2 | Un login nuevo dejaba **viva en el servidor la sesión anterior** del mismo navegador (sólo se sobrescribía la cookie). | `/callback` revoca la sesión presentada antes de guardar la nueva. |
+| E3 | Un fallo del almacén de sesiones daba **500 con la excepción del driver** (que puede contener el DSN) sin filtrar al log. Cerrado, pero ruidoso e inseguro en logs. | 503 `session service unavailable`, sin encadenar ni registrar la excepción; nunca anónimo. |
+| E4 | `verify_oidc.py` no podía verificar un token real ni detectar que el backend busca el JWKS en otra URI que el discovery. | `--audience --token-env NOMBRE` verifica con el mismo verificador de la API e imprime `iss`/`sub` para `add-member`; comprueba paridad de URI JWKS. El token nunca se imprime. |
+
+| E5 | Con la base caída, la consulta de membresía dejaba escapar la excepción del driver (500). | 503 `organization membership is temporarily unavailable`, sin detalles. |
+| E6 | `return_to` se devolvía como ruta relativa: en la topología ADR-038 el usuario acababa en el host de la **API**. `/\host` y rutas con caracteres de control pasaban la validación (no explotable: Starlette las codifica). | La ruta se resuelve contra el origen de `JUVAL_BFF_POST_LOGIN_REDIRECT` si es absoluto; `\` y caracteres de control se rechazan. |
+| E7 | Ningún DSN exigía TLS: el `sslmode=prefer` de libpq acepta texto plano (degradable por un atacante en la red). | `postgres_tls.require_tls_for_remote`: un DSN remoto sin `sslmode=require|verify-ca|verify-full` aborta el arranque (sesiones y almacén de ejecución) y `tenancy_admin.py`. Socket unix y loopback exentos. `PGSSLMODE` no cuenta. |
+
+Tests nuevos: `tests/unit/test_verify_oidc.py` (rotación, retirada, vencimiento
+de caché, caída y recuperación del JWKS, `kid` desconocido, aud/iss/exp, HS256
+con clave pública, herramienta), `tests/unit/test_postgres_tls.py`, y en
+`test_api_bff.py` / `test_auth_mode_fail_closed.py`: sesión revocada no
+reutilizable, revocación en nuevo login, redirecciones, 503 de sesiones y de
+membresía, arranque abortado sin TLS.
+
+**Ventanas residuales de JWKS (medidas con el `PyJWKClient` real, PyJWT
+2.15.1 = mínimo de `pyproject.toml`):** clave retirada aceptada ≤ 300 s tras
+retirarla (no hay aceptación indefinida); clave nueva rechazada ≤ 30 s tras la
+última descarga (401); JWKS caído: se sirve la caché ≤ 300 s y después todo
+bearer es 401 (nunca claves caducadas); recuperación en la primera petición
+tras volver el JWKS, sin reinicio. Las sesiones BFF no dependen del JWKS por
+petición. `cooldown_duration` exige PyJWT ≥ 2.15 (el mínimo declarado lo
+cumple; una versión menor fallaría al arrancar, cerrado).
+
+**Decisiones del propietario aplicadas (2026-11-10, APPROVED):** inactividad
+30 min configurable y absoluta 8 h; revocación efectiva al cambiar permisos o
+membresías; invalidación global antes de cambiar el emisor; TLS `verify-full`;
+`/healthz` público mínimo; alertas por eventos estructurados sin servicio
+externo; Codex responsable exclusivo de `frontend-next/`.
+
+| Control | Implementación (local) |
+|---|---|
+| Inactividad | `SessionStore.load` comprueba y registra la actividad en un único `UPDATE … RETURNING` (PostgreSQL) o bajo lock (memoria); `last_seen_at` nunca retrocede; la sesión inactiva se **revoca**. `JUVAL_SESSION_IDLE_TIMEOUT_MINUTES` (1–480; inválido aborta el arranque) |
+| Absoluta | 8 h desde el login; la actividad no la extiende |
+| Roles | válidos mientras lo sea el access token; al vencer se renuevan con el refresh token y el **access token nuevo se verifica** con el verificador de la API (otro `sub` → revocación); sin refresh token → la sesión termina; IdP caído → 503 sin revocar |
+| Revocación de operador | `tenancy_admin.py revoke-sessions --subject <sub>` / `--all` (runbook §6) |
+| Emisor | `revoke-sessions --all` obligatorio antes del cambio |
+| Admin entre organizaciones | sin excepción (OD-4); test nuevo con admin de otra organización |
+| `/healthz` | liveness pública, constante; única excepción en `compliance_check.py::PUBLIC_ROUTES`; test de inventario de rutas |
+| TLS | DSN remoto sólo con `sslmode=verify-full` (runbook §11.1) |
+| Eventos | `security_events.py`, logger `juval.security`, vocabulario cerrado, `subject_fp` en lugar de `sub` (runbook §11.2) |
+
+Residual: FusionAuth no emite refresh tokens sin `offline_access` y el
+refresh activado en la aplicación (hoy no se piden): en ese caso cada sesión
+dura un TTL del access token, no 8 h. Decidir TTL y refresh es del
+propietario (PENDING).
+
+**Sesiones BFF (Hito 2):**
+
+| Control | Estado | Evidencia / brecha |
+|---|---|---|
+| Expiración absoluta | Sí, 8 h | `bff._SESSION_TTL`; `load` rechaza vencidas |
+| Expiración por inactividad | Sí, 30 min (ver arriba) | sustituye la brecha de la primera pasada |
+| Revocación / logout | Sí | logout con CSRF revoca en servidor y borra textos cifrados; idempotente |
+| Rotación de id | En login (E2); no en refresh (ADR-036, deliberado) | — |
+| Fijación de sesión | Protegida | id generado en servidor en `/callback`; `state` ligado a cookie de transacción; PKCE S256 |
+| Cookies | `HttpOnly` (sesión), `Secure` por defecto, `SameSite=Lax`, host-only, `Path=/` | Prefijo `__Host-` no usado (rompería el lab HTTP) — **PENDING** opcional |
+| CSRF | Doble envío + `SameSite=Lax`; bearer exento | tests de CSRF existentes |
+| Sesiones concurrentes | Ilimitadas por sujeto; sin revocación por sujeto en código | SQL por sujeto en runbook §6 |
+| Cambio de issuer | La sesión no guarda `iss` | revocación masiva obligatoria (runbook §6); columna `issuer` — **PENDING** (requiere migración de 04) |
+| Cambio de membresía | Inmediato | `tenant_access` consulta la membresía en cada petición |
+| Cambio de roles | ≤ un TTL del access token, o inmediato con `revoke-sessions` | ver arriba |
+| Fallo del store | 503 cerrado (E3); arranque aborta si la BD no cumple ADR-048 | `verify_session_database` |
+| Reinicio del backend | Sesiones sobreviven (PostgreSQL) | lab desechable; memoria prohibida bajo OIDC sin opt-in |
+| Fallback anónimo | Imposible | ADR-055; sin cookie válida → bearer → 401 |
+
+Menor, sin cambio: el comentario de `PostgresSessionStore.load` dice que un
+fallo al actualizar `last_seen_at` nunca deniega la sesión, pero no está
+capturado (hoy acabaría en 503 por E3). Cerrado, no explotable.
+
+**OIDC / FusionAuth (Hito 3):** issuer, audiencia, `exp`/`iat` (60 s de
+margen), claims obligatorios y RS256 fijados en `TokenVerifier`; `alg=none` y
+HS256 rechazados; JWKS caído → 401; `(iss, sub)` como identidad; sin
+autoaprovisionamiento (sin membresía → 403). Brechas **PENDING**: no se
+distingue ID token de access token (`typ`/`at+jwt`), mitigado porque ambos
+exigen la misma audiencia; sin logout por canal trasero; sin `sid`. Evidencia
+real pendiente: `verify_oidc.py` contra el emisor real con un token de prueba.
+
+**Corrección documental:** ADR-036 y §«Session production migration» decían
+que el DSN de sesiones debe usar el rol **propietario**; el código
+(`verify_session_database`, ADR-048) exige `juval_backend` **no propietario**
+con políticas explícitas. Gana el código; corregido abajo y anotado en ADR-036.
+
 ## Unblock plan — 2026-10-26 (isolated clone, plan only)
 
 Ordered steps, owners, pending decisions D0–D8 and proofs per ADR-040 criterion:
@@ -377,9 +472,10 @@ repeat safely in the lab; unrelated sentinel data survives. This is not live
 Supabase evidence or permission to run a live migration.
 
 Before an explicitly authorized live migration: take a protected backup,
-identify exact project/schema and **table-owning backend role**; ensure no
-browser/PostgREST policies grant access. Apply only the reviewed identity SQL
-with that owner; no FORCE RLS. Configure postgres store and backend-only keyring
+identify exact project/schema and the **non-owner `juval_backend` runtime
+role** (ADR-048; corrected SEC-01E — the owner role is refused at startup);
+ensure no browser/PostgREST policies grant access. Apply only the reviewed
+identity SQL as `postgres`, then ADR-048's explicit policies; no FORCE RLS. Configure postgres store and backend-only keyring
 through secret management. The read-only startup check now rejects unreachable
 DBs, missing columns/tables and ownership/RLS policy errors. It does not repair
 schemas, fully fingerprint types/indexes or prove long-term availability.
