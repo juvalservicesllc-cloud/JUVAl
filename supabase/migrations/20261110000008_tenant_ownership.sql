@@ -58,4 +58,3 @@ ALTER TABLE batches
     ADD CONSTRAINT batches_owner_required
     CHECK (organization_id IS NOT NULL AND created_by_issuer IS NOT NULL AND created_by_subject IS NOT NULL)
     NOT VALID;
-
