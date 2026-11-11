@@ -35,9 +35,11 @@ def test_implements_the_execution_run_store_port_shape():
     save_params = list(inspect.signature(store.save_execution_run).parameters)
     load_params = list(inspect.signature(store.load_execution_run).parameters)
     list_params = list(inspect.signature(store.list_execution_runs).parameters)
-    assert save_params == ["run", "records", "financial_records", "capture_diagnostics", "owner"]  # ADR-056
+    assert save_params == ["run", "records", "financial_records", "capture_diagnostics", "owner",  # ADR-056
+                           "acquisition"]  # ADR-058
     assert load_params == ["execution_id"]
     assert list_params == ["limit"]
+    assert list(inspect.signature(store.load_acquisition).parameters) == ["execution_id"]  # ADR-058
 
 
 def test_implements_the_record_snapshot_store_port_shape():

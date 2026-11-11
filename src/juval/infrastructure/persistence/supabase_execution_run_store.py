@@ -57,12 +57,14 @@ from typing import Any, Mapping, Optional, Sequence
 
 from juval.domain.execution_run import ExecutionRun, ExecutionStatus
 from juval.domain.batch import Batch, BatchFile, BatchFileStatus, BatchStatus
+from juval.application.acquisition_documents import columns_for_write, record_from_columns
 from juval.application.batch_store import RunWrite
 from juval.application.financial_persistence import FinancialStorageUnavailable
 from juval.application.record_snapshot_store import RecordSnapshotPage, RecordSnapshotQuery
 from juval.application.tenancy import OutOfScopeError, Ownership, TenantScope, canonical_organization_id
 from juval.application.review_classification import PENDING_DEMAND_VERIFICATION
 from juval.application.run_analytics import brand_distribution, decision_counts_by_run, issue_types, numeric_summary, price_spread
+from juval.domain.acquisition import AcquisitionRecord
 from juval.infrastructure.logging.sqlite_execution_run_store import _diagnostics_row, _financial_row, _owner_values
 
 _INSERT = """
@@ -79,6 +81,28 @@ INSERT INTO execution_runs (
 # database that predates migration 20261110000008.
 _INSERT_OWNED = _INSERT.replace(
     "warnings\n) VALUES (", "warnings,\n    organization_id, created_by_issuer, created_by_subject\n) VALUES (%s, %s, %s, ")
+
+# ADR-058: the acquisition columns are named only when the run carries an
+# acquisition record, so a run without one still saves on a database that
+# predates migration 20261111000010. Reading them there is an error.
+_ACQUISITION_INSERT_COLUMNS = ",\n    acquisition_configuration, acquisition_execution"
+
+
+def _insert_sql(owned: bool, acquired: bool) -> str:
+    sql = _INSERT_OWNED if owned else _INSERT
+    if acquired:
+        sql = sql.replace("\n) VALUES (", _ACQUISITION_INSERT_COLUMNS + "\n) VALUES (%s, %s, ")
+    return sql
+
+
+_SELECT_ACQUISITION = """
+SELECT acquisition_configuration, acquisition_execution FROM execution_runs WHERE execution_id = %s
+"""
+
+
+class AcquisitionStorageUnavailable(RuntimeError):
+    """Migration 20261111000010 is not applied: an error, never NOT_RECORDED."""
+
 
 _INSERT_RECORD = """
 INSERT INTO execution_run_records (execution_id, ordinal, record_ref, snapshot)
@@ -206,12 +230,17 @@ def _row_to_run(row: tuple) -> ExecutionRun:
 def _write_run(conn, run: ExecutionRun, records: Sequence[Mapping[str, Any]],
                financial_records: Sequence[Mapping[str, Any]],
                capture_diagnostics: Sequence[Mapping[str, Any]],
-               owner: Optional[Ownership] = None) -> None:
-    """The run's inserts on `conn`, inside the caller's transaction."""
+               owner: Optional[Ownership] = None,
+               acquisition: Optional[AcquisitionRecord] = None) -> None:
+    """The run's inserts on `conn`, inside the caller's transaction.
+
+    The acquisition documents are checked against the provenance about to be
+    persisted (ADR-058 P6/P7) before anything is written."""
     _, Json = _require_driver()
+    acquisition_columns = columns_for_write(acquisition, records, financial_records)
     owned = owner is not None
     conn.execute(
-        _INSERT_OWNED if owned else _INSERT,
+        _insert_sql(owned, acquisition is not None),
         (
             run.execution_id,
             run.started_at,
@@ -226,6 +255,7 @@ def _write_run(conn, run: ExecutionRun, records: Sequence[Mapping[str, Any]],
             run.records_with_errors,
             run.warnings,
             *(_owner_values(owner) if owned else ()),
+            *(acquisition_columns if acquisition is not None else ()),
         ),
     )
     for ordinal, record in enumerate(records):
@@ -374,13 +404,14 @@ class SupabaseExecutionRunStore:
         financial_records: Sequence[Mapping[str, Any]] = (),
         capture_diagnostics: Sequence[Mapping[str, Any]] = (),
         owner: Optional[Ownership] = None,
+        acquisition: Optional[AcquisitionRecord] = None,
     ) -> None:
-        """Run, record snapshots and (optionally) native financial payloads and
-        capture diagnostics, all in one transaction: any failure, including a
-        financial or diagnostics one, rolls back everything."""
+        """Run, record snapshots and (optionally) native financial payloads,
+        capture diagnostics and ADR-058 acquisition documents, all in one
+        transaction: any failure rolls back everything."""
         owner = self._owner_for_write(owner)
         with self._connect() as conn:
-            _write_run(conn, run, records, financial_records, capture_diagnostics, owner)
+            _write_run(conn, run, records, financial_records, capture_diagnostics, owner, acquisition)
 
     def save_batch_with_runs(self, batch: Batch, runs: Sequence[RunWrite], owner: Optional[Ownership] = None) -> None:
         """Every child run (records, financial documents, diagnostics) and the
@@ -389,7 +420,8 @@ class SupabaseExecutionRunStore:
         owner = self._owner_for_write(owner)
         with self._connect() as conn:
             for item in runs:
-                _write_run(conn, item.run, item.records, item.financial_records, item.capture_diagnostics, owner)
+                _write_run(conn, item.run, item.records, item.financial_records, item.capture_diagnostics, owner,
+                           item.acquisition)
             _write_batch(conn, batch, owner)
 
     def _payload_row(self, table: str, execution_id: str, record_ref: str) -> Optional[tuple[str, int, str]]:
@@ -436,6 +468,20 @@ class SupabaseExecutionRunStore:
         """(format, format_version, payload JSON text) of one record's stored
         diagnostics, or None when none were stored for it."""
         return self._payload_row("execution_run_capture_diagnostics", execution_id, record_ref)
+
+    def load_acquisition(self, execution_id: str) -> Optional[AcquisitionRecord]:
+        """Same contract as `SqliteExecutionRunStore.load_acquisition`; RLS also
+        filters the row in the database."""
+        psycopg, _ = _require_driver()
+        try:
+            with self._connect() as conn:
+                self._require_runs_in_scope(conn, (execution_id,))
+                row = conn.execute(_SELECT_ACQUISITION, (execution_id,)).fetchone()
+        except psycopg.errors.UndefinedColumn as error:
+            raise AcquisitionStorageUnavailable("execution_runs has no acquisition columns") from error
+        if row is None:
+            raise LookupError(f"execution run {execution_id!r} does not exist")
+        return record_from_columns(*row)
 
     def load_execution_run(self, execution_id: str) -> Optional[ExecutionRun]:
         """The run, or None -- also when it belongs to another organization."""

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Mapping, NamedTuple, Optional, Protocol, Sequence
 
 from juval.application.tenancy import Ownership
+from juval.domain.acquisition import AcquisitionRecord
 from juval.domain.batch import Batch
 from juval.domain.execution_run import ExecutionRun
 
@@ -25,6 +26,7 @@ class RunWrite(NamedTuple):
     records: Sequence[Mapping[str, Any]] = ()
     financial_records: Sequence[Mapping[str, Any]] = ()
     capture_diagnostics: Sequence[Mapping[str, Any]] = ()
+    acquisition: Optional[AcquisitionRecord] = None  # ADR-058; None = NOT_RECORDED
 
 
 class AtomicBatchStore(Protocol):

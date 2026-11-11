@@ -34,12 +34,14 @@ from __future__ import annotations
 from typing import Any, Mapping, Optional, Protocol, Sequence
 
 from juval.application.tenancy import Ownership, TenantScope
+from juval.domain.acquisition import AcquisitionRecord
 from juval.domain.execution_run import ExecutionRun
 
 
 class ExecutionRunStore(Protocol):
     def save_execution_run(self, run: ExecutionRun, records: Sequence[Mapping[str, Any]] = (), *,
-                           owner: Optional[Ownership] = None) -> None:
+                           owner: Optional[Ownership] = None,
+                           acquisition: Optional[AcquisitionRecord] = None) -> None:
         """Persist `run`, and -- atomically, same transaction -- `records`
         if given (ADR-019). Each item of `records` is a JSON-safe snapshot
         dict shaped like `record_snapshot.py::record_to_snapshot()` output;
@@ -56,7 +58,16 @@ class ExecutionRunStore(Protocol):
         `owner` (ADR-056) records the owning organization and creator in the
         same transaction. A scoped store refuses a missing or foreign owner;
         None on an unscoped store leaves the run unowned, i.e. quarantined.
+
+        `acquisition` (ADR-058) is written in the run's own INSERT, after being
+        checked against the provenance of `records` (P6/P7). None leaves the
+        run NOT_RECORDED. There is no way to add or change it later.
         """
+        ...
+
+    def load_acquisition(self, execution_id: str) -> Optional[AcquisitionRecord]:
+        """ADR-058 documents of a run; None is NOT_RECORDED, never "no run".
+        An unknown run raises LookupError; one outside the scope, OutOfScopeError."""
         ...
 
     def scoped(self, scope: TenantScope) -> "ExecutionRunStore":

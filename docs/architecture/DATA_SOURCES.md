@@ -91,6 +91,7 @@ pendiente #2). Cuando se apruebe una fuente concreta, su adapter deberá:
 | Excel (proveedor) | **IMPLEMENTED** — `infrastructure/excel/importer.py`, única fuente de datos real hoy; 17 tests de integración |
 | Amazon SP-API Catalog Items | **DOC VERIFIED / DEVELOPER REGISTRATION REJECTED_REMEDIATION_REQUIRED / LIVE VALIDATION BLOCKED** — decisión Amazon 2026-08-17: **NOT ELIGIBLE FOR SP-API ACCESS**. JUVAl sigue siendo **PRIVATE DEVELOPER** para uso interno, propia organización y propia cuenta seller; no hay production application client, self-authorization ni credenciales disponibles, y no hay adapter. Se requiere actualizar el Developer Profile y presentar un caso nuevo; no reabrir el caso previo. Ver `docs/compliance/SP_API_REGISTRATION_REMEDIATION.md`. |
 | Fuente de datos de mercado (BSR/Buy Box histórico, tipo Keepa) | **NOT IMPLEMENTED** — pendiente de aprobación explícita, no asumida |
+| Maquinaria de conectores y registro por corrida (ADR-057/ADR-058) | **IMPLEMENTED, sin ningún proveedor** — `infrastructure/enrichment/connector.py`, `application/acquisition_run.py`; probado solo con fixtures sintéticos y dobles de transporte en `tests/`. Migración `20261111000010` redactada y **no aplicada** |
 | Base de datos de persistencia de Juval | **IMPLEMENTED para ExecutionRun/records** (SQLite/Supabase según configuración); no es una fuente externa de Product Intelligence |
 
 ## 6. Requisitos de ejecución futura

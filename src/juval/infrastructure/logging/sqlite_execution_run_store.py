@@ -47,6 +47,13 @@ transaction. It is independent of the financial table: a record with no
 scenario has diagnostics but no financial document. A run saved without them simply
 has no rows here: legacy runs are neither rewritten nor backfilled.
 
+ADR-058: `execution_runs` gains `acquisition_configuration` and
+`acquisition_execution` (additive, NULL for every earlier run =
+NOT_RECORDED, with a CHECK that refuses one NULL). They are written by the
+run's own INSERT after `application/acquisition_documents.py` has checked
+them against the provenance being persisted, and are never selected by the
+listings.
+
 Concurrency: not designed for multi-writer use. Each operation opens and
 closes its own short-lived connection with SQLite's default settings
 (no WAL, no custom timeout) — sufficient for a single local user running
@@ -64,6 +71,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Mapping, Optional, Sequence
 
+from juval.application.acquisition_documents import columns_for_write, record_from_columns
+from juval.domain.acquisition import AcquisitionRecord
 from juval.domain.execution_run import ExecutionRun, ExecutionStatus
 from juval.domain.batch import Batch, BatchFile, BatchFileStatus, BatchStatus
 from juval.application.batch_store import RunWrite
@@ -162,8 +171,9 @@ INSERT INTO execution_runs (
     input_filename, input_hash, application_version,
     records_total, records_processed,
     records_successful, records_with_errors, warnings,
-    organization_id, created_by_issuer, created_by_subject
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    organization_id, created_by_issuer, created_by_subject,
+    acquisition_configuration, acquisition_execution
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 _INSERT_RECORD = """
@@ -250,6 +260,20 @@ _OWNER_COLUMNS = (
     ("created_by_subject", "TEXT"),
 )
 
+# ADR-058: the run's acquisition documents travel in its own row, written by
+# the same INSERT. Both NULL is NOT_RECORDED (every run saved before them);
+# one NULL is refused by the CHECK (P3). SQLite accepts the cross-column CHECK
+# on ADD COLUMN and leaves existing rows untouched.
+_ACQUISITION_COLUMNS = (
+    ("acquisition_configuration", "TEXT"),
+    ("acquisition_execution",
+     "TEXT CHECK ((acquisition_configuration IS NULL) = (acquisition_execution IS NULL))"),
+)
+
+_SELECT_ACQUISITION = """
+SELECT acquisition_configuration, acquisition_execution FROM execution_runs WHERE execution_id = ?
+"""
+
 _ORGANIZATIONS_SCHEMA = """
 CREATE TABLE IF NOT EXISTS organizations (
     organization_id TEXT PRIMARY KEY,
@@ -333,8 +357,13 @@ def _owner_values(owner: Optional[Ownership]) -> tuple[Optional[str], Optional[s
 def _write_run(conn: sqlite3.Connection, run: ExecutionRun, records: Sequence[Mapping[str, Any]],
                financial_records: Sequence[Mapping[str, Any]],
                capture_diagnostics: Sequence[Mapping[str, Any]],
-               owner: Optional[Ownership] = None) -> None:
-    """The run's inserts on `conn`, inside the caller's transaction."""
+               owner: Optional[Ownership] = None,
+               acquisition: Optional[AcquisitionRecord] = None) -> None:
+    """The run's inserts on `conn`, inside the caller's transaction.
+
+    The acquisition documents are checked against the provenance about to be
+    persisted (ADR-058 P6/P7) before anything is written."""
+    acquisition_columns = columns_for_write(acquisition, records, financial_records)
     conn.execute(
         _INSERT,
         (
@@ -351,6 +380,7 @@ def _write_run(conn: sqlite3.Connection, run: ExecutionRun, records: Sequence[Ma
             run.records_with_errors,
             run.warnings,
             *_owner_values(owner),
+            *acquisition_columns,
         ),
     )
     for ordinal, record in enumerate(records):
@@ -461,6 +491,7 @@ class SqliteExecutionRunStore:
                 _add_missing_columns(conn, "batch_files", _BATCH_FILE_COUNT_COLUMNS)
                 _add_missing_columns(conn, "execution_runs", _OWNER_COLUMNS)
                 _add_missing_columns(conn, "batches", _OWNER_COLUMNS)
+                _add_missing_columns(conn, "execution_runs", _ACQUISITION_COLUMNS)
                 conn.execute(_RUNS_ORGANIZATION_INDEX)
                 conn.execute(_ORGANIZATIONS_SCHEMA)
                 conn.execute(_ORGANIZATIONS_NAME_INDEX)
@@ -556,16 +587,17 @@ class SqliteExecutionRunStore:
         financial_records: Sequence[Mapping[str, Any]] = (),
         capture_diagnostics: Sequence[Mapping[str, Any]] = (),
         owner: Optional[Ownership] = None,
+        acquisition: Optional[AcquisitionRecord] = None,
     ) -> None:
-        """Run, record snapshots and (optionally) native financial payloads and
-        capture diagnostics, all in one transaction: any failure, including a
-        financial or diagnostics one, rolls back everything. `owner` None
-        (CLI, unscoped store only) leaves the run unowned, i.e. quarantined."""
+        """Run, record snapshots and (optionally) native financial payloads,
+        capture diagnostics and ADR-058 acquisition documents, all in one
+        transaction: any failure rolls back everything. `owner` None (CLI,
+        unscoped store only) leaves the run unowned, i.e. quarantined."""
         owner = self._owner_for_write(owner)
         with closing(sqlite3.connect(self._db_path)) as conn:
             conn.execute("PRAGMA foreign_keys = ON")
             with conn:
-                _write_run(conn, run, records, financial_records, capture_diagnostics, owner)
+                _write_run(conn, run, records, financial_records, capture_diagnostics, owner, acquisition)
 
     def save_batch_with_runs(self, batch: Batch, runs: Sequence[RunWrite], owner: Optional[Ownership] = None) -> None:
         """Every child run (records, financial documents, diagnostics) and the
@@ -576,7 +608,8 @@ class SqliteExecutionRunStore:
             conn.execute("PRAGMA foreign_keys = ON")
             with conn:
                 for item in runs:
-                    _write_run(conn, item.run, item.records, item.financial_records, item.capture_diagnostics, owner)
+                    _write_run(conn, item.run, item.records, item.financial_records, item.capture_diagnostics, owner,
+                               item.acquisition)
                 _write_batch(conn, batch, owner)
 
     def load_financial_record(self, execution_id: str, record_ref: str) -> Optional[tuple[str, int, str]]:
@@ -606,6 +639,16 @@ class SqliteExecutionRunStore:
         with closing(self._connect_in_scope(execution_id)) as conn:
             return (_rows_by_ref(conn, "execution_run_financial_records", execution_id, record_refs),
                     _rows_by_ref(conn, "execution_run_capture_diagnostics", execution_id, record_refs))
+
+    def load_acquisition(self, execution_id: str) -> Optional[AcquisitionRecord]:
+        """ADR-058 documents of one run; None is NOT_RECORDED. A run outside the
+        scope raises OutOfScopeError and an unknown run LookupError, so None
+        never stands for "no such run"."""
+        with closing(self._connect_in_scope(execution_id)) as conn:
+            row = conn.execute(_SELECT_ACQUISITION, (execution_id,)).fetchone()
+        if row is None:
+            raise LookupError(f"execution run {execution_id!r} does not exist")
+        return record_from_columns(*row)
 
     def load_execution_run(self, execution_id: str) -> Optional[ExecutionRun]:
         """The run, or None -- also when it belongs to another organization."""

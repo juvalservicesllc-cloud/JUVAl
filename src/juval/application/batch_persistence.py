@@ -25,6 +25,7 @@ from juval.application.capture_diagnostics import RecordCaptureDiagnostics
 from juval.application.financial_persistence import AnyFinancialRecord, financial_payloads
 from juval.domain.batch import Batch, BatchFileStatus
 from juval.application.tenancy import Ownership
+from juval.domain.acquisition import AcquisitionRecord
 from juval.domain.execution_run import ExecutionRun
 
 
@@ -40,6 +41,7 @@ class BatchChild:
     snapshots: Sequence[Mapping[str, Any]] = ()
     documents: Sequence[AnyFinancialRecord] = ()
     capture_diagnostics: Sequence[RecordCaptureDiagnostics] = ()
+    acquisition: Optional[AcquisitionRecord] = None
 
 
 def save_batch_with_runs(store: AtomicBatchStore, batch: Batch, children: Sequence[BatchChild],
@@ -60,5 +62,5 @@ def save_batch_with_runs(store: AtomicBatchStore, batch: Batch, children: Sequen
     for child in children:  # raises FinancialRecordIntegrityError, naming the execution, before any write
         payloads, diagnostics = financial_payloads(child.run, child.snapshots, child.documents,
                                                    child.capture_diagnostics)
-        writes.append(RunWrite(child.run, child.snapshots, payloads, diagnostics))
+        writes.append(RunWrite(child.run, child.snapshots, payloads, diagnostics, child.acquisition))
     store.save_batch_with_runs(batch, writes, owner)
