@@ -461,6 +461,79 @@ def test_refresh_guard_excludes_other_instances_and_releases_after_error(stores)
         assert recovered
 
 
+def _peer(sessions):
+    return type(sessions)(sessions._dsn, sessions._cipher) if hasattr(sessions, '_dsn') else sessions
+
+
+def test_refresh_guard_waiter_returns_only_after_the_refresher_releases(stores):
+    """B-1: a busy caller that waits sees the refresher's end, never becomes one."""
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+
+    sessions, _ = stores
+    peer = _peer(sessions)
+    session_id = _session().session_id
+    started, released = Event(), Event()
+
+    def waiter():
+        started.set()
+        with peer.refresh_guard(session_id, wait=timedelta(seconds=10)) as acquired:
+            return acquired, released.is_set()
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        with sessions.refresh_guard(session_id) as acquired:
+            assert acquired
+            pending = pool.submit(waiter)
+            assert started.wait(5)
+            if hasattr(sessions, '_dsn'):           # prove it is blocked on the lock, not finished
+                _await_lock_waiter(sessions._dsn)
+            assert not pending.done()
+            released.set()
+        assert pending.result(timeout=10) == (False, True)
+    with peer.refresh_guard(session_id) as again:   # the waiter left no lock behind
+        assert again
+
+
+def _await_lock_waiter(dsn):
+    import time
+    import psycopg
+    deadline = time.monotonic() + 5
+    with psycopg.connect(dsn, autocommit=True) as conn:
+        while time.monotonic() < deadline:
+            if conn.execute("select count(*) from pg_locks where locktype = 'advisory' and not granted").fetchone()[0]:
+                return
+            time.sleep(0.01)
+    pytest.fail("no waiter blocked on the refresh lock")
+
+
+def test_refresh_guard_wait_is_bounded(stores):
+    import time
+    sessions, _ = stores
+    peer = _peer(sessions)
+    session_id = _session().session_id
+    with sessions.refresh_guard(session_id) as acquired:
+        assert acquired
+        started = time.monotonic()
+        with peer.refresh_guard(session_id, wait=timedelta(milliseconds=300)) as competing:
+            assert not competing
+        elapsed = time.monotonic() - started
+    assert 0.29 <= elapsed < 3
+    with peer.refresh_guard(session_id) as recovered:   # timeout left no lock or open transaction
+        assert recovered
+
+
+def test_refresh_guard_wait_never_blocks_on_another_session(stores):
+    import time
+    sessions, _ = stores
+    peer = _peer(sessions)
+    with sessions.refresh_guard(_session().session_id) as acquired:
+        assert acquired
+        started = time.monotonic()
+        with peer.refresh_guard(_session().session_id, wait=timedelta(seconds=10)) as other:
+            assert other
+        assert time.monotonic() - started < 2
+
+
 def test_refresh_cannot_update_expired_session(stores):
     sessions, _ = stores
     session = _session(ttl=timedelta(seconds=-1))

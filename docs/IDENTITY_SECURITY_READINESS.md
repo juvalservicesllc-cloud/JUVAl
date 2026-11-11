@@ -117,6 +117,31 @@ que el DSN de sesiones debe usar el rol **propietario**; el código
 (`verify_session_database`, ADR-048) exige `juval_backend` **no propietario**
 con políticas explícitas. Gana el código; corregido abajo y anotado en ADR-036.
 
+## SEC-01G — validación frontend/BFF y corrección B-1 — 2026-11-11
+
+Local, sobre `bb9ed35`, sin commits, push ni despliegue; IdP, PostgreSQL y
+usuarios sintéticos (`tools/integration_lab.py`). Chromium real contra
+frontend-next (cambios de Codex sin commit) y el BFF del laboratorio.
+
+- **B-1 (MEDIA, backend), corregido localmente.** Con el access token caducado,
+  las peticiones paralelas que no ganaban el guard de refresh releían antes de
+  que terminara y respondían 503 `identity provider temporarily unavailable`
+  con el IdP activo (3 de 4 en el laboratorio); con una cuenta desactivada,
+  503 en vez de 401. Causa: guard no bloqueante (ADR-039) combinado con la
+  regla SEC-01E de no autorizar con roles caducados. Corrección: espera acotada
+  (5 s) solo para quien ya tiene el token caducado; enmienda en ADR-039.
+- Evidencia tras la corrección: misma ráfaga → 4/4 200; cuenta desactivada →
+  401; `integration_lab.py --check` 23/23; navegador 21/21 (incluidos cuenta
+  desactivada y recuperación tras reinicio de la API); contrato de sesiones en
+  PostgreSQL desechable 70 PASS / 2 SKIP (memoria); suite backend 2408 PASS /
+  138 SKIP. Los tests nuevos fallan con la espera desactivada (reproducen B-1).
+- Pendientes de frontend (Codex): `e2e/recovery-b1.spec.ts` no admite la
+  lectura de sesión al cargar (E2E comercial 41/42). Pendientes menores: error
+  de callback mostrado como JSON en el host de la API; el probe de puerto del
+  laboratorio rechaza un relanzamiento durante TIME_WAIT (~60 s).
+- Producción sigue **NO-GO**: dominio/TLS, FusionAuth real y decisiones de
+  propietario pendientes (runbook §0).
+
 ## Unblock plan — 2026-10-26 (isolated clone, plan only)
 
 Ordered steps, owners, pending decisions D0–D8 and proofs per ADR-040 criterion:

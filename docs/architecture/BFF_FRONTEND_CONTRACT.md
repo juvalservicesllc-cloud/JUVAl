@@ -111,7 +111,7 @@ rutas de datos → `401`. No hay renovación silenciosa: volver a iniciar sesió
 | 404 | `unknown execution_id`, `unknown record for execution`, `unknown or expired execution_id`, `unknown batch_id`, `this run is not part of a batch` | no existe **o es de otra organización** (indistinguible a propósito) | «no encontrado»; nunca sugerir que existe |
 | 503 | `session service unavailable` | almacén de sesiones caído | «servicio no disponible temporalmente», reintento manual; **no** tratar como sesión cerrada |
 | 503 | `organization membership is temporarily unavailable` | base de datos caída | igual |
-| 503 | `identity provider temporarily unavailable` | el IdP no responde al renovar roles | igual |
+| 503 | `identity provider temporarily unavailable` | el IdP no responde al renovar roles, o una renovación concurrente de la misma sesión supera 5 s (las peticiones paralelas con token caducado esperan su resultado; ADR-039 enmienda) | igual |
 | 503 | `authentication is not initialised` | instancia arrancando | igual |
 | 503 | `organization membership is not available on this deployment`, `financial persistence is not available on this deployment` | despliegue mal configurado | igual; es un fallo de operación, no del usuario |
 | 500 | `persist=true was requested but the execution store is not configured`, `persist=true was requested but JUVAL_EXECUTION_DB_PATH is not configured`, `this endpoint requires JUVAL_EXECUTION_STORE/JUVAL_EXECUTION_DB_PATH to be configured`, `configured execution store does not support batches`, `configured execution store does not support batch persistence`, `stored financial data failed validation` | error de configuración o de datos del servidor | mensaje genérico de error; no reintentar en bucle |

@@ -65,6 +65,47 @@ session, rejects the revoked session and refuses transaction replay. PASS on
 substitute for a deployment restart/pooler test.
 
 
+## Amendment 2026-11-11 — bounded wait for expired tokens (SEC-01G-B1)
+
+Authority: explicit owner instruction SEC-01G-B1 ("espera acotada para las
+peticiones competidoras"). **APPROVED** for this scope only.
+
+Why: since SEC-01E an expired access token no longer authorizes on stale roles.
+"Busy callers skip refresh; they still load the normal authenticated session"
+then stopped being true for callers whose token had already expired: they
+re-read before the refresher finished and answered 503 `identity provider
+temporarily unavailable` with the IdP up (lab: 3 of 4 parallel requests), and a
+disabled account answered 503 instead of 401.
+
+Decision: becoming the refresher stays nonblocking (`pg_try_advisory_xact_lock`
+/ the memory key set). `refresh_guard(session_id, wait)` adds an optional
+bounded wait for a **busy** caller: it returns when the refresher's transaction
+ends or `wait` passes, yields False, and the caller never contacts the
+provider -- it re-reads the stored session. `bff.refresh_if_needed` passes
+`_REFRESH_WAIT` (5 s) only when the caller's access token has already expired;
+a caller still inside its token's lifetime keeps the nonblocking skip.
+PostgreSQL waits with `pg_advisory_xact_lock` under a transaction-local
+`lock_timeout` (statement timeout raised above it); a waiter that obtains the
+lock commits at once to release it, and a timeout rolls back. Memory waits on a
+`Condition` over its existing mutex, notified on release. Waiters hold no row
+locks, so they cannot deadlock with the refresher's writes, which commit on
+their own connections before the guard transaction ends.
+
+Outcomes after the wait: refreshed -> authorized; refresh refused or session
+revoked -> 401; provider outage or wait exhausted -> 503 (a real condition, not
+converted into success, never stale roles). One provider call per refresh.
+
+Cost: while a refresh is in flight, each waiting request of the same session
+holds one PostgreSQL connection for at most 5 s. A 64-bit key collision can
+make an unrelated request wait up to 5 s and answer 503 once.
+
+Verification: memory/PostgreSQL contract tests (waiter returns only after
+release, proven blocked through `pg_locks`; bounded wait; other sessions never
+wait); BFF tests with four concurrent callers on an expired token (success,
+disabled account, revocation during refresh, outage, wait timeout, two
+sessions) asserting one provider call each. Run with the wait disabled, the same
+tests reproduce B-1. Lab and browser evidence in `docs/IDENTITY_SECURITY_READINESS.md`.
+
 Third-wave recovery test: after a successful synthetic provider rotation and
 failed token write, the old stored generation remains. On provider refusal of
 that consumed token, the HTTP session projection becomes unauthenticated,

@@ -86,22 +86,27 @@ class InMemorySessionStore:
     def __init__(self, idle_timeout: timedelta = DEFAULT_IDLE_TIMEOUT) -> None:
         self._idle_timeout = idle_timeout
         self._lock = threading.Lock()
+        self._refresh_done = threading.Condition(self._lock)
         self._items: Dict[str, _StoredSession] = {}
         self._refreshing: set[str] = set()
 
     @contextmanager
-    def refresh_guard(self, session_id: str):
+    def refresh_guard(self, session_id: str, wait: timedelta = timedelta(0)):
         key = digest(session_id)
-        with self._lock:
+        with self._refresh_done:
             acquired = key not in self._refreshing
             if acquired:
                 self._refreshing.add(key)
+            elif wait > timedelta(0):
+                # Bounded: returns on release or when `wait` runs out.
+                self._refresh_done.wait_for(lambda: key not in self._refreshing, wait.total_seconds())
         try:
             yield acquired
         finally:
             if acquired:
-                with self._lock:
+                with self._refresh_done:
                     self._refreshing.remove(key)
+                    self._refresh_done.notify_all()
 
     def save(self, session: Session) -> None:
         record = SessionRecord(

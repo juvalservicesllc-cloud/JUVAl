@@ -83,6 +83,27 @@ def _require_driver():
     return psycopg
 
 
+def _wait_for_refresher(conn, key: int, wait: timedelta) -> None:
+    """Block until the refresher holding `key` ends its transaction, at most `wait`.
+
+    Acquiring the lock here only proves the refresher finished; this caller is
+    not the refresher, so the lock is released at once by committing. On
+    `lock_timeout` the transaction is rolled back. Either way the caller
+    re-reads the session and never contacts the provider.
+    """
+    milliseconds = max(1, int(wait.total_seconds() * 1000))
+    conn.execute(
+        "select set_config('lock_timeout', %s, true), set_config('statement_timeout', %s, true)",
+        (f"{milliseconds}ms", f"{milliseconds + 5000}ms"),   # lock_timeout is the bound
+    )
+    try:
+        conn.execute("select pg_advisory_xact_lock(%s)", (key,))
+    except _require_driver().errors.LockNotAvailable:
+        conn.rollback()
+        return
+    conn.commit()
+
+
 _SESSION_CRUD = {
     "identity_sessions": ("SELECT", "INSERT", "UPDATE", "DELETE"),
     "identity_oauth_transactions": ("SELECT", "INSERT", "DELETE"),
@@ -300,7 +321,7 @@ class PostgresSessionStore(_PostgresBacked):
         self._idle_timeout = idle_timeout
 
     @contextmanager
-    def refresh_guard(self, session_id: str):
+    def refresh_guard(self, session_id: str, wait: timedelta = timedelta(0)):
         # Transaction-scoped lock: released on normal exit, exception or lost
         # connection. Stable 64-bit namespace; collisions only defer refresh.
         key = int(digest("juval-refresh:" + session_id)[:16], 16)
@@ -311,6 +332,8 @@ class PostgresSessionStore(_PostgresBacked):
             acquired = conn.execute(
                 "select pg_try_advisory_xact_lock(%s)", (key,)
             ).fetchone()[0]
+            if not acquired and wait > timedelta(0):
+                _wait_for_refresher(conn, key, wait)
             yield acquired
 
     def save(self, session: Session) -> None:

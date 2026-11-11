@@ -391,6 +391,151 @@ def test_overlapping_refresh_calls_contact_provider_once(wired, monkeypatch):
     assert calls == ['old-refresh']
 
 
+# --- B-1: concurrent requests on an expired access token (SEC-01G) -------
+
+
+def _race(wired, monkeypatch, provider, *, sessions=1, callers=4, settle=None, ids_out=None):
+    """Run `callers` concurrent `_fresh_session` calls per expired session.
+
+    The provider is entered only by a refresher; it blocks until every caller
+    has reached the refresh guard, so the others contend while the refresh is
+    in flight. `settle` lets the test release the provider. Returns, per
+    session, each caller's outcome: a record, None (401) or the HTTP status.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event, Lock
+
+    from fastapi import HTTPException
+
+    total = sessions * callers
+    entered, count, lock = Event(), [0], Lock()
+    original = wired.refresh_guard
+
+    def spy(session_id, **kwargs):
+        with lock:
+            count[0] += 1
+            if count[0] == total:
+                entered.set()
+        return original(session_id, **kwargs)
+
+    monkeypatch.setattr(wired, "refresh_guard", spy)
+    calls = []
+
+    def gated(config, token):
+        calls.append(token)
+        assert entered.wait(5), "callers never reached the guard"
+        if settle is not None:
+            settle()
+        return provider(config, token)
+
+    monkeypatch.setattr(bff, "_refresh_tokens", gated)
+    ids = []
+    for n in range(sessions):
+        session_id, _ = _session(wired, access_ttl=timedelta(seconds=-1))
+        if n:
+            wired.replace_tokens(session_id, 0, "a", f"refresh-{n}", _now() - timedelta(seconds=1), _now())
+        ids.append(session_id)
+    if ids_out is not None:
+        ids_out.extend(ids)
+
+    def call(session_id):
+        snapshot = wired.load(session_id, _now())       # what the request loaded: expired
+        try:
+            return bff._fresh_session(session_id, snapshot, VERIFIER)
+        except HTTPException as error:
+            return error.status_code
+
+    with ThreadPoolExecutor(max_workers=total) as pool:
+        futures = {s: [pool.submit(call, s) for _ in range(callers)] for s in ids}
+        results = {s: [f.result(timeout=15) for f in fs] for s, fs in futures.items()}
+    return ids, results, calls
+
+
+def test_concurrent_requests_on_an_expired_token_all_get_the_refreshed_session(wired, monkeypatch):
+    ids, results, calls = _race(wired, monkeypatch, lambda c, t: {
+        "access_token": "user-1|operator", "refresh_token": "rotated", "expires_in": 3600})
+    outcomes = results[ids[0]]
+    assert all(not isinstance(o, int) and o is not None for o in outcomes), outcomes   # no spurious 503
+    assert {o.refresh_generation for o in outcomes} == {1}
+    assert calls == ["old-refresh"]                                                # one provider call
+
+
+def test_disabled_account_ends_every_concurrent_request_as_signed_out(wired, monkeypatch):
+    def reject(config, token):
+        raise bff._RefreshRejected("HTTP 400")
+
+    ids, results, calls = _race(wired, monkeypatch, reject)
+    assert results[ids[0]] == [None] * 4          # 401 for all, never a 503 that hides it
+    assert calls == ["old-refresh"]
+    assert wired.load(ids[0], _now()) is None
+
+
+def test_session_revoked_during_the_refresh_is_not_resurrected_for_waiters(wired, monkeypatch):
+    known = []
+
+    def revoke_then_rotate(config, token):
+        wired.revoke(known[0], _now())           # operator revoke-sessions while refreshing
+        return {"access_token": "user-1|operator", "refresh_token": "rotated", "expires_in": 3600}
+
+    ids, results, calls = _race(wired, monkeypatch, revoke_then_rotate, ids_out=known)
+    assert results[ids[0]] == [None] * 4
+    assert calls == ["old-refresh"]
+
+
+def test_a_real_provider_outage_stays_503_and_waiters_do_not_retry(wired, monkeypatch):
+    def unreachable(config, token):
+        raise OSError("connection refused")
+
+    ids, results, calls = _race(wired, monkeypatch, unreachable)
+    assert results[ids[0]] == [503] * 4           # the outage is not turned into success
+    assert calls == ["old-refresh"]               # waiters never replay the refresh token
+    assert wired.load(ids[0], _now()) is not None  # kept for a later retry (ADR-036)
+
+
+def test_the_wait_is_bounded_and_ends_in_503(wired, monkeypatch):
+    from threading import Event
+
+    monkeypatch.setattr(bff, "_REFRESH_WAIT", timedelta(milliseconds=200))
+    waiters_done = Event()
+    finished = []
+
+    def slow(config, token):
+        return {"access_token": "user-1|operator", "refresh_token": "rotated", "expires_in": 3600}
+
+    def hold_until_waiters_gave_up():
+        # The refresher is still busy when the waiters' bounded wait ends.
+        assert waiters_done.wait(10)
+
+    original_fresh = bff._fresh_session
+
+    def tracked(session_id, snapshot, verifier):
+        try:
+            return original_fresh(session_id, snapshot, verifier)
+        finally:
+            finished.append(1)
+            if len(finished) == 3:
+                waiters_done.set()
+
+    monkeypatch.setattr(bff, "_fresh_session", tracked)
+    ids, results, calls = _race(wired, monkeypatch, slow, settle=hold_until_waiters_gave_up)
+    outcomes = results[ids[0]]
+    assert sorted(o if isinstance(o, int) else 200 for o in outcomes) == [200, 503, 503, 503]
+    assert calls == ["old-refresh"]
+
+
+def test_concurrent_refreshes_of_different_sessions_stay_isolated(wired, monkeypatch):
+    def per_session(config, token):
+        return {"access_token": "user-1|operator", "refresh_token": f"{token}-rotated", "expires_in": 3600}
+
+    ids, results, calls = _race(wired, monkeypatch, per_session, sessions=2, callers=2)
+    assert sorted(calls) == ["old-refresh", "refresh-1"]          # one call per session, own token
+    for session_id in ids:
+        assert all(not isinstance(o, int) and o is not None for o in results[session_id])
+        assert wired.load(session_id, _now()).refresh_generation >= 1
+    assert wired.load(ids[0], _now()).refresh_token == "old-refresh-rotated"
+    assert wired.load(ids[1], _now()).refresh_token == "refresh-1-rotated"
+
+
 def test_logout_during_refresh_cannot_resurrect_session(wired, monkeypatch):
     session_id, record = _session(wired, access_ttl=timedelta(seconds=5))
     def provider(config, token):

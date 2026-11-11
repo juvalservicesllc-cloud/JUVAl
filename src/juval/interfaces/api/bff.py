@@ -751,6 +751,11 @@ def csrf_guard(request: Request) -> None:
 #: the IdP is not called on every poll.
 _REFRESH_SKEW = timedelta(seconds=120)
 
+#: How long a request whose access token has already expired waits for a
+#: concurrent refresh of the same session to finish (ADR-039 amendment). Past
+#: it, the request answers 503 like any unavailable refresh -- never stale roles.
+_REFRESH_WAIT = timedelta(seconds=5)
+
 
 def _refresh_due(record: SessionRecord) -> bool:
     expires = record.access_token_expires_at
@@ -796,13 +801,18 @@ def refresh_if_needed(
     """Renew under store-wide exclusion; preserve session id and CAS writes.
 
     Reload after acquiring the guard: the caller may hold an older generation.
-    Busy refreshers skip provider I/O. Guard failure propagates fail-closed.
+    Busy refreshers skip provider I/O. One whose access token has already
+    expired cannot authorize without the refresh outcome, so it first waits
+    (bounded) for the refresher; one still inside its token's lifetime does not
+    wait. Guard failure propagates fail-closed.
     A process/DB failure after provider rotation can still require a new login;
     the database and external provider do not share an atomic transaction.
     """
     if record.refresh_token is None or not _refresh_due(record):
         return None
-    with session_store().refresh_guard(session_id) as acquired:
+    expires = record.access_token_expires_at
+    wait = _REFRESH_WAIT if expires is None or expires <= _now() else timedelta(0)
+    with session_store().refresh_guard(session_id, wait=wait) as acquired:
         if not acquired:
             return None
         current = session_store().load(session_id, _now())

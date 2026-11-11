@@ -141,7 +141,9 @@ la misma en todos los casos.
 refrescos concurrentes gana exactamente uno; al perdedor se le **dice** que
 perdió y relee en vez de sobrescribir un refresh token que el ganador ya usó.
 Eso impide la actualización perdida, pero no serializa llamadas al proveedor.
-ADR-039 añade exclusión no bloqueante antes de la llamada y relectura del estado.
+ADR-039 añade exclusión no bloqueante antes de la llamada y relectura del estado;
+su enmienda 2026-11-11 hace esperar (5 s máx.) solo a quien ya tiene el access
+token caducado, para que relea el resultado en vez de responder 503.
 
 **El id de sesión no rota en el refresco.** Rotarlo invalidaría la cookie de
 todas las demás peticiones en vuelo del mismo navegador — un cierre de sesión

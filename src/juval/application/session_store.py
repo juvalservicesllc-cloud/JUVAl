@@ -153,12 +153,15 @@ class OAuthTransactionStore(Protocol):
 
 
 class SessionStore(Protocol):
-    def refresh_guard(self, session_id: str) -> ContextManager[bool]:
-        """Nonblocking exclusion across refresh callers sharing this store.
+    def refresh_guard(self, session_id: str, wait: timedelta = timedelta(0)) -> ContextManager[bool]:
+        """Exclusion across refresh callers sharing this store (ADR-039).
 
-        Yield True only to the sole refresher until context exit. A busy caller
-        skips refresh; it must not contact the provider with a stale token.
-        PostgreSQL implementations must coordinate across processes.
+        Yield True only to the sole refresher until context exit. Becoming the
+        refresher never blocks. A busy caller gets False and must not contact
+        the provider with a stale token; with `wait` > 0 it first waits, at
+        most `wait`, for the current refresher to finish, so that a re-read
+        sees its outcome. PostgreSQL implementations must coordinate across
+        processes.
         """
 
     def save(self, session: Session) -> None:
