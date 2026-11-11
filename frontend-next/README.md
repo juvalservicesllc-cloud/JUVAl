@@ -34,15 +34,28 @@ Run: `npm run dev -- --port 5183` with `VITE_API_BASE_URL` pointing at the API.
 
 All requests go through `src/api/client.ts::apiFetch`; no page talks to `fetch`
 directly. It sends `credentials: "include"` (the HttpOnly `juval_session`
-cookie), and on POST adds `X-JUVAL-CSRF` with the token read once from
-`GET /api/v1/auth/session` and kept in memory only. A stale token is re-read and
-the POST retried **once**. A 401 shows a "Sign in" link to
-`/api/v1/auth/login` (no automatic redirect, so no login loop); 403 says
-"permission" or "security check"; an unreachable API is a `NetworkError`.
+cookie), and on mutations adds `X-JUVAL-CSRF` with the token read from
+`GET /api/v1/auth/session` and kept in memory only. The shell reads session
+metadata on load using the same in-memory lookup as mutations. There is no
+polling or keep-alive: the server enforces inactivity and absolute expiry.
+A stale token is re-read and the mutation retried **once**. A missing CSRF
+projection on an authenticated session prompts another session read.
+A 401 forgets the cached session and shows a "Sign in" link with the current
+app path, query and fragment as `return_to` (no automatic redirect).
+An authenticated session shows "Sign out" in the existing header. Logout
+revokes the BFF session with CSRF, clears the in-memory lookup and navigates to
+the returned IdP `end_session_url`, or `/` if absent. Logout errors preserve
+the account state unless the API answers 401.
+403 distinguishes permissions, CSRF and an unassigned organization; the last
+case asks the operator to contact the administrator without a retry control.
+503 offers manual retry and never declares a session closed. An unreachable
+API is a `NetworkError`; other server errors use a generic message.
 With `JUVAL_AUTH_MODE=disabled` the session is `authenticated: false`, no token
 is sent and behaviour is unchanged. The API must list the app origin in
-`JUVAL_CORS_ORIGINS` (credentialed CORS, never `*`). Not yet built: a session
-indicator and logout.
+`JUVAL_CORS_ORIGINS` (credentialed CORS, never `*`). OAuth tokens never reach
+app code; API cookies are managed by the browser. CSRF is never persisted.
+See [BFF integration validation](BFF_INTEGRATION_REPORT.md) for measured
+results, sandbox limitations and exact commands for Claude Code.
 
 ## Visual review from the Windows workstation
 

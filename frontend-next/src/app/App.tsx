@@ -1,7 +1,7 @@
 import { useEffect, useState, type CSSProperties } from "react"
 import { accentColors, appearanceTokens, COLOR_LABELS, DEFAULT_APPEARANCE, loadAppearance, resetAppearance, saveAppearance, type Appearance } from "../appearance"
 import { AppearancePage } from "../pages/AppearancePage"
-import { loginUrl, onAuthRequired } from "../api/client"
+import { apiErrorMessage, getSession, loginUrl, logout, onAuthRequired, resetSession, type BrowserSession } from "../api/client"
 import { BatchPage } from "../pages/BatchPage"
 import { CatalogPage } from "../pages/CatalogPage"
 import { DashboardPage } from "../pages/DashboardPage"
@@ -58,7 +58,41 @@ export function App() {
   // The API answered 401: offer sign-in, never redirect on our own -- an
   // automatic redirect on every 401 is how login loops start.
   const [signInNeeded, setSignInNeeded] = useState(false)
-  useEffect(() => onAuthRequired(() => setSignInNeeded(true)), [])
+  const [session, setSession] = useState<BrowserSession | null>(null)
+  const [accountError, setAccountError] = useState("")
+  const [sessionReload, setSessionReload] = useState(0)
+  const [loggingOut, setLoggingOut] = useState(false)
+  useEffect(() => {
+    let active = true
+    let ended = false
+    const unsubscribe = onAuthRequired(() => {
+      ended = true
+      setSession({ authenticated: false })
+      setSignInNeeded(true)
+      setAccountError("")
+    })
+    // Once on load (also after the full-page login return), or a manual retry.
+    // A late startup response must never undo a newer 401.
+    getSession().then((value) => {
+      if (active && !ended) { setSession(value); setAccountError("") }
+    }).catch((error: unknown) => {
+      if (active && !ended) setAccountError(apiErrorMessage(error))
+    })
+    return () => { active = false; unsubscribe() }
+  }, [sessionReload])
+
+  const signOut = async () => {
+    setLoggingOut(true)
+    setAccountError("")
+    try {
+      await logout()
+      setSession({ authenticated: false })
+    } catch (error) {
+      setAccountError(apiErrorMessage(error))
+    } finally {
+      setLoggingOut(false)
+    }
+  }
 
   // Internal navigation stays in this tab: intercept same-origin anchors so a
   // link routes instead of reloading the application. Anything explicitly
@@ -121,11 +155,13 @@ export function App() {
     <main>
       <header>
         <span>{localPage ? pathname === "/appearance" ? "Settings — browser-local appearance" : pathname === "/about" ? "Methodology" : "Workspace" : "LIVE — real backend, real persisted runs"}</span>
+        {session?.authenticated && <button onClick={signOut} disabled={loggingOut}>{loggingOut ? "Signing out…" : "Sign out"}</button>}
         <button onClick={() => changeAppearance({ dark: !dark })} role="switch" aria-checked={dark}>{dark ? "Light" : "Dark"}</button>
       </header>
       {signInNeeded && <p role="alert" className="notice">
-        You are not signed in or your session has expired. <a href={loginUrl()}>Sign in</a> to continue; nothing on this page was changed.
+        You are not signed in or your session has expired. <a href={loginUrl(location.pathname + location.search + location.hash)} onClick={resetSession}>Sign in</a> to continue; nothing on this page was changed.
       </p>}
+      {accountError && <p role="alert" className="notice">{accountError}{!session?.authenticated && !signInNeeded && <> <button onClick={() => setSessionReload((value) => value + 1)}>Retry session</button></>}</p>}
       {page}
     </main>
   </div>

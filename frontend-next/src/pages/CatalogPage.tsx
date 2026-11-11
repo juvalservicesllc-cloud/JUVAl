@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react"
-import { apiErrorMessage } from "../api/client"
+import { apiErrorMessage, canRetryApiError } from "../api/client"
 import { filteredExportUrl, getRunBrands, getRunRecords, getRuns } from "../api/catalog"
 import type { BrandDistributionOut, CatalogQuery, FieldValueOut, RecordOut, RecordSort, RunSummaryOut } from "../api/types"
 import { clearCatalogQuery, loadCatalogQuery, saveCatalogQuery } from "../catalogQuery"
@@ -36,9 +36,9 @@ const DEFAULT_QUERY: CatalogQuery = {
   hazmat: "", bulky: "", provenanceField: "", provenanceStatus: "", pendingDemand: false,
 }
 
-type RunsState = { kind: "loading" } | { kind: "error"; message: string } | { kind: "empty" } | { kind: "ready"; runs: RunSummaryOut[] }
+type RunsState = { kind: "loading" } | { kind: "error"; message: string; retryable: boolean } | { kind: "empty" } | { kind: "ready"; runs: RunSummaryOut[] }
 type BrandsState = { kind: "loading" } | { kind: "error" } | { kind: "ready"; brands: BrandDistributionOut }
-type RecordsState = { kind: "loading" } | { kind: "error"; message: string } | { kind: "ready"; records: RecordOut[]; total: number; hasMore: boolean }
+type RecordsState = { kind: "loading" } | { kind: "error"; message: string; retryable: boolean } | { kind: "ready"; records: RecordOut[]; total: number; hasMore: boolean }
 
 function text(value: FieldValueOut): string {
   return value.value === null || value.value === undefined ? "" : String(value.value)
@@ -86,7 +86,7 @@ export function CatalogPage({ initialRunId = "", initialPendingDemand = false }:
         // straight into that run rather than whichever run happens to be newest.
         setRunId((current) => (current && response.items.some((r) => r.execution_id === current) ? current : response.items[0].execution_id))
       })
-      .catch((error: unknown) => { if (!controller.signal.aborted) setRuns({ kind: "error", message: apiErrorMessage(error) }) })
+      .catch((error: unknown) => { if (!controller.signal.aborted) setRuns({ kind: "error", message: apiErrorMessage(error), retryable: canRetryApiError(error) }) })
     return () => controller.abort()
   }, [reload])
 
@@ -112,7 +112,7 @@ export function CatalogPage({ initialRunId = "", initialPendingDemand = false }:
     setRecords({ kind: "loading" })
     getRunRecords(runId, query, controller.signal)
       .then((response) => setRecords({ kind: "ready", records: response.records, total: response.pagination.total, hasMore: response.pagination.has_more }))
-      .catch((error: unknown) => { if (!controller.signal.aborted) setRecords({ kind: "error", message: apiErrorMessage(error) }) })
+      .catch((error: unknown) => { if (!controller.signal.aborted) setRecords({ kind: "error", message: apiErrorMessage(error), retryable: canRetryApiError(error) }) })
     return () => controller.abort()
   }, [runId, query, reload])
 
@@ -138,7 +138,7 @@ export function CatalogPage({ initialRunId = "", initialPendingDemand = false }:
     <h1>Run-scoped catalog</h1>
 
     {runs.kind === "loading" && <p className="panel">Loading persisted runs…</p>}
-    {runs.kind === "error" && <section className="panel"><p role="alert">{runs.message}</p><button onClick={() => setReload((n) => n + 1)}>Retry</button></section>}
+    {runs.kind === "error" && <section className="panel"><p role="alert">{runs.message}</p>{runs.retryable && <button onClick={() => setReload((n) => n + 1)}>Retry</button>}</section>}
     {runs.kind === "empty" && <p className="panel">No persisted runs yet. Process a catalog with persistence enabled to review its records here.</p>}
 
     {runs.kind === "ready" && <>
@@ -215,7 +215,7 @@ export function CatalogPage({ initialRunId = "", initialPendingDemand = false }:
       </section>
 
       {records.kind === "loading" && <p className="panel">Loading records…</p>}
-      {records.kind === "error" && <section className="panel"><p role="alert">{records.message}</p><button onClick={() => setReload((n) => n + 1)}>Retry</button></section>}
+      {records.kind === "error" && <section className="panel"><p role="alert">{records.message}</p>{records.retryable && <button onClick={() => setReload((n) => n + 1)}>Retry</button>}</section>}
 
       {records.kind === "ready" && <>
         <p className="result-count">{count(total)} result{total === 1 ? "" : "s"}</p>

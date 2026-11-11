@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import { getRunAnalytics } from "../api/analytics"
 import { getRunBatch } from "../api/batches"
 import { getRuns } from "../api/catalog"
-import { apiErrorMessage } from "../api/client"
+import { apiErrorMessage, canRetryApiError } from "../api/client"
 import type { BatchResponse, NumericSummaryOut, RunAnalyticsOut, RunSummaryOut } from "../api/types"
 import { count, fieldMoney, fieldPercent } from "../format"
 import { Badge, ProvenanceBadge } from "./shared"
@@ -16,10 +16,10 @@ import { Badge, ProvenanceBadge } from "./shared"
  * are batch facts and appear only when the run belongs to a batch. No Decision
  * Score, ranking or market data — none has an approved contract.
  */
-type RunsState = { kind: "loading" } | { kind: "error"; message: string } | { kind: "empty" } | { kind: "ready"; runs: RunSummaryOut[] }
+type RunsState = { kind: "loading" } | { kind: "error"; message: string; retryable: boolean } | { kind: "empty" } | { kind: "ready"; runs: RunSummaryOut[] }
 type DataState =
   | { kind: "loading" }
-  | { kind: "error"; message: string }
+  | { kind: "error"; message: string; retryable: boolean }
   | { kind: "ready"; analytics: RunAnalyticsOut; batch: BatchResponse | null; batchUnavailable: boolean }
 
 const STATUSES = ["VERIFIED", "INFERRED", "NOT_FOUND", "INVALID"] as const
@@ -82,7 +82,7 @@ export function DashboardPage({ initialRunId = "", go }: { initialRunId?: string
         setRuns({ kind: "ready", runs: items })
         setRunId((current) => current || items[0].execution_id)
       })
-      .catch((error: unknown) => { if (!controller.signal.aborted) setRuns({ kind: "error", message: apiErrorMessage(error) }) })
+      .catch((error: unknown) => { if (!controller.signal.aborted) setRuns({ kind: "error", message: apiErrorMessage(error), retryable: canRetryApiError(error) }) })
     return () => controller.abort()
   }, [reload])
 
@@ -96,12 +96,12 @@ export function DashboardPage({ initialRunId = "", go }: { initialRunId?: string
       getRunBatch(runId, controller.signal).then((batch) => ({ batch, unavailable: false }), () => ({ batch: null, unavailable: true })),
     ])
       .then(([analytics, { batch, unavailable }]) => setData({ kind: "ready", analytics, batch, batchUnavailable: unavailable }))
-      .catch((error: unknown) => { if (!controller.signal.aborted) setData({ kind: "error", message: apiErrorMessage(error) }) })
+      .catch((error: unknown) => { if (!controller.signal.aborted) setData({ kind: "error", message: apiErrorMessage(error), retryable: canRetryApiError(error) }) })
     return () => controller.abort()
   }, [runId, reload])
 
   if (runs.kind === "loading") return <section className="panel"><h1>Dashboard</h1><p aria-live="polite">Loading runs…</p></section>
-  if (runs.kind === "error") return <section className="panel"><h1>Dashboard</h1><p role="alert" className="notice">{runs.message}</p><button onClick={() => setReload((n) => n + 1)}>Retry</button></section>
+  if (runs.kind === "error") return <section className="panel"><h1>Dashboard</h1><p role="alert" className="notice">{runs.message}</p>{runs.retryable && <button onClick={() => setReload((n) => n + 1)}>Retry</button>}</section>
   if (runs.kind === "empty") return <section className="panel">
     <h1>Dashboard</h1>
     <p>No persisted runs yet. Import a supplier file with "Persist" on to see its analysis here.</p>
@@ -121,7 +121,7 @@ export function DashboardPage({ initialRunId = "", go }: { initialRunId?: string
     </section>
 
     {data.kind === "loading" && <section className="panel"><p aria-live="polite">Loading analytics…</p></section>}
-    {data.kind === "error" && <section className="panel"><p role="alert" className="notice">{data.message}</p><button onClick={() => setReload((n) => n + 1)}>Retry</button></section>}
+    {data.kind === "error" && <section className="panel"><p role="alert" className="notice">{data.message}</p>{data.retryable && <button onClick={() => setReload((n) => n + 1)}>Retry</button>}</section>}
     {data.kind === "ready" && <Analytics {...data} go={go} runId={runId} />}
     <section className="panel" aria-label="Recent runs">
       <h2>Recent runs</h2>

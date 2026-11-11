@@ -26,3 +26,13 @@ it("keeps the preview when the batch fails and offers retry instead of inventing
   expect(await screen.findByRole("link", { name: "Supplier title" })).toBeInTheDocument()
   expect(screen.getByRole("button", { name: "Retry context and preview" })).toBeInTheDocument()
 })
+
+it("explains missing organization without retrying the context or preview", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ detail: "no organization access for this identity" }), { status: 403 })))
+  render(<RunContext executionId="r-1" />)
+  const alerts = await screen.findAllByRole("alert")
+  expect(alerts).toHaveLength(2)
+  for (const alert of alerts) expect(alert).toHaveTextContent("Your account is not assigned to an organization. Contact your JUVAl administrator.")
+  expect(screen.queryByRole("button", { name: /retry/i })).not.toBeInTheDocument()
+  expect(fetch).toHaveBeenCalledTimes(2)
+})

@@ -22,12 +22,16 @@ it("keeps provenance states and demonstration labels distinct and discloses unim
   expect(screen.getByText(/AI analyst is not implemented/)).toBeInTheDocument()
 })
 
-it("wires /about as a static page without a network request", () => {
-  const fetch = vi.fn()
+it("wires /about as a static page with only the shell's session lookup", () => {
+  const fetch = vi.fn(async (url: string) => {
+    if (new URL(url).pathname !== "/api/v1/auth/session") throw new Error(`Unexpected request: ${url}`)
+    return new Response(JSON.stringify({ authenticated: false }), { status: 200 })
+  })
   vi.stubGlobal("fetch", fetch)
   history.pushState({}, "", "/about")
   render(<App />)
   expect(screen.getByRole("heading", { level: 1, name: "Methodology" })).toBeInTheDocument()
   expect(screen.queryByText(/Not yet connected/)).not.toBeInTheDocument()
-  expect(fetch).not.toHaveBeenCalled()
+  expect(fetch).toHaveBeenCalledTimes(1)
+  expect(fetch).toHaveBeenCalledWith(expect.stringMatching(/\/api\/v1\/auth\/session$/), expect.objectContaining({ method: "GET", credentials: "include" }))
 })

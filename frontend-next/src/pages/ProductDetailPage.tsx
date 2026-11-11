@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { ApiError, apiErrorMessage } from "../api/client"
+import { ApiError, apiErrorMessage, canRetryApiError } from "../api/client"
 import { getRecordFinancial, getRunRecord } from "../api/records"
 import type { FieldValueOut, ProvenanceStatus, RecordFinancialOut, RecordOut } from "../api/types"
 import { fieldMoney, fieldPercent } from "../format"
@@ -24,7 +24,7 @@ import { MarketDemo } from "./MarketDemo"
 type State =
   | { kind: "loading" }
   | { kind: "missing" }
-  | { kind: "error"; message: string }
+  | { kind: "error"; message: string; retryable: boolean }
   | { kind: "ready"; record: RecordOut }
 
 type FinancialState = { kind: "loading" } | { kind: "error" } | { kind: "ready"; financial: RecordFinancialOut }
@@ -157,7 +157,7 @@ export function ProductDetailPage({ executionId, recordRef, go }: { executionId:
       .catch((error: unknown) => {
         if (controller.signal.aborted) return
         if (error instanceof ApiError && error.status === 404) return setState({ kind: "missing" })
-        setState({ kind: "error", message: apiErrorMessage(error) })
+        setState({ kind: "error", message: apiErrorMessage(error), retryable: canRetryApiError(error) })
       })
     return () => controller.abort()
   }, [executionId, recordRef, reload])
@@ -177,7 +177,7 @@ export function ProductDetailPage({ executionId, recordRef, go }: { executionId:
   if (state.kind === "error") return <section className="panel">
     <h1>Product detail</h1>
     <p role="alert" className="notice">{state.message}</p>
-    <button onClick={() => setReload((n) => n + 1)}>Retry</button>
+    {state.retryable && <button onClick={() => setReload((n) => n + 1)}>Retry</button>}
   </section>
 
   const { record } = state

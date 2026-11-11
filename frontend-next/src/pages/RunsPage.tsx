@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { apiErrorMessage } from "../api/client"
+import { apiErrorMessage, canRetryApiError } from "../api/client"
 import { listRuns } from "../api/runs"
 import type { RunSummaryOut } from "../api/types"
 import { count } from "../format"
@@ -17,7 +17,7 @@ import { Badge, DecisionCounts } from "./shared"
  * Duplicate and Delete are not implemented: both need run lifecycle semantics
  * that no ADR covers yet.
  */
-type State = { kind: "loading" } | { kind: "error"; message: string } | { kind: "empty" } | { kind: "ready"; runs: RunSummaryOut[] }
+type State = { kind: "loading" } | { kind: "error"; message: string; retryable: boolean } | { kind: "empty" } | { kind: "ready"; runs: RunSummaryOut[] }
 const SORTS = { started_at: "Started at", input_filename: "Input file", execution_id: "Execution ID", status: "Status", records_total: "Total records", records_processed: "Processed", records_successful: "Successful", records_with_errors: "Errors", warnings: "Warnings" } as const
 type Sort = keyof typeof SORTS
 
@@ -32,14 +32,14 @@ export function RunsPage({ go }: { go: (path: string) => void }) {
     setState({ kind: "loading" })
     listRuns(100, controller.signal)
       .then((r) => setState(r.items.length ? { kind: "ready", runs: r.items } : { kind: "empty" }))
-      .catch((error: unknown) => { if (!controller.signal.aborted) setState({ kind: "error", message: apiErrorMessage(error) }) })
+      .catch((error: unknown) => { if (!controller.signal.aborted) setState({ kind: "error", message: apiErrorMessage(error), retryable: canRetryApiError(error) }) })
     return () => controller.abort()
   }, [reload])
 
   return <>
     <h1>Processing runs</h1>
     {state.kind === "loading" && <p className="panel">Loading runs…</p>}
-    {state.kind === "error" && <section className="panel"><p role="alert" className="notice">{state.message}</p><button onClick={() => setReload((n) => n + 1)}>Retry</button></section>}
+    {state.kind === "error" && <section className="panel"><p role="alert" className="notice">{state.message}</p>{state.retryable && <button onClick={() => setReload((n) => n + 1)}>Retry</button>}</section>}
     {state.kind === "empty" && <p className="panel">No persisted runs yet. Process a batch with persistence enabled to see it here.</p>}
     {state.kind === "ready" && <section className="panel">
       <p aria-live="polite">{count(state.runs.length)} persisted run{state.runs.length === 1 ? "" : "s"} (up to 100), ordered by {SORTS[sort]}, {direction === "asc" ? "ascending" : "descending"}. Each run is one supplier file.</p>

@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { createBatch } from "../api/batches"
-import { apiErrorMessage } from "../api/client"
+import { apiErrorMessage, canRetryApiError } from "../api/client"
 import { MAX_FILES, SUPPORTED_EXTENSIONS } from "../api/contract"
 import { previewImport } from "../api/preview"
 import type { BatchResponse, FeesIn, ImportPreviewResponse, ThresholdsIn } from "../api/types"
@@ -31,7 +31,7 @@ const SEVERITIES = ["NONE", "LOW", "MEDIUM", "HIGH", "CRITICAL"]
 type State =
   | { kind: "idle" }
   | { kind: "submitting"; files: string[] }
-  | { kind: "error"; message: string }
+  | { kind: "error"; message: string; retryable: boolean }
   | { kind: "done"; batch: BatchResponse }
 
 /** The preview belongs to one queued File object; removing that file hides it. */
@@ -110,7 +110,7 @@ export function UploadPage({ go }: { go: (path: string) => void }) {
       const batch = await createBatch(files, thresholds, fees, persist)
       setState({ kind: "done", batch })
     } catch (error: unknown) {
-      setState({ kind: "error", message: apiErrorMessage(error) })
+      setState({ kind: "error", message: apiErrorMessage(error), retryable: canRetryApiError(error) })
     }
   }
 
@@ -191,7 +191,7 @@ export function UploadPage({ go }: { go: (path: string) => void }) {
       <h2>Batch not completed</h2>
       <p role="alert" className="notice">{state.message}</p>
       <p>No successful backend result is being shown as a completed batch.</p>
-      <button onClick={() => setState({ kind: "idle" })}>Try again</button>
+      {state.retryable && <button onClick={() => setState({ kind: "idle" })}>Try again</button>}
     </section>}
 
     {state.kind === "done" && <section className="panel">

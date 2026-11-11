@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { getRuns } from "../api/catalog"
-import { ApiError, apiErrorMessage } from "../api/client"
+import { ApiError, apiErrorMessage, canRetryApiError } from "../api/client"
 import { getRunRecord } from "../api/records"
 import type { FieldValueOut, RecordOut, RunSummaryOut } from "../api/types"
 import { favoriteKey, loadFavorites, parseFavoriteKey, saveFavorites, toggleFavorite } from "../favorites"
@@ -18,7 +18,7 @@ import { Badge, ProvenanceBadge } from "./shared"
  */
 const MAX_RESOLVED = 50
 
-type RunsState = { kind: "loading" } | { kind: "error"; message: string } | { kind: "ready"; runs: RunSummaryOut[] }
+type RunsState = { kind: "loading" } | { kind: "error"; message: string; retryable: boolean } | { kind: "ready"; runs: RunSummaryOut[] }
 type Item = { kind: "loading" } | { kind: "missing" } | { kind: "error"; message: string } | { kind: "ready"; record: RecordOut }
 
 const text = (value: FieldValueOut | undefined) => value?.value === null || value?.value === undefined ? "" : String(value.value)
@@ -49,7 +49,7 @@ export function FavoritesPage({ initialRunId = "", go }: { initialRunId?: string
     setRuns({ kind: "loading" })
     getRuns(controller.signal)
       .then(({ items: list }) => setRuns({ kind: "ready", runs: list }))
-      .catch((error: unknown) => { if (!controller.signal.aborted) setRuns({ kind: "error", message: apiErrorMessage(error) }) })
+      .catch((error: unknown) => { if (!controller.signal.aborted) setRuns({ kind: "error", message: apiErrorMessage(error), retryable: canRetryApiError(error) }) })
     return () => controller.abort()
   }, [reload])
 
@@ -89,7 +89,7 @@ export function FavoritesPage({ initialRunId = "", go }: { initialRunId?: string
   </>
 
   if (runs.kind === "loading") return <section className="panel">{header}<p aria-live="polite">Loading runs…</p></section>
-  if (runs.kind === "error") return <section className="panel">{header}<p role="alert" className="notice">{runs.message}</p><button onClick={() => setReload((n) => n + 1)}>Retry</button></section>
+  if (runs.kind === "error") return <section className="panel">{header}<p role="alert" className="notice">{runs.message}</p>{runs.retryable && <button onClick={() => setReload((n) => n + 1)}>Retry</button>}</section>
   if (!starredRuns.length) return <section className="panel">
     {header}
     <p>No favorites{unlisted.length ? " in the runs available here" : " yet"}. Star records in Catalog to collect them here.</p>

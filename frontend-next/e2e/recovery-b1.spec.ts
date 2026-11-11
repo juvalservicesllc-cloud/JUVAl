@@ -47,12 +47,13 @@ for (const count of [2, 10]) {
   })
 }
 
-test("B1: selecting eleven names the rejected overflow and sends no server request", async ({ page }) => {
+test("B1: selecting eleven names the rejected overflow and sends no upload or preview request", async ({ page }) => {
   await page.goto("/import")
   const requests: string[] = []
   page.on("request", (r) => { if (new URL(r.url()).pathname.startsWith("/api/")) requests.push(`${r.method()} ${r.url()}`) })
   await page.getByLabel("Supplier files").setInputFiles(Array.from({ length: 11 }, (_, i) => join(DIR, "files", `batch-${String(i + 1).padStart(2, "0")}.xlsx`)))
   await expect(page.getByRole("alert")).toHaveText("At most 10 files per batch, so these were not queued: batch-11.xlsx.")
   await expect(page.getByRole("list", { name: "File queue" }).getByRole("listitem")).toHaveCount(10)
-  expect(requests).toEqual([])
+  // Only the shell's session GET is allowed; uploads, previews and other API calls still fail.
+  expect(requests.filter((request) => request !== `GET ${API}/api/v1/auth/session`)).toEqual([])
 })

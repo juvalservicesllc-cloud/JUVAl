@@ -139,6 +139,20 @@ describe("UploadPage on the real pipeline", () => {
     expect(screen.getByText(/no successful backend result/i)).toBeInTheDocument()
   })
 
+  it("explains missing organization without offering to retry the batch", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(
+      new URL(url).pathname === "/api/v1/auth/session"
+        ? { authenticated: true, csrf_token: "synthetic-csrf" }
+        : { detail: "no organization access for this identity" },
+    ), { status: new URL(url).pathname === "/api/v1/auth/session" ? 200 : 403 })))
+    render(<UploadPage go={vi.fn()} />)
+    fireEvent.drop(dropZone(), { dataTransfer: { files: [file("a.csv")] } })
+    fillConfiguration()
+    await userEvent.setup().click(screen.getByRole("button", { name: /process catalog/i }))
+    expect(await screen.findByRole("alert")).toHaveTextContent("Your account is not assigned to an organization. Contact your JUVAl administrator.")
+    expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument()
+  })
+
   it("surfaces a partial success and routes into the batch", async () => {
     const partial = batchResponse({ status: "PARTIAL_SUCCESS", total_files: 2, succeeded_files: 1, failed_files: 1 })
     vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: true, status: 200, json: async () => partial })))

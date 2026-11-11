@@ -74,7 +74,7 @@ describe("RunsPage on real persisted runs", () => {
     vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: false, status: 500, json: async () => ({ detail: "store unavailable" }) })))
     render(<RunsPage go={vi.fn()} />)
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(/store unavailable/i)
+    expect(await screen.findByRole("alert")).toHaveTextContent("The API request failed. Please try again.")
     expect(screen.getByRole("button", { name: /retry/i })).toBeInTheDocument()
   })
 

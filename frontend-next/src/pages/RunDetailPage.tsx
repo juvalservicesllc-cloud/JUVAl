@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { apiErrorMessage, apiUrl, ApiError } from "../api/client"
+import { apiErrorMessage, apiUrl, ApiError, canRetryApiError } from "../api/client"
 import { getRun } from "../api/runs"
 import type { RunSummaryOut } from "../api/types"
 import { count } from "../format"
@@ -17,7 +17,7 @@ import { RunContext } from "./RunContext"
 type State =
   | { kind: "loading" }
   | { kind: "missing" }
-  | { kind: "error"; message: string }
+  | { kind: "error"; message: string; retryable: boolean }
   | { kind: "ready"; run: RunSummaryOut }
 
 export function RunDetailPage({ executionId, go }: { executionId: string; go: (path: string) => void }) {
@@ -36,7 +36,7 @@ export function RunDetailPage({ executionId, go }: { executionId: string; go: (p
         // An unknown execution id is a real 404, not a transport failure --
         // saying "retry" there would be misleading.
         if (error instanceof ApiError && error.status === 404) return setState({ kind: "missing" })
-        setState({ kind: "error", message: apiErrorMessage(error) })
+        setState({ kind: "error", message: apiErrorMessage(error), retryable: canRetryApiError(error) })
       })
     return () => controller.abort()
   }, [executionId, reload])
@@ -47,7 +47,7 @@ export function RunDetailPage({ executionId, go }: { executionId: string; go: (p
     <p>No persisted run matches this execution id. It may never have been persisted, or the id may be wrong.</p>
     <button onClick={() => go("/runs")}>Back to Runs</button>
   </section>
-  if (state.kind === "error") return <section className="panel"><h1>Run detail</h1><p role="alert" className="notice">{state.message}</p><button onClick={() => setReload((n) => n + 1)}>Retry</button></section>
+  if (state.kind === "error") return <section className="panel"><h1>Run detail</h1><p role="alert" className="notice">{state.message}</p>{state.retryable && <button onClick={() => setReload((n) => n + 1)}>Retry</button>}</section>
 
   const { run } = state
   return <>

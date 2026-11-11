@@ -1,10 +1,16 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { afterEach, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { App } from "../app/App"
 
 const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9xkAAAAASUVORK5CYII="
 function open() { history.pushState({}, "", "/appearance"); return render(<App />) }
+beforeEach(() => {
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    if (new URL(url).pathname !== "/api/v1/auth/session") throw new Error(`Unexpected request: ${url}`)
+    return new Response(JSON.stringify({ authenticated: false }), { status: 200 })
+  }))
+})
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); localStorage.clear(); history.pushState({}, "", "/") })
 
 it("applies accent, validates hex, warns on contrast and restores the preference", async () => {
@@ -29,8 +35,7 @@ it("applies accent, validates hex, warns on contrast and restores the preference
 })
 
 it("uploads logo/background locally with preview, persists them and resets only appearance", async () => {
-  const fetch = vi.fn()
-  vi.stubGlobal("fetch", fetch)
+  const fetch = vi.mocked(globalThis.fetch)
   localStorage.setItem("juval.catalog.columns.v1", "keep-columns")
   localStorage.setItem("juval.catalog.favorites.v1", "keep-favorites")
   const user = userEvent.setup()
@@ -51,7 +56,11 @@ it("uploads logo/background locally with preview, persists them and resets only 
   expect(localStorage.length).toBe(2)
   expect(localStorage.getItem("juval.catalog.columns.v1")).toBe("keep-columns")
   expect(localStorage.getItem("juval.catalog.favorites.v1")).toBe("keep-favorites")
-  expect(fetch).not.toHaveBeenCalled()
+  // The shell checks its account once. Appearance assets and preferences
+  // remain entirely local, including across the remount above.
+  expect(fetch).toHaveBeenCalledTimes(1)
+  expect(fetch).toHaveBeenCalledWith(expect.stringMatching(/\/api\/v1\/auth\/session$/), expect.objectContaining({ method: "GET", credentials: "include" }))
+  expect(fetch.mock.calls[0][1]?.body).toBeUndefined()
 })
 
 it("shows file rejection and still works when browser storage is unavailable", async () => {

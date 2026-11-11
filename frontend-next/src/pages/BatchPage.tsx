@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { getRunAnalytics } from "../api/analytics"
 import { getBatch } from "../api/batches"
-import { ApiError, apiErrorMessage } from "../api/client"
+import { ApiError, apiErrorMessage, canRetryApiError } from "../api/client"
 import type { BatchResponse, RunAnalyticsOut } from "../api/types"
 import { count, fieldMoney, fieldPercent } from "../format"
 import { Badge } from "./shared"
@@ -18,7 +18,7 @@ import { Badge } from "./shared"
  * A REJECTED file never ran: it has no execution_id and its counts stay 0,
  * which is "never processed", not a measured zero.
  */
-type State = { kind: "loading" } | { kind: "error"; message: string } | { kind: "ready"; batch: BatchResponse }
+type State = { kind: "loading" } | { kind: "error"; message: string; retryable: boolean } | { kind: "ready"; batch: BatchResponse }
 type FileAnalytics = { kind: "loading" } | { kind: "missing" } | { kind: "error" } | { kind: "ready"; analytics: RunAnalyticsOut }
 
 /**
@@ -89,12 +89,12 @@ export function BatchPage({ batchId, go }: { batchId: string; go: (path: string)
     setState({ kind: "loading" })
     getBatch(batchId, controller.signal)
       .then((batch) => setState({ kind: "ready", batch }))
-      .catch((error: unknown) => { if (!controller.signal.aborted) setState({ kind: "error", message: apiErrorMessage(error) }) })
+      .catch((error: unknown) => { if (!controller.signal.aborted) setState({ kind: "error", message: apiErrorMessage(error), retryable: canRetryApiError(error) }) })
     return () => controller.abort()
   }, [batchId, reload])
 
   if (state.kind === "loading") return <section className="panel"><h1>Batch</h1><p>Loading batch…</p></section>
-  if (state.kind === "error") return <section className="panel"><h1>Batch</h1><p role="alert" className="notice">{state.message}</p><button onClick={() => setReload((n) => n + 1)}>Retry</button></section>
+  if (state.kind === "error") return <section className="panel"><h1>Batch</h1><p role="alert" className="notice">{state.message}</p>{state.retryable && <button onClick={() => setReload((n) => n + 1)}>Retry</button>}</section>
 
   const { batch } = state
   return <>

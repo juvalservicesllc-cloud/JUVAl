@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { getRunBatch } from "../api/batches"
 import { getRunRecords } from "../api/catalog"
-import { apiErrorMessage } from "../api/client"
+import { apiErrorMessage, canRetryApiError } from "../api/client"
 import type { BatchResponse, RunRecordsResponse } from "../api/types"
 import { Badge, ProvenanceBadge } from "./shared"
 
@@ -11,15 +11,17 @@ export function RunContext({ executionId }: { executionId: string }) {
   const [preview, setPreview] = useState<RunRecordsResponse>()
   const [batchError, setBatchError] = useState("")
   const [previewError, setPreviewError] = useState("")
+  const [retryable, setRetryable] = useState(true)
   const [reload, setReload] = useState(0)
   useEffect(() => {
     const controller = new AbortController()
     setBatch(undefined); setPreview(undefined); setBatchError(""); setPreviewError("")
+    setRetryable(true)
     getRunBatch(executionId, controller.signal).then((value) => { if (!controller.signal.aborted) setBatch(value) })
-      .catch((error: unknown) => { if (!controller.signal.aborted) setBatchError(apiErrorMessage(error)) })
+      .catch((error: unknown) => { if (!controller.signal.aborted) { setBatchError(apiErrorMessage(error)); if (!canRetryApiError(error)) setRetryable(false) } })
     getRunRecords(executionId, { limit: 25, offset: 0, search: "", brand: "", decision: "ALL", sort: "record_ref", direction: "asc", minRoi: "", minProfit: "", minMargin: "", confidence: "INCLUDE_INFERRED", hazmat: "", bulky: "", provenanceField: "", provenanceStatus: "", pendingDemand: false }, controller.signal)
       .then((value) => { if (!controller.signal.aborted) setPreview(value) })
-      .catch((error: unknown) => { if (!controller.signal.aborted) setPreviewError(apiErrorMessage(error)) })
+      .catch((error: unknown) => { if (!controller.signal.aborted) { setPreviewError(apiErrorMessage(error)); if (!canRetryApiError(error)) setRetryable(false) } })
     return () => controller.abort()
   }, [executionId, reload])
   return <section className="panel" aria-label="Run context and preview">
@@ -39,6 +41,6 @@ export function RunContext({ executionId }: { executionId: string }) {
         </tr>)}</tbody>
       </table></div>}
     </>}
-    {(batchError || previewError) && <button onClick={() => setReload((value) => value + 1)}>Retry context and preview</button>}
+    {retryable && (batchError || previewError) && <button onClick={() => setReload((value) => value + 1)}>Retry context and preview</button>}
   </section>
 }

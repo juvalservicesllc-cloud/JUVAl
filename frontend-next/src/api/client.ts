@@ -25,6 +25,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000
 
 export const CSRF_HEADER = "X-JUVAL-CSRF"
 const CSRF_REJECTED = "csrf token missing or invalid"
+const NO_ORGANIZATION = "no organization access for this identity"
 
 export class ApiError extends Error {
   constructor(readonly status: number, readonly body: unknown) {
@@ -49,7 +50,10 @@ export function apiErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     const detail = detailOf(error)
     if (error.status === 401) return "You are not signed in or your session has expired. Sign in to continue."
+    if (error.status === 503) return "The service is temporarily unavailable. Try again in a moment."
+    if (error.status >= 500) return "The API request failed. Please try again."
     if (error.status === 403) {
+      if (detail === NO_ORGANIZATION) return "Your account is not assigned to an organization. Contact your JUVAl administrator."
       return detail === CSRF_REJECTED
         ? "The security check for this action failed. Reload the page and try again."
         : "Your account does not have permission for this action."
@@ -64,12 +68,25 @@ export function apiErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+/** Retrying cannot assign an organization; the administrator must do that. */
+export function canRetryApiError(error: unknown): boolean {
+  return !(error instanceof ApiError && error.status === 403 && detailOf(error) === NO_ORGANIZATION)
+}
+
 export function apiUrl(path: string): string {
   return new URL(path, `${API_BASE_URL.replace(/\/$/, "")}/`).toString()
 }
 
 /** Where the operator goes to sign in: a top-level navigation to the BFF. */
-export const loginUrl = () => apiUrl("api/v1/auth/login")
+export function loginUrl(returnTo?: string): string {
+  const url = new URL(apiUrl("api/v1/auth/login"))
+  // Accept app paths only, following the BFF's return_to restrictions.
+  if (returnTo?.startsWith("/") && !returnTo.startsWith("//") && !returnTo.includes("\\") &&
+    !Array.from(returnTo).some((c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127)) {
+    url.search = new URLSearchParams({ return_to: returnTo }).toString()
+  }
+  return url.toString()
+}
 
 // --- Session ---------------------------------------------------------
 
@@ -82,30 +99,59 @@ export function onAuthRequired(listener: AuthListener): () => void {
   return () => { authListeners.delete(listener) }
 }
 
-// The CSRF token for the current session, resolved once and shared by
-// concurrent callers. `null` means there is none to send (auth disabled, not
-// signed in, or the lookup failed -- the server then answers the request itself).
-let csrfToken: Promise<string | null> | null = null
+export type BrowserSession =
+  | { authenticated: false }
+  | { authenticated: true; subject: string; roles: string[]; permissions: string[]; expires_at: string }
+type SessionResponse = BrowserSession & { csrf_token?: string }
 
-async function fetchCsrfToken(): Promise<string | null> {
+// One in-memory lookup shared by the shell and mutations. No timer: polling
+// would count as activity and defeat the server's idle-session timeout.
+let session: Promise<SessionResponse> | null = null
+
+function currentSession(): Promise<SessionResponse> {
+  if (!session) {
+    const pending = requestJson("api/v1/auth/session").then((body) => body as SessionResponse)
+    session = pending
+    // A transport/service failure is not a signed-out session and must not
+    // poison the cache. Do not let an old failure evict a newer lookup.
+    void pending.catch(() => { if (session === pending) session = null })
+  }
+  return session
+}
+
+/** Session metadata for the shell; the CSRF value stays private to this client. */
+export async function getSession(): Promise<BrowserSession> {
+  const body = await currentSession()
+  return body.authenticated === true
+    ? { authenticated: true, subject: body.subject, roles: body.roles, permissions: body.permissions, expires_at: body.expires_at }
+    : { authenticated: false }
+}
+
+async function currentCsrfToken(): Promise<string | null> {
   try {
-    const response = await fetch(apiUrl("api/v1/auth/session"), { credentials: "include" })
-    if (!response.ok) return null
-    const body = await response.json() as { authenticated?: unknown; csrf_token?: unknown }
+    let body = await currentSession()
+    if (body.authenticated === true && !body.csrf_token) {
+      resetSession()
+      body = await currentSession()
+    }
     return body.authenticated === true && typeof body.csrf_token === "string" ? body.csrf_token : null
   } catch {
+    // Preserve lab behaviour: the data route remains authoritative. Its 503
+    // or 401 is handled normally, never guessed from a failed session lookup.
     return null
   }
 }
 
-function currentCsrfToken(): Promise<string | null> {
-  csrfToken ??= fetchCsrfToken()
-  return csrfToken
-}
-
 /** Forget the cached token (tests, and whenever the session may have changed). */
 export function resetSession(): void {
-  csrfToken = null
+  session = null
+}
+
+/** Revoke the BFF session before navigating to the IdP's SSO logout. */
+export async function logout(): Promise<void> {
+  const body = await requestJson("api/v1/auth/logout", { method: "POST" }) as { end_session_url?: string }
+  resetSession()
+  window.location.assign(body.end_session_url || "/")
 }
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"])

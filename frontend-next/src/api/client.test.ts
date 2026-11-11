@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { ApiError, apiErrorMessage, CSRF_HEADER, NetworkError, onAuthRequired, requestJson } from "./client"
+import { ApiError, apiErrorMessage, canRetryApiError, CSRF_HEADER, getSession, loginUrl, logout, NetworkError, onAuthRequired, requestJson, resetSession } from "./client"
 import { createBatch } from "./batches"
 import { filteredExportUrl, getRunBrands, getRunRecords, getRuns } from "./catalog"
 import { previewImport } from "./preview"
@@ -51,6 +51,7 @@ describe("shared API client: BFF cookie session and CSRF (ADR-034)", () => {
       expect(call.init.credentials).toBe("include")
       expect(call.init.method).toBe("GET")
       expect(csrfHeader(call)).toBeNull()
+      expect(new Headers(call.init.headers).has("Authorization")).toBe(false)
     }
     expect(fake.sessionLookups()).toBe(0)
   })
@@ -172,5 +173,152 @@ describe("shared API client: BFF cookie session and CSRF (ADR-034)", () => {
     const url = new URL(filteredExportUrl("r1", { ...query, brand: "Acme" }))
     expect(url.pathname).toBe("/api/v1/runs/r1/records/export")
     expect(url.search).not.toMatch(/csrf|token|session/i)
+  })
+
+  it.each(["/", "/runs/abc?tab=x#record", "/catalog?search=lamp%20shade&run=a%2Fb", "/import?name=café #preview"])("encodes an app return path exactly: %s", (path) => {
+    const url = new URL(loginUrl(path))
+    expect(url.pathname).toBe("/api/v1/auth/login")
+    expect(url.searchParams.get("return_to")).toBe(path)
+    expect(url.hash).toBe("")
+  })
+
+  it.each([undefined, "", "https://evil.example/runs", "http://localhost:5173/runs", "//evil.example", "runs/a", "/\\evil.example", "/\t/evil.example", "/runs\n", "/runs\u007f"])("discards an unsafe return destination: %s", (path) => {
+    expect(new URL(loginUrl(path)).search).toBe("")
+  })
+
+  it("shares one session lookup between the shell and concurrent mutations without exposing the CSRF value", async () => {
+    const fake = backend({ session: signedIn })
+    const [session] = await Promise.all([getSession(), previewImport(file()), previewImport(file())])
+    expect(session).toEqual({ authenticated: true, subject: "u-1", roles: ["operator"], permissions: [], expires_at: "2026-10-26T20:00:00Z" })
+    expect(session).not.toHaveProperty("csrf_token")
+    expect(fake.sessionLookups()).toBe(1)
+    expect(fake.api().map(csrfHeader)).toEqual([TOKEN, TOKEN])
+  })
+
+  it("re-reads session if an authenticated response is missing the CSRF projection", async () => {
+    let lookups = 0
+    const fake = backend({ session: () => ++lookups === 1 ? json(200, { authenticated: true }) : signedIn() })
+    await getSession()
+    await previewImport(file())
+    expect(fake.sessionLookups()).toBe(2)
+    expect(csrfHeader(fake.api()[0])).toBe(TOKEN)
+  })
+
+  it.each(["https://id.juval.test/oauth2/logout?client_id=synthetic", undefined])("logs out with CSRF, forgets the session, then navigates to %s", async (endSessionUrl) => {
+    const assign = vi.fn()
+    vi.stubGlobal("window", { location: { assign } })
+    const fake = backend({ session: signedIn, answer: () => json(200, { logged_out: true, end_session_url: endSessionUrl }) })
+    await getSession()
+    await logout()
+    expect(fake.api()).toHaveLength(1)
+    expect(new URL(fake.api()[0].url).pathname).toBe("/api/v1/auth/logout")
+    expect(fake.api()[0].init.method).toBe("POST")
+    expect(fake.api()[0].init.credentials).toBe("include")
+    expect(csrfHeader(fake.api()[0])).toBe(TOKEN)
+    expect(assign).toHaveBeenCalledExactlyOnceWith(endSessionUrl ?? "/")
+    await getSession()
+    expect(fake.sessionLookups()).toBe(2) // logout invalidated the shared cache
+  })
+
+  it("can log out again after the server has already ended the session", async () => {
+    const assign = vi.fn()
+    vi.stubGlobal("window", { location: { assign } })
+    const fake = backend({ session: signedOut, answer: () => json(200, { logged_out: true }) })
+    await logout()
+    expect(csrfHeader(fake.api()[0])).toBeNull()
+    expect(assign).toHaveBeenCalledExactlyOnceWith("/")
+  })
+
+  it("uses the same bounded CSRF retry for logout", async () => {
+    const assign = vi.fn()
+    vi.stubGlobal("window", { location: { assign } })
+    let tokens = 0
+    const fake = backend({
+      session: () => json(200, { authenticated: true, csrf_token: `token-${++tokens}` }),
+      answer: (_, n) => n === 0 ? json(403, { detail: "csrf token missing or invalid" }) : json(200, { logged_out: true }),
+    })
+    await logout()
+    expect(fake.api().map(csrfHeader)).toEqual(["token-1", "token-2"])
+    expect(assign).toHaveBeenCalledExactlyOnceWith("/")
+  })
+
+  it.each([403, 503])("does not navigate or forget a valid session after failed logout (%s)", async (status) => {
+    const assign = vi.fn()
+    vi.stubGlobal("window", { location: { assign } })
+    const fake = backend({ session: signedIn, answer: () => json(status, { detail: "session service unavailable" }) })
+    await expect(logout()).rejects.toMatchObject({ status })
+    expect(assign).not.toHaveBeenCalled()
+    await expect(getSession()).resolves.toMatchObject({ authenticated: true })
+    expect(fake.sessionLookups()).toBe(1)
+  })
+
+  it("explains an unassigned organization and does not retry the request", async () => {
+    const fake = backend({ session: signedIn, answer: () => json(403, { detail: "no organization access for this identity" }) })
+    const error = await previewImport(file()).catch((e: unknown) => e)
+    expect(fake.api()).toHaveLength(1)
+    expect(apiErrorMessage(error)).toBe("Your account is not assigned to an organization. Contact your JUVAl administrator.")
+    expect(canRetryApiError(error)).toBe(false)
+    expect(canRetryApiError(new ApiError(503, {}))).toBe(true)
+  })
+
+  it.each(["session service unavailable", "identity provider temporarily unavailable", "organization membership is temporarily unavailable", "authentication is not initialised", "anything"])("keeps a 503 (%s) distinct from session expiry", async (detail) => {
+    const fake = backend({ session: signedIn, answer: () => json(503, { detail }) })
+    const listener = vi.fn()
+    const unsubscribe = onAuthRequired(listener)
+    try {
+      const error = await previewImport(file()).catch((e: unknown) => e)
+      expect(apiErrorMessage(error)).toBe("The service is temporarily unavailable. Try again in a moment.")
+      expect(listener).not.toHaveBeenCalled()
+      expect(fake.api()).toHaveLength(1)
+      await expect(getSession()).resolves.toMatchObject({ authenticated: true })
+      expect(fake.sessionLookups()).toBe(1)
+    } finally { unsubscribe() }
+  })
+
+  it("surfaces a session-service error and permits a manual retry without caching signed-out state", async () => {
+    let unavailable = true
+    const fake = backend({ session: () => unavailable ? json(503, { detail: "identity provider temporarily unavailable" }) : signedIn() })
+    const listener = vi.fn()
+    const unsubscribe = onAuthRequired(listener)
+    try {
+      await expect(getSession()).rejects.toMatchObject({ status: 503 })
+      expect(listener).not.toHaveBeenCalled()
+      unavailable = false
+      await expect(getSession()).resolves.toMatchObject({ authenticated: true })
+      expect(fake.sessionLookups()).toBe(2)
+    } finally { unsubscribe() }
+  })
+
+  it.each([500, 502])("uses a generic message for server errors (%s) without exposing deployment details", (status) => {
+    expect(apiErrorMessage(new ApiError(status, { detail: "stored financial data failed validation" }))).toBe("The API request failed. Please try again.")
+  })
+
+  it("reports session network failure as a network error, not as signed out", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new TypeError("fetch failed"))))
+    await expect(getSession()).rejects.toBeInstanceOf(NetworkError)
+  })
+
+  it("does not let an old failed lookup evict the current session", async () => {
+    let rejectOld!: (error: Error) => void
+    vi.stubGlobal("fetch", vi.fn().mockImplementationOnce(() => new Promise((_, reject) => { rejectOld = reject }))
+      .mockImplementationOnce(async () => signedIn()))
+    const old = getSession().catch(() => undefined)
+    resetSession()
+    await getSession()
+    rejectOld(new TypeError("old lookup failed"))
+    await old
+    await expect(getSession()).resolves.toMatchObject({ authenticated: true })
+    expect(fetch).toHaveBeenCalledTimes(2)
+  })
+
+  it("never polls the session or simulates activity during eight hours", async () => {
+    vi.useFakeTimers()
+    try {
+      const fake = backend({ session: signedIn })
+      await getSession()
+      await vi.advanceTimersByTimeAsync(8 * 60 * 60 * 1000)
+      expect(fake.sessionLookups()).toBe(1)
+      expect(fake.api()).toHaveLength(0)
+    } finally { vi.useRealTimers() }
   })
 })
